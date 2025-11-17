@@ -7,3 +7,4 @@ passlib[bcrypt]
 python-multipart
 pydantic[email]
 python-dotenv
+prisma

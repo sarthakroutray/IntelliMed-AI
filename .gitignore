@@ -74,6 +74,7 @@ tmp/
 # Prisma
 prisma/migrations/
 .prisma/
+backend/prisma_client/
 
 # Logs
 logs/

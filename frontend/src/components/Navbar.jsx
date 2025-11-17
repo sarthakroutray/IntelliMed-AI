@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/AuthContext.jsx';
 
 const Navbar = () => {
   const { user, logout } = useAuth();
@@ -8,7 +8,9 @@ const Navbar = () => {
 
   const handleLogout = () => {
     logout();
-    navigate('/login');
+    setTimeout(() => {
+      navigate('/login', { replace: true });
+    }, 0);
   };
 
   return (
@@ -19,8 +21,7 @@ const Navbar = () => {
       <div className="nav-links">
         {user ? (
           <>
-            {user.role === 'patient' && <Link to="/patient-dashboard">Dashboard</Link>}
-            {user.role === 'doctor' && <Link to="/doctor-dashboard">Dashboard</Link>}
+            <Link to="/dashboard">Dashboard            </Link>
             <button onClick={handleLogout} className="btn">Logout</button>
           </>
         ) : (

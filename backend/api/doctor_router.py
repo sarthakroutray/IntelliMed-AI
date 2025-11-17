@@ -1,45 +1,77 @@
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-
-from backend import models, schemas, auth
-from backend.database import get_db
+from fastapi import APIRouter, Depends, HTTPException, status
+from backend.auth import get_current_user
+from backend.prisma_db import get_db
+from backend.schemas import User, DocumentDetail
+from backend.prisma_client import Prisma
 
 router = APIRouter()
 
-
-@router.get("/patients/", response_model=List[schemas.UserInDB])
-def get_patients(
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.require_role("doctor")),
+@router.get("/patients", response_model=List[User])
+async def get_doctor_patients(
+    db: Prisma = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    patients = db.query(models.User).filter(models.User.role == "patient").all()
+    """
+    Retrieves a list of all patients assigned to the current doctor.
+    """
+    if current_user.role != 'doctor':
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only doctors can view patients",
+        )
+
+    patient_links = await db.doctorpatient.find_many(
+        where={'doctor_id': current_user.id}
+    )
+    patient_ids = [link.patient_id for link in patient_links]
+
+    patients = await db.user.find_many(
+        where={'id': {'in': patient_ids}}
+    )
     return patients
 
-
-@router.get(
-    "/patients/{patient_id}/documents", response_model=List[schemas.DocumentInfo]
-)
-def get_patient_documents(
+@router.get("/patients/{patient_id}/documents", response_model=List[DocumentDetail])
+async def get_patient_documents_for_doctor(
     patient_id: int,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.require_role("doctor")),
+    db: Prisma = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    patient = db.query(models.User).filter(models.User.id == patient_id).first()
-    if not patient or patient.role != "patient":
-        raise HTTPException(status_code=404, detail="Patient not found")
+    """
+    Retrieves all documents for a specific patient, accessible by a doctor.
+    """
+    if current_user.role != 'doctor':
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only doctors can view patient documents",
+        )
 
-    documents = (
-        db.query(models.MedicalDocument)
-        .filter(models.MedicalDocument.patient_id == patient_id)
-        .all()
+    link = await db.doctorpatient.find_first(
+        where={
+            'doctor_id': current_user.id,
+            'patient_id': patient_id,
+        }
+    )
+
+    if not link:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have access to this patient's documents",
+        )
+
+    documents = await db.medicaldocument.find_many(
+        where={'patient_id': patient_id}
     )
     
     return [
-        schemas.DocumentInfo(
-            filename=doc.file_path.split('/')[-1],
+        DocumentDetail(
+            id=doc.id,
+            file_name=doc.file_path.split('/')[-1] if doc.file_path else "N/A",
+            file_url=f"/uploads/{doc.file_path.split('/')[-1]}" if doc.file_path else "",
             upload_timestamp=doc.upload_timestamp,
             ai_analysis=doc.ai_analysis_json,
+            filename=doc.file_path.split('/')[-1] if doc.file_path else "N/A",
         )
         for doc in documents
     ]
+

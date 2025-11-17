@@ -1,11 +1,13 @@
+from typing import List
 import shutil
 import asyncio
 from pathlib import Path
-from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
-from sqlalchemy.orm import Session
-
-from backend import models, schemas, auth, services
-from backend.database import get_db
+from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, status
+from backend.auth import get_current_user
+from backend.prisma_db import get_db
+from backend.schemas import User, DocumentInfo, DocumentDetail
+from backend.prisma_client import Prisma
+from backend import services
 
 router = APIRouter()
 
@@ -13,12 +15,18 @@ UPLOAD_DIR = Path("./uploads")
 UPLOAD_DIR.mkdir(exist_ok=True)
 
 
-@router.post("/upload/", response_model=schemas.DocumentInfo)
+@router.post("/upload/", response_model=DocumentInfo)
 async def upload_document(
     file: UploadFile = File(...),
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.require_role("patient")),
+    db: Prisma = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
+    if current_user.role != 'patient':
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only patients can upload documents",
+        )
+
     if not file.filename:
         raise HTTPException(status_code=400, detail="No file provided")
 
@@ -42,17 +50,40 @@ async def upload_document(
         "cv_result": cv_result,
     }
 
-    db_document = models.MedicalDocument(
-        patient_id=current_user.id,
-        file_path=str(file_path),
-        ai_analysis_json=aggregated_analysis,
+    db_document = await db.medicaldocument.create(
+        data={
+            'patient_id': current_user.id,
+            'file_path': str(file_path),
+            'ai_analysis_json': aggregated_analysis,
+        }
     )
-    db.add(db_document)
-    db.commit()
-    db.refresh(db_document)
 
-    return schemas.DocumentInfo(
+    return DocumentInfo(
         filename=file.filename,
         upload_timestamp=db_document.upload_timestamp,
         ai_analysis=db_document.ai_analysis_json,
     )
+
+@router.get("/documents", response_model=List[DocumentInfo])
+async def get_own_documents(
+    db: Prisma = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if current_user.role != 'patient':
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only patients can view their documents",
+        )
+
+    documents = await db.medicaldocument.find_many(
+        where={'patient_id': current_user.id}
+    )
+    return [
+        DocumentInfo(
+            filename=doc.file_path.split('/')[-1],
+            upload_timestamp=doc.upload_timestamp,
+            ai_analysis=doc.ai_analysis_json,
+        )
+        for doc in documents
+    ]
+

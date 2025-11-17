@@ -1,0 +1,54 @@
+generator client {
+  provider = "prisma-client-py"
+  output   = "../prisma_client"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DIRECT_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id                Int               @id @default(autoincrement())
+  email             String            @unique @db.VarChar(255)
+  name              String?           @db.VarChar(255)
+  hashed_password   String            @db.VarChar(255)
+  role              role_enum
+  medical_documents MedicalDocument[]
+  doctor_patients   DoctorPatient[]   @relation("doctor_relations")
+  patient_doctors   DoctorPatient[]   @relation("patient_relations")
+
+  @@index([email], map: "idx_users_email")
+  @@map("users")
+}
+
+model DoctorPatient {
+  id          Int      @id @default(autoincrement())
+  doctor_id   Int?
+  patient_id  Int
+  access_code String?  @unique
+  created_at  DateTime @default(now())
+  doctor      User?    @relation("doctor_relations", fields: [doctor_id], references: [id])
+  patient     User     @relation("patient_relations", fields: [patient_id], references: [id])
+
+  @@map("doctor_patient")
+}
+
+model MedicalDocument {
+  id               Int       @id @default(autoincrement())
+  patient_id       Int?
+  file_path        String    @db.VarChar(255)
+  upload_timestamp DateTime? @default(now()) @db.Timestamptz(6)
+  ai_analysis_json Json?
+  users            User?     @relation(fields: [patient_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([patient_id], map: "idx_medical_documents_patient_id")
+  @@map("medical_documents")
+}
+
+enum role_enum {
+  patient
+  doctor
+  admin
+}
