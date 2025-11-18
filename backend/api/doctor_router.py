@@ -66,11 +66,11 @@ async def get_patient_documents_for_doctor(
     return [
         DocumentDetail(
             id=doc.id,
-            file_name=doc.file_path.split('/')[-1] if doc.file_path else "N/A",
+            filename=doc.file_path.split('/')[-1] if doc.file_path else "N/A",
             file_url=f"/uploads/{doc.file_path.split('/')[-1]}" if doc.file_path else "",
             upload_timestamp=doc.upload_timestamp,
             ai_analysis=doc.ai_analysis_json,
-            filename=doc.file_path.split('/')[-1] if doc.file_path else "N/A",
+            analysis_status="processed" if doc.ai_analysis_json else "pending",
         )
         for doc in documents
     ]

@@ -52,4 +52,8 @@ export const getPatientDocuments = (patientId, token) => {
   return api.get(url);
 };
 
+export const deleteDocument = (documentId) => {
+  return api.delete(`/patient/documents/${documentId}`);
+};
+
 export default api;

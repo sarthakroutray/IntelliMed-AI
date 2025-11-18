@@ -126,23 +126,85 @@ const DoctorDashboard = () => {
                                 <div className="documents-grid">
                                     {documents.map((doc) => (
                                         <div key={doc.id} className="document-card">
-                                            <div className="document-icon">Doc</div>
-                                            <div className="document-details">
-                                                <a href={doc.file_url} target="_blank" rel="noopener noreferrer" className="document-name">
-                                                    {doc.file_name}
-                                                </a>
-                                                <div className="document-meta">
-                                                    <span className="upload-date">
-                                                        {new Date(doc.upload_timestamp).toLocaleDateString()}
-                                                    </span>
-                                                    <span className={`status-badge status-${doc.analysis_status}`}>
-                                                        {doc.analysis_status === 'processed' && '✓ '}
-                                                        {doc.analysis_status === 'pending' && '• '}
-                                                        {doc.analysis_status === 'failed' && '✗ '}
-                                                        {doc.analysis_status}
-                                                    </span>
+                                            <div className="document-header">
+                                                <div className="document-icon">📄</div>
+                                                <div className="document-info">
+                                                    <a href={doc.file_url} target="_blank" rel="noopener noreferrer" className="document-name">
+                                                        {doc.filename}
+                                                    </a>
+                                                    <div className="document-meta">
+                                                        <span className="upload-date">
+                                                            {new Date(doc.upload_timestamp).toLocaleDateString()}
+                                                        </span>
+                                                        <span className={`status-badge status-${doc.analysis_status}`}>
+                                                            {doc.analysis_status === 'processed' && '✓ '}
+                                                            {doc.analysis_status === 'pending' && '• '}
+                                                            {doc.analysis_status === 'failed' && '✗ '}
+                                                            {doc.analysis_status}
+                                                        </span>
+                                                    </div>
                                                 </div>
                                             </div>
+                                            
+                                            {doc.ai_analysis && (
+                                                <div className="ai-analysis-section">
+                                                    <h4>AI Analysis Results</h4>
+                                                    
+                                                    {/* Computer Vision Results */}
+                                                    {doc.ai_analysis.cv_result && (
+                                                        <div className="analysis-block cv-analysis">
+                                                            <h5>🔬 Image Analysis</h5>
+                                                            <div className="cv-result">
+                                                                <div className="classification">
+                                                                    <strong>Classification:</strong> {doc.ai_analysis.cv_result.classification}
+                                                                </div>
+                                                                <div className="confidence">
+                                                                    <strong>Confidence:</strong> {(doc.ai_analysis.cv_result.confidence * 100).toFixed(0)}%
+                                                                    <div className="confidence-bar">
+                                                                        <div 
+                                                                            className="confidence-fill" 
+                                                                            style={{width: `${doc.ai_analysis.cv_result.confidence * 100}%`}}
+                                                                        ></div>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                    
+                                                    {/* NLP Results */}
+                                                    {doc.ai_analysis.nlp_result && (
+                                                        <div className="analysis-block nlp-analysis">
+                                                            <h5>📝 Text Analysis</h5>
+                                                            <div className="summary">
+                                                                <strong>Summary:</strong>
+                                                                <p>{doc.ai_analysis.nlp_result.summary}</p>
+                                                            </div>
+                                                            {doc.ai_analysis.nlp_result.entities && doc.ai_analysis.nlp_result.entities.length > 0 && (
+                                                                <div className="entities">
+                                                                    <strong>Key Entities:</strong>
+                                                                    <div className="entity-list">
+                                                                        {doc.ai_analysis.nlp_result.entities.map((entity, idx) => (
+                                                                            <span key={idx} className={`entity-tag entity-${entity.label.toLowerCase()}`}>
+                                                                                {entity.text} <em>({entity.label})</em>
+                                                                            </span>
+                                                                        ))}
+                                                                    </div>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                    
+                                                    {/* OCR Results */}
+                                                    {doc.ai_analysis.ocr_result && (
+                                                        <div className="analysis-block ocr-analysis">
+                                                            <h5>📖 Extracted Text</h5>
+                                                            <div className="ocr-text">
+                                                                {doc.ai_analysis.ocr_result}
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
                                         </div>
                                     ))}
                                 </div>

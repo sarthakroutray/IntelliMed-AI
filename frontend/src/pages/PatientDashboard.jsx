@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { uploadDocument, getPatientDocuments } from '../services/api';
+import { uploadDocument, getPatientDocuments, deleteDocument } from '../services/api';
 import { useDropzone } from 'react-dropzone';
 import '../styles/PatientDashboard.css';
 import GenerateAccessCode from '../components/GenerateAccessCode.jsx';
@@ -42,6 +42,17 @@ const PatientDashboard = () => {
       setError('File upload failed. Please try again.');
     } finally {
       setUploading(false);
+    }
+  };
+
+  const handleDelete = async (documentId) => {
+    if (!window.confirm('Are you sure you want to delete this document?')) return;
+    
+    try {
+      await deleteDocument(documentId);
+      setDocuments(documents.filter(doc => doc.id !== documentId));
+    } catch (err) {
+      setError('Failed to delete document.');
     }
   };
 
@@ -134,10 +145,6 @@ const PatientDashboard = () => {
           </button>
         </div>
 
-        <div className="dashboard-card">
-          <GenerateAccessCode />
-        </div>
-
         <div className="dashboard-card documents-card full-width">
           <div className="card-header">
             <h2>Your Documents</h2>
@@ -164,6 +171,13 @@ const PatientDashboard = () => {
                         })}
                       </p>
                     </div>
+                    <button 
+                      className="delete-button"
+                      onClick={() => handleDelete(doc.id)}
+                      title="Delete Document"
+                    >
+                      🗑️
+                    </button>
                   </div>
                   {doc.ai_analysis && (
                     <div className="analysis-section">
@@ -186,6 +200,10 @@ const PatientDashboard = () => {
               <span className="empty-hint">Upload your first document to get started</span>
             </div>
           )}
+        </div>
+
+        <div className="dashboard-card">
+          <GenerateAccessCode />
         </div>
       </div>
     </div>

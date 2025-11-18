@@ -1,6 +1,7 @@
 from typing import List
 import shutil
 import asyncio
+import json
 from pathlib import Path
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, status
 from backend.auth import get_current_user
@@ -54,11 +55,12 @@ async def upload_document(
         data={
             'patient_id': current_user.id,
             'file_path': str(file_path),
-            'ai_analysis_json': aggregated_analysis,
+            'ai_analysis_json': json.dumps(aggregated_analysis),
         }
     )
 
     return DocumentInfo(
+        id=db_document.id,
         filename=file.filename,
         upload_timestamp=db_document.upload_timestamp,
         ai_analysis=db_document.ai_analysis_json,
@@ -80,10 +82,53 @@ async def get_own_documents(
     )
     return [
         DocumentInfo(
+            id=doc.id,
             filename=doc.file_path.split('/')[-1],
             upload_timestamp=doc.upload_timestamp,
             ai_analysis=doc.ai_analysis_json,
         )
         for doc in documents
     ]
+
+
+@router.delete("/documents/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_document(
+    document_id: int,
+    db: Prisma = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if current_user.role != 'patient':
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only patients can delete documents",
+        )
+
+    # Find the document
+    document = await db.medicaldocument.find_first(
+        where={
+            'id': document_id,
+            'patient_id': current_user.id
+        }
+    )
+
+    if not document:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document not found"
+        )
+
+    # Delete file from filesystem
+    try:
+        file_path = Path(document.file_path)
+        if file_path.exists():
+            file_path.unlink()
+    except Exception as e:
+        print(f"Error deleting file: {e}")
+
+    # Delete from DB
+    await db.medicaldocument.delete(
+        where={'id': document_id}
+    )
+
+    return None
 

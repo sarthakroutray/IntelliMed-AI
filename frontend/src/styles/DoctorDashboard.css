@@ -240,8 +240,8 @@
 
 .documents-grid {
     padding: 1.5rem;
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    display: flex;
+    flex-direction: column;
     gap: 1.5rem;
 }
 
@@ -252,6 +252,7 @@
     padding: 1.5rem;
     transition: all 0.3s ease;
     display: flex;
+    flex-direction: column;
     gap: 1rem;
 }
 
@@ -261,12 +262,22 @@
     border-color: #667eea;
 }
 
+.document-header {
+    display: flex;
+    gap: 1rem;
+}
+
 .document-icon {
     font-size: 2.5rem;
     flex-shrink: 0;
 }
 
 .document-details {
+    flex: 1;
+    min-width: 0;
+}
+
+.document-info {
     flex: 1;
     min-width: 0;
 }
@@ -418,4 +429,147 @@
     .stat-card {
         flex: 1;
     }
+}
+
+/* AI Analysis Sections */
+.ai-analysis-section {
+    background: linear-gradient(135deg, #f0f4ff 0%, #fafbff 100%);
+    border: 2px solid #e0e7ff;
+    border-radius: 10px;
+    padding: 1.5rem;
+    margin-top: 1rem;
+}
+
+.ai-analysis-section h4 {
+    margin: 0 0 1rem 0;
+    color: #667eea;
+    font-size: 1.1rem;
+    font-weight: 700;
+}
+
+.analysis-block {
+    background: white;
+    border-radius: 8px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    border-left: 4px solid #667eea;
+}
+
+.analysis-block:last-child {
+    margin-bottom: 0;
+}
+
+.analysis-block h5 {
+    margin: 0 0 0.75rem 0;
+    color: #333;
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+/* CV Analysis */
+.cv-analysis {
+    border-left-color: #28a745;
+}
+
+.cv-result {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.classification {
+    font-size: 1rem;
+    color: #333;
+}
+
+.confidence {
+    font-size: 0.95rem;
+    color: #666;
+}
+
+.confidence-bar {
+    height: 8px;
+    background: #e0e0e0;
+    border-radius: 4px;
+    overflow: hidden;
+    margin-top: 0.5rem;
+}
+
+.confidence-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #28a745 0%, #20c997 100%);
+    transition: width 0.5s ease;
+}
+
+/* NLP Analysis */
+.nlp-analysis {
+    border-left-color: #17a2b8;
+}
+
+.summary p {
+    margin: 0.5rem 0 0 0;
+    color: #555;
+    line-height: 1.6;
+    font-style: italic;
+}
+
+.entities {
+    margin-top: 0.75rem;
+}
+
+.entity-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+}
+
+.entity-tag {
+    background: #e8f5e9;
+    color: #2e7d32;
+    padding: 0.375rem 0.75rem;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    border: 1px solid #a5d6a7;
+}
+
+.entity-tag em {
+    opacity: 0.7;
+    font-size: 0.75rem;
+    margin-left: 0.25rem;
+}
+
+.entity-medication {
+    background: #fff3e0;
+    color: #e65100;
+    border-color: #ffb74d;
+}
+
+.entity-dosage {
+    background: #e3f2fd;
+    color: #0277bd;
+    border-color: #64b5f6;
+}
+
+.entity-condition {
+    background: #fce4ec;
+    color: #c2185b;
+    border-color: #f48fb1;
+}
+
+/* OCR Analysis */
+.ocr-analysis {
+    border-left-color: #6c757d;
+}
+
+.ocr-text {
+    background: #f8f9fa;
+    padding: 0.75rem;
+    border-radius: 6px;
+    font-family: 'Courier New', monospace;
+    font-size: 0.9rem;
+    color: #333;
+    line-height: 1.6;
+    white-space: pre-wrap;
 }

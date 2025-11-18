@@ -34,6 +34,7 @@ class TokenData(BaseModel):
 
 
 class DocumentInfo(BaseModel):
+    id: int
     filename: str
     upload_timestamp: datetime
     ai_analysis: Optional[Dict[str, Any]]
@@ -42,6 +43,5 @@ class DocumentInfo(BaseModel):
         from_attributes = True
 
 class DocumentDetail(DocumentInfo):
-    id: int
     file_url: str
-    analysis_status: str
+    analysis_status: str = "processed"
