@@ -6,7 +6,6 @@ from pathlib import Path
 from dotenv import load_dotenv
 from fastapi import HTTPException, status
 
-# Load environment variables
 env_path = Path(__file__).parent / '.env'
 if not env_path.exists():
     env_path = Path(__file__).parent.parent / '.env'
@@ -22,14 +21,11 @@ def decode_token(token: str):
     This is a simplified approach since the frontend uses Google's own verification.
     """
     try:
-        # Split the JWT token
         parts = token.split('.')
         if len(parts) != 3:
             raise ValueError("Invalid token format")
         
-        # Decode the payload (second part)
         payload = parts[1]
-        # Add padding if needed
         padding = 4 - len(payload) % 4
         if padding != 4:
             payload += '=' * padding
@@ -68,18 +64,15 @@ def verify_google_token(token: str):
         logger.info("Decoding Google token")
         idinfo = decode_token(token)
         
-        # Verify that the token was issued to us
         token_aud = idinfo.get('aud')
         if token_aud != GOOGLE_CLIENT_ID:
             logger.warning(f"Token audience mismatch. Expected {GOOGLE_CLIENT_ID}, got {token_aud}")
-            # Still allow it if it's a valid Google token, the frontend verified it
-            # This can happen with audience mismatches but the frontend validation is sufficient
         
         user_info = {
             'email': idinfo.get('email'),
             'name': idinfo.get('name'),
             'picture': idinfo.get('picture'),
-            'sub': idinfo.get('sub'),  # Google's unique user ID
+            'sub': idinfo.get('sub'),
         }
         logger.info(f"Successfully decoded token for user: {user_info.get('email')}")
         return user_info

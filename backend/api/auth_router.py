@@ -13,14 +13,13 @@ router = APIRouter()
 
 class GoogleLoginRequest(BaseModel):
     token: str
-    role: str  # 'patient' or 'doctor' from the selected tab
+    role: str
 
 
 @router.post("/token", response_model=schemas.Token)
 async def login_for_access_token(
     db: Prisma = Depends(get_db), form_data: OAuth2PasswordRequestForm = Depends()
 ):
-    # Hardcoded admin credentials for development
     if form_data.username == "admin@intellimed.ai" and form_data.password == "adminpassword":
         access_token_expires = timedelta(minutes=auth.ACCESS_TOKEN_EXPIRE_MINUTES)
         access_token = auth.create_access_token(

@@ -35,7 +35,6 @@ async def upload_document(
     with file_path.open("wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
-    # Run AI services concurrently
     ocr_task = asyncio.create_task(services.mock_ocr_service(str(file_path)))
     cv_task = asyncio.create_task(services.mock_cv_service(str(file_path)))
 
@@ -103,7 +102,6 @@ async def delete_document(
             detail="Only patients can delete documents",
         )
 
-    # Find the document
     document = await db.medicaldocument.find_first(
         where={
             'id': document_id,
@@ -117,7 +115,6 @@ async def delete_document(
             detail="Document not found"
         )
 
-    # Delete file from filesystem
     try:
         file_path = Path(document.file_path)
         if file_path.exists():
@@ -125,7 +122,6 @@ async def delete_document(
     except Exception as e:
         print(f"Error deleting file: {e}")
 
-    # Delete from DB
     await db.medicaldocument.delete(
         where={'id': document_id}
     )
