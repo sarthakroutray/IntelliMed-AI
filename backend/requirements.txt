@@ -8,3 +8,9 @@ python-multipart
 pydantic[email]
 python-dotenv
 prisma
+pytesseract
+Pillow
+spacy
+torch
+torchvision
+numpy
