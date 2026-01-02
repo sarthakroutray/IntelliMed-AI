@@ -35,11 +35,11 @@ async def upload_document(
     with file_path.open("wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
-    ocr_task = asyncio.create_task(services.mock_ocr_service(str(file_path)))
-    cv_task = asyncio.create_task(services.mock_cv_service(str(file_path)))
+    ocr_task = asyncio.create_task(services.ocr_service(str(file_path)))
+    cv_task = asyncio.create_task(services.cv_service(str(file_path)))
 
     ocr_result = await ocr_task
-    nlp_task = asyncio.create_task(services.mock_nlp_service(ocr_result))
+    nlp_task = asyncio.create_task(services.nlp_service(ocr_result))
 
     cv_result = await cv_task
     nlp_result = await nlp_task

@@ -141,7 +141,6 @@ const SignUpPage = () => {
               onClick={() => setActiveTab('doctor')}
             >
               <span className="tab-icon">Doctor</span>
-              <span>Doctor</span>
             </div>
           </div>
           {renderForm()}

@@ -176,7 +176,7 @@ const PatientDashboard = () => {
                       onClick={() => handleDelete(doc.id)}
                       title="Delete Document"
                     >
-                      🗑️
+                      Delete
                     </button>
                   </div>
                   {doc.ai_analysis && (
