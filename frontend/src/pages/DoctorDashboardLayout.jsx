@@ -15,16 +15,18 @@ const DoctorDashboardLayout = () => {
   const navigate = useNavigate();
   const [showLinkModal, setShowLinkModal] = useState(false);
   const [activeTab, setActiveTab] = useState('overview'); // overview, patients, documents, ai-analysis
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
 
   const handleNavigate = (path, tab) => {
     setActiveTab(tab);
     navigate(path);
+    setShowMobileMenu(false);
   };
 
   return (
     <div className="flex h-screen w-full bg-background-light dark:bg-background-dark font-display">
       {/* Sidebar */}
-      <aside className="w-64 flex-shrink-0 bg-white dark:bg-[#1a202c] border-r border-[#f0f2f4] dark:border-gray-800 flex flex-col z-20">
+      <aside className="w-64 flex-shrink-0 bg-white dark:bg-[#1a202c] border-r border-[#f0f2f4] dark:border-gray-800 flex flex-col z-20 hidden md:flex">
         {/* Logo */}
         <div className="h-16 flex items-center gap-3 px-6 border-b border-[#f0f2f4] dark:border-gray-800">
           <div className="size-8 text-primary">
@@ -106,8 +108,93 @@ const DoctorDashboardLayout = () => {
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col min-w-0 bg-background-light dark:bg-background-dark overflow-hidden">
+        {/* Mobile Header */}
+        <div className="md:hidden flex items-center justify-between p-4 bg-white dark:bg-[#1A202C] border-b border-gray-200 dark:border-gray-700 sticky top-0 z-20">
+          <h2 className="text-lg font-bold dark:text-white">IntelliMed-AI</h2>
+          <button 
+            onClick={() => setShowMobileMenu(!showMobileMenu)}
+            className="text-gray-500 dark:text-gray-400 p-2"
+          >
+            <Icon name={showMobileMenu ? 'close' : 'menu'} />
+          </button>
+        </div>
+
+        {/* Mobile Menu */}
+        {showMobileMenu && (
+          <div className="md:hidden bg-white dark:bg-[#1A202C] border-b border-gray-200 dark:border-gray-700 p-4 space-y-2 sticky top-16 z-10">
+            <button 
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors ${
+                activeTab === 'overview' 
+                  ? 'bg-primary/10 text-primary' 
+                  : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
+              }`}
+              onClick={() => handleNavigate('/dashboard/overview', 'overview')}
+            >
+              <Icon name="dashboard" />
+              <span className="text-sm font-medium">Overview</span>
+            </button>
+
+            <button 
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors ${
+                activeTab === 'patients' 
+                  ? 'bg-primary/10 text-primary' 
+                  : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
+              }`}
+              onClick={() => handleNavigate('/dashboard/patients', 'patients')}
+            >
+              <Icon name="group" />
+              <span className="text-sm font-medium">Patients</span>
+            </button>
+
+            <button 
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors ${
+                activeTab === 'documents' 
+                  ? 'bg-primary/10 text-primary' 
+                  : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
+              }`}
+              onClick={() => handleNavigate('/dashboard/documents', 'documents')}
+            >
+              <Icon name="description" />
+              <span className="text-sm font-medium">Documents</span>
+            </button>
+
+            <button 
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors ${
+                activeTab === 'ai-analysis' 
+                  ? 'bg-primary/10 text-primary' 
+                  : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
+              }`}
+              onClick={() => handleNavigate('/dashboard/ai-analysis', 'ai-analysis')}
+            >
+              <Icon name="auto_awesome" />
+              <span className="text-sm font-medium">AI Analysis</span>
+            </button>
+
+            <hr className="border-gray-200 dark:border-gray-700 my-2" />
+
+            <button 
+              onClick={() => {
+                setShowLinkModal(true);
+                setShowMobileMenu(false);
+              }}
+              className="w-full flex items-center gap-2 px-3 py-2 text-primary hover:text-primary/80 hover:bg-primary/5 rounded-lg text-sm font-medium transition-colors"
+            >
+              <Icon name="add_link" />
+              Link Patient
+            </button>
+
+            <button 
+              onClick={logout}
+              className="w-full flex items-center gap-2 px-3 py-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg text-sm font-medium transition-colors"
+            >
+              <Icon name="logout" />
+              Logout
+            </button>
+          </div>
+        )}
+
         {/* Top Header */}
-        <header className="h-16 flex items-center justify-between px-6 bg-white dark:bg-[#1a202c] border-b border-[#f0f2f4] dark:border-gray-800 sticky top-0 z-10">
+        <header className="hidden md:flex h-16 items-center justify-between px-6 bg-white dark:bg-[#1a202c] border-b border-[#f0f2f4] dark:border-gray-800 sticky top-0 z-10">
           <div className="flex items-center gap-2">
             <a className="text-[#637588] dark:text-gray-400 text-sm font-medium leading-normal hover:text-primary transition-colors cursor-pointer" onClick={() => handleNavigate('/dashboard/overview', 'overview')}>
               Dashboard

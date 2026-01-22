@@ -25,6 +25,9 @@ class UpdateProfileRequest(BaseModel):
     blood_type: Optional[str] = None
     allergies: Optional[str] = None
     chronic_conditions: Optional[str] = None
+    dark_mode: Optional[bool] = None
+    email_notifications: Optional[bool] = None
+    push_notifications: Optional[bool] = None
 
 
 @router.get("/profile")
@@ -56,6 +59,9 @@ async def get_profile(
             "blood_type": user.blood_type,
             "allergies": user.allergies,
             "chronic_conditions": user.chronic_conditions,
+            "dark_mode": user.dark_mode,
+            "email_notifications": user.email_notifications,
+            "push_notifications": user.push_notifications,
             "created_at": user.created_at.isoformat() if user.created_at else None
         }
     except Exception as e:

@@ -15,10 +15,12 @@ const PatientDashboardLayout = () => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [showGenerateCodeModal, setShowGenerateCodeModal] = useState(false);
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
 
   const handleNavigate = (path, tab) => {
     setActiveTab(tab);
     navigate(path);
+    setShowMobileMenu(false);
   };
 
   return (
@@ -131,12 +133,89 @@ const PatientDashboardLayout = () => {
             <div className="bg-primary flex items-center justify-center rounded-full size-8 text-white font-bold text-sm">
               {user?.email?.charAt(0).toUpperCase()}
             </div>
-            <span className="font-bold">{user?.email?.split('@')[0]}</span>
+            <span className="font-bold text-sm truncate">{user?.email?.split('@')[0]}</span>
           </div>
-          <button className="text-gray-500">
-            <Icon name="menu" />
+          <button 
+            onClick={() => setShowMobileMenu(!showMobileMenu)}
+            className="text-gray-500 dark:text-gray-400 p-2"
+          >
+            <Icon name={showMobileMenu ? 'close' : 'menu'} />
           </button>
         </div>
+
+        {/* Mobile Menu */}
+        {showMobileMenu && (
+          <div className="md:hidden bg-white dark:bg-[#1A202C] border-b border-gray-200 dark:border-gray-700 p-4 space-y-2 sticky top-16 z-10">
+            <button 
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors ${
+                activeTab === 'dashboard'
+                  ? 'bg-primary/10 text-primary'
+                  : 'hover:bg-gray-100 dark:hover:bg-gray-800 text-[#616f89] dark:text-gray-400'
+              }`}
+              onClick={() => handleNavigate('/patient-dashboard', 'dashboard')}
+            >
+              <Icon name="dashboard" />
+              <p className="text-sm font-medium">Dashboard</p>
+            </button>
+
+            <button 
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors ${
+                activeTab === 'profile'
+                  ? 'bg-primary/10 text-primary'
+                  : 'hover:bg-gray-100 dark:hover:bg-gray-800 text-[#616f89] dark:text-gray-400'
+              }`}
+              onClick={() => handleNavigate('/patient-dashboard/profile', 'profile')}
+            >
+              <Icon name="person" />
+              <p className="text-sm font-medium">Profile</p>
+            </button>
+
+            <button 
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors ${
+                activeTab === 'ai-analysis'
+                  ? 'bg-primary/10 text-primary'
+                  : 'hover:bg-gray-100 dark:hover:bg-gray-800 text-[#616f89] dark:text-gray-400'
+              }`}
+              onClick={() => handleNavigate('/patient-dashboard/ai-analysis', 'ai-analysis')}
+            >
+              <Icon name="auto_awesome" />
+              <p className="text-sm font-medium">AI Analysis</p>
+            </button>
+
+            <button 
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors ${
+                activeTab === 'settings'
+                  ? 'bg-primary/10 text-primary'
+                  : 'hover:bg-gray-100 dark:hover:bg-gray-800 text-[#616f89] dark:text-gray-400'
+              }`}
+              onClick={() => handleNavigate('/patient-dashboard/settings', 'settings')}
+            >
+              <Icon name="settings" />
+              <p className="text-sm font-medium">Settings</p>
+            </button>
+
+            <hr className="border-gray-200 dark:border-gray-700 my-2" />
+
+            <button 
+              onClick={() => {
+                setShowGenerateCodeModal(true);
+                setShowMobileMenu(false);
+              }}
+              className="w-full flex items-center gap-2 px-3 py-2 text-primary hover:text-primary/80 hover:bg-primary/5 rounded-lg text-sm font-medium transition-colors"
+            >
+              <Icon name="add_link" className="text-[18px]" />
+              Connect with Doctor
+            </button>
+
+            <button 
+              onClick={logout}
+              className="w-full flex items-center gap-2 px-3 py-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg text-sm font-medium transition-colors"
+            >
+              <Icon name="logout" className="text-[18px]" />
+              Logout
+            </button>
+          </div>
+        )}
 
         {/* Page Content */}
         <Routes>

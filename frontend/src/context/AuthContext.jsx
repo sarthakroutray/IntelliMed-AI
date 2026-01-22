@@ -8,6 +8,25 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(localStorage.getItem('token'));
   const [loading, setLoading] = useState(true);
+  const [darkMode, setDarkMode] = useState(() => {
+    // Check localStorage first, then check system preference
+    const saved = localStorage.getItem('darkMode');
+    if (saved !== null) {
+      return saved === 'true';
+    }
+    // Check system preference
+    return window.matchMedia('(prefers-color-scheme: dark)').matches;
+  });
+
+  // Apply dark mode to document
+  useEffect(() => {
+    if (darkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+    localStorage.setItem('darkMode', darkMode);
+  }, [darkMode]);
 
   useEffect(() => {
     if (token) {
@@ -61,8 +80,12 @@ export const AuthProvider = ({ children }) => {
     setUser(null);
   };
 
+  const toggleDarkMode = () => {
+    setDarkMode(!darkMode);
+  };
+
   return (
-    <AuthContext.Provider value={{ user, token, login, logout, register, googleLogin, loading }}>
+    <AuthContext.Provider value={{ user, token, login, logout, register, googleLogin, loading, darkMode, toggleDarkMode }}>
       {children}
     </AuthContext.Provider>
   );

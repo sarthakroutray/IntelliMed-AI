@@ -1,5 +1,6 @@
 import secrets
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
+from pydantic import BaseModel
 
 import sys
 from pathlib import Path
@@ -13,6 +14,11 @@ from prisma_client import Prisma
 router = APIRouter(
     tags=["linking"],
 )
+
+
+class LinkPatientRequest(BaseModel):
+    access_code: str
+
 
 @router.post("/patient/generate-access-code", status_code=status.HTTP_201_CREATED)
 async def generate_access_code(current_user: User = Depends(get_current_user), db: Prisma = Depends(get_db)):
@@ -34,14 +40,14 @@ async def generate_access_code(current_user: User = Depends(get_current_user), d
     return {"access_code": access_code}
 
 @router.post("/doctor/link-patient", status_code=status.HTTP_200_OK)
-async def link_patient(access_code: str, current_user: User = Depends(get_current_user), db: Prisma = Depends(get_db)):
+async def link_patient(request: LinkPatientRequest, current_user: User = Depends(get_current_user), db: Prisma = Depends(get_db)):
     if current_user.role != 'doctor':
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only doctors can link with patients",
         )
 
-    link_request = await db.doctorpatient.find_unique(where={'access_code': access_code})
+    link_request = await db.doctorpatient.find_unique(where={'access_code': request.access_code})
 
     if not link_request or link_request.doctor_id is not None:
         raise HTTPException(
@@ -50,7 +56,7 @@ async def link_patient(access_code: str, current_user: User = Depends(get_curren
         )
 
     await db.doctorpatient.update(
-        where={'access_code': access_code},
+        where={'access_code': request.access_code},
         data={'doctor_id': current_user.id}
     )
 

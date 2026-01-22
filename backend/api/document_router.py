@@ -1,14 +1,16 @@
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from fastapi.responses import FileResponse
 from datetime import datetime
 import sys
+import os
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from auth import get_current_user
 from prisma_db import get_db
 from schemas import User, DocumentDetail
-from prisma_client import Prisma
+from prisma_client import Prisma, Json
 
 router = APIRouter()
 
@@ -22,9 +24,9 @@ async def get_document(
     Retrieve a specific medical document with AI analysis.
     """
     # Find the document
-    document = await db.document.find_unique(
+    document = await db.medicaldocument.find_unique(
         where={'id': document_id},
-        include={'user': True}
+        include={'users': True}
     )
     
     if not document:
@@ -36,7 +38,7 @@ async def get_document(
     # Check if user has access to this document
     if current_user.role == 'patient':
         # Patients can only view their own documents
-        if document.user_id != current_user.id:
+        if document.patient_id != current_user.id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You don't have access to this document"
@@ -46,7 +48,7 @@ async def get_document(
         link = await db.doctorpatient.find_first(
             where={
                 'doctor_id': current_user.id,
-                'patient_id': document.user_id
+                'patient_id': document.patient_id
             }
         )
         if not link:
@@ -84,16 +86,16 @@ async def get_document(
     
     return {
         "id": document.id,
-        "title": document.file_name or "Medical Document",
+        "title": "Medical Document",
         "patient": {
-            "name": document.user.email,  # Use actual name if available
-            "id": document.user_id
+            "name": document.users.email if document.users else "Unknown",
+            "id": document.patient_id
         },
-        "timestamp": document.created_at.strftime("%Y-%m-%d %H:%M:%S"),
+        "timestamp": document.upload_timestamp.strftime("%Y-%m-%d %H:%M:%S") if document.upload_timestamp else "",
         "status": "Processed",
-        "fileType": document.file_type or "DICOM",
+        "fileType": "DICOM",
         "fileSize": "2.4 MB",  # Calculate actual file size if needed
-        "fileName": document.file_name,
+        "fileName": document.file_path.split('/')[-1] if document.file_path else "unknown",
         "fileUrl": document.file_path,
         "imageUrl": document.file_path,  # Use actual file path
         "analysis": analysis
@@ -118,7 +120,7 @@ async def verify_document(
         )
     
     # Find the document
-    document = await db.document.find_unique(where={'id': document_id})
+    document = await db.medicaldocument.find_unique(where={'id': document_id})
     
     if not document:
         raise HTTPException(
@@ -130,7 +132,7 @@ async def verify_document(
     link = await db.doctorpatient.find_first(
         where={
             'doctor_id': current_user.id,
-            'patient_id': document.user_id
+            'patient_id': document.patient_id
         }
     )
     if not link:
@@ -139,13 +141,21 @@ async def verify_document(
             detail="You don't have access to this document"
         )
     
-    # Update document with verification (you might want to add these fields to your schema)
-    # For now, we'll just return success
+    # Update document with verification
+    verified_at = datetime.utcnow()
+    updated_doc = await db.medicaldocument.update(
+        where={'id': document_id},
+        data={
+            'verified_by': current_user.id,
+            'verified_at': verified_at,
+            'verification_notes': notes
+        }
+    )
     
     return {
         "message": "Document verified successfully",
         "verified_by": current_user.email,
-        "verified_at": datetime.utcnow().isoformat(),
+        "verified_at": verified_at.isoformat(),
         "notes": notes
     }
 
@@ -167,7 +177,7 @@ async def add_clinical_note(
         )
     
     # Find the document
-    document = await db.document.find_unique(where={'id': document_id})
+    document = await db.medicaldocument.find_unique(where={'id': document_id})
     
     if not document:
         raise HTTPException(
@@ -179,7 +189,7 @@ async def add_clinical_note(
     link = await db.doctorpatient.find_first(
         where={
             'doctor_id': current_user.id,
-            'patient_id': document.user_id
+            'patient_id': document.patient_id
         }
     )
     if not link:
@@ -188,12 +198,143 @@ async def add_clinical_note(
             detail="You don't have access to this document"
         )
     
-    # Here you would save the note to your database
-    # For now, we'll just return success
+    # Get existing notes or initialize empty list
+    existing_notes = document.clinical_notes if document.clinical_notes else []
+    
+    # Add new note
+    added_at = datetime.utcnow()
+    new_note = {
+        "note": note,
+        "added_by": current_user.email,
+        "added_by_id": current_user.id,
+        "added_at": added_at.isoformat()
+    }
+    
+    # Append to existing notes
+    if isinstance(existing_notes, list):
+        existing_notes.append(new_note)
+    else:
+        existing_notes = [new_note]
+    
+    # Update document with new note
+    await db.medicaldocument.update(
+        where={'id': document_id},
+        data={'clinical_notes': Json(existing_notes)}
+    )
     
     return {
         "message": "Clinical note added successfully",
         "note": note,
         "added_by": current_user.email,
-        "added_at": datetime.utcnow().isoformat()
+        "added_at": added_at.isoformat()
     }
+
+
+@router.post("/documents/{document_id}/archive")
+async def archive_document(
+    document_id: int,
+    db: Prisma = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Archive a document. Only doctors can archive documents.
+    """
+    if current_user.role != 'doctor':
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only doctors can archive documents"
+        )
+    
+    # Find the document
+    document = await db.medicaldocument.find_unique(where={'id': document_id})
+    
+    if not document:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document not found"
+        )
+    
+    # Check if doctor has access to this patient
+    link = await db.doctorpatient.find_first(
+        where={
+            'doctor_id': current_user.id,
+            'patient_id': document.patient_id
+        }
+    )
+    if not link:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have access to this document"
+        )
+    
+    # Update document as archived
+    archived_at = datetime.utcnow()
+    await db.medicaldocument.update(
+        where={'id': document_id},
+        data={
+            'archived': True,
+            'archived_at': archived_at,
+            'archived_by': current_user.id
+        }
+    )
+    
+    return {
+        "message": "Document archived successfully",
+        "archived_by": current_user.email,
+        "archived_at": archived_at.isoformat()
+    }
+
+
+@router.get("/documents/{document_id}/download")
+async def download_document(
+    document_id: int,
+    db: Prisma = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Download a document file.
+    """
+    # Find the document
+    document = await db.medicaldocument.find_unique(where={'id': document_id})
+    
+    if not document:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document not found"
+        )
+    
+    # Check if user has access to this document
+    if current_user.role == 'patient':
+        if document.patient_id != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You don't have access to this document"
+            )
+    elif current_user.role == 'doctor':
+        link = await db.doctorpatient.find_first(
+            where={
+                'doctor_id': current_user.id,
+                'patient_id': document.patient_id
+            }
+        )
+        if not link:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You don't have access to this document"
+            )
+    
+    # Check if file exists
+    file_path = document.file_path
+    if not os.path.exists(file_path):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="File not found on server"
+        )
+    
+    # Return file for download
+    filename = os.path.basename(file_path)
+    return FileResponse(
+        path=file_path,
+        filename=filename,
+        media_type='application/octet-stream'
+    )

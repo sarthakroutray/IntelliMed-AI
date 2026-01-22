@@ -3,34 +3,51 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 const LoginPage = () => {
+  const [selectedRole, setSelectedRole] = useState('patient');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
   const { googleLogin } = useAuth();
   const navigate = useNavigate();
 
   const handleGoogleLogin = useCallback(
     (response) => {
-      googleLogin(response.credential, 'doctor')
+      setLoading(true);
+      setError('');
+      googleLogin(response.credential, selectedRole)
         .then(() => {
           navigate('/dashboard');
         })
         .catch((err) => {
-          setError(
-            err.response?.data?.detail || 'Google login failed. Please try again.'
-          );
+          const errorMessage = err.response?.data?.detail || 'Google login failed. Please try again.';
+          
+          // If account exists with different role, provide helpful message
+          if (err.response?.status === 403 && errorMessage.includes('registered as')) {
+            const oppositeRole = selectedRole === 'patient' ? 'doctor' : 'patient';
+            setError(`${errorMessage} Try logging in as a ${oppositeRole} instead.`);
+          } else {
+            setError(errorMessage);
+          }
+        })
+        .finally(() => {
+          setLoading(false);
         });
     },
-    [googleLogin, navigate]
+    [googleLogin, navigate, selectedRole]
   );
 
   useEffect(() => {
     const initializeGoogleSignIn = () => {
       if (window.google && document.getElementById('googleSignInDiv')) {
+        // Clear previous button
+        const signInDiv = document.getElementById('googleSignInDiv');
+        signInDiv.innerHTML = '';
+        
         window.google.accounts.id.initialize({
           client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
           callback: handleGoogleLogin,
         });
         window.google.accounts.id.renderButton(
-          document.getElementById('googleSignInDiv'),
+          signInDiv,
           { 
             theme: 'outline', 
             size: 'large', 
@@ -85,12 +102,42 @@ const LoginPage = () => {
                 Welcome Back
               </h1>
               <p className="text-[#616f89] dark:text-gray-400 text-sm font-normal leading-normal px-4">
-                Secure Portal Access for Healthcare Professionals.<br/>
-                Manage patient documents with AI-driven precision.
+                Sign in to your account
               </p>
             </div>
+
+            {/* Role Selection Tabs */}
+            <div className="w-full flex gap-2 mb-6 p-1 bg-slate-100 dark:bg-slate-800 rounded-lg">
+              <button
+                type="button"
+                onClick={() => setSelectedRole('patient')}
+                className={`flex-1 py-2.5 px-4 rounded-md text-sm font-bold transition-all ${
+                  selectedRole === 'patient'
+                    ? 'bg-white dark:bg-slate-700 text-primary shadow-sm'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                Patient
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedRole('doctor')}
+                className={`flex-1 py-2.5 px-4 rounded-md text-sm font-bold transition-all ${
+                  selectedRole === 'doctor'
+                    ? 'bg-white dark:bg-slate-700 text-primary shadow-sm'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                Doctor
+              </button>
+            </div>
             
-            {/* Login Button */}
+            {/* Error Message */}
+            {error && (
+              <div className="w-full mb-4 p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
+                <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+              </div>
+            )}
             <div className="w-full flex justify-center mb-6">
               <div id="googleSignInDiv" className="w-full"></div>
             </div>
@@ -106,7 +153,7 @@ const LoginPage = () => {
                 New to IntelliMed? <Link to="/register" className="text-primary font-bold hover:underline">Create an account</Link>
               </p>
               <div className="pt-2">
-                <a className="text-[#616f89] dark:text-gray-400 text-xs font-medium hover:text-primary transition-colors" href="#">Contact Support</a>
+                <a className="text-[#616f89] dark:text-gray-400 text-xs font-medium hover:text-primary transition-colors" href="mailto:support@intellimed.ai">Contact Support</a>
               </div>
             </div>
             
@@ -122,7 +169,7 @@ const LoginPage = () => {
                 </p>
               </div>
               <div className="mt-3 text-center">
-                <a className="text-[11px] text-[#94a3b8] dark:text-gray-500 hover:text-primary transition-colors underline decoration-dotted" href="#">Privacy Policy &amp; Terms</a>
+                <a className="text-[11px] text-[#94a3b8] dark:text-gray-500 hover:text-primary transition-colors underline decoration-dotted" href="https://intellimed.ai/privacy" target="_blank" rel="noopener noreferrer">Privacy Policy &amp; Terms</a>
               </div>
             </div>
           </div>

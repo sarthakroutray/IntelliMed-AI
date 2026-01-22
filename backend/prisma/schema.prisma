@@ -32,9 +32,15 @@ model User {
   allergies         String?           @db.Text
   chronic_conditions String?          @db.Text
   
+  // Settings
+  dark_mode         Boolean           @default(false)
+  email_notifications Boolean         @default(true)
+  push_notifications Boolean          @default(false)
+  
   medical_documents MedicalDocument[]
   doctor_patients   DoctorPatient[]   @relation("doctor_relations")
   patient_doctors   DoctorPatient[]   @relation("patient_relations")
+  shared_documents  DocumentShare[]   @relation("shared_documents")
 
   @@index([email], map: "idx_users_email")
   @@map("users")
@@ -58,10 +64,30 @@ model MedicalDocument {
   file_path        String    @db.VarChar(255)
   upload_timestamp DateTime? @default(now()) @db.Timestamptz(6)
   ai_analysis_json Json?
+  verified_by      Int?
+  verified_at      DateTime?
+  verification_notes String? @db.Text
+  clinical_notes   Json?     @default("[]")
+  archived         Boolean   @default(false)
+  archived_at      DateTime?
+  archived_by      Int?
   users            User?     @relation(fields: [patient_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  shared_with      DocumentShare[]
 
   @@index([patient_id], map: "idx_medical_documents_patient_id")
   @@map("medical_documents")
+}
+
+model DocumentShare {
+  id          Int       @id @default(autoincrement())
+  document_id Int
+  doctor_id   Int
+  shared_at   DateTime  @default(now())
+  document    MedicalDocument @relation(fields: [document_id], references: [id], onDelete: Cascade)
+  doctor      User      @relation("shared_documents", fields: [doctor_id], references: [id], onDelete: Cascade)
+
+  @@unique([document_id, doctor_id])
+  @@map("document_share")
 }
 
 enum role_enum {

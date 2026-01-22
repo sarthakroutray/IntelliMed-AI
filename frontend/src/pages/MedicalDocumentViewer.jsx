@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { getDocument, verifyDocument, addClinicalNote } from '../services/api';
+import { getDocument, verifyDocument, addClinicalNote, archiveDocument, downloadDocument } from '../services/api';
 
 const MedicalDocumentViewer = () => {
   const { documentId } = useParams();
@@ -13,6 +13,8 @@ const MedicalDocumentViewer = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showNoteModal, setShowNoteModal] = useState(false);
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
   const [clinicalNote, setClinicalNote] = useState('');
 
   useEffect(() => {
@@ -63,6 +65,36 @@ const MedicalDocumentViewer = () => {
     }
   };
 
+  const handleDownload = async () => {
+    try {
+      const response = await downloadDocument(documentId);
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', document.fileName || 'document');
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      alert('Failed to download document: ' + (err.response?.data?.detail || 'Unknown error'));
+    }
+  };
+
+  const handleArchive = async () => {
+    if (!window.confirm('Are you sure you want to archive this document?')) {
+      return;
+    }
+    
+    try {
+      await archiveDocument(documentId);
+      alert('Document archived successfully!');
+      navigate('/dashboard');
+    } catch (err) {
+      alert('Failed to archive document: ' + (err.response?.data?.detail || 'Unknown error'));
+    }
+  };
+
   if (loading) {
     return (
       <div className="h-screen flex items-center justify-center bg-background-light dark:bg-background-dark">
@@ -103,24 +135,37 @@ const MedicalDocumentViewer = () => {
         <div className="flex flex-1 justify-end gap-6 items-center">
           {/* Action Buttons */}
           <div className="hidden md:flex gap-2">
-            <button className="flex items-center justify-center rounded-lg h-9 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-900 dark:text-white gap-2 text-sm font-bold px-4 transition-colors">
+            <button 
+              onClick={handleDownload}
+              className="flex items-center justify-center rounded-lg h-9 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-900 dark:text-white gap-2 text-sm font-bold px-4 transition-colors"
+            >
               <span className="material-symbols-outlined !text-[20px]">download</span>
               <span>Download</span>
             </button>
-            <button className="flex items-center justify-center rounded-lg h-9 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-900 dark:text-white gap-2 text-sm font-bold px-4 transition-colors">
+            <button 
+              onClick={() => setShowShareModal(true)}
+              className="flex items-center justify-center rounded-lg h-9 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-900 dark:text-white gap-2 text-sm font-bold px-4 transition-colors"
+            >
               <span className="material-symbols-outlined !text-[20px]">share</span>
               <span>Share</span>
             </button>
-            <button className="flex items-center justify-center rounded-lg h-9 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-900 dark:text-white gap-2 text-sm font-bold px-4 transition-colors">
-              <span className="material-symbols-outlined !text-[20px]">inventory_2</span>
-              <span>Archive</span>
-            </button>
+            {user && user.role === 'doctor' && (
+              <button 
+                onClick={handleArchive}
+                className="flex items-center justify-center rounded-lg h-9 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-900 dark:text-white gap-2 text-sm font-bold px-4 transition-colors"
+              >
+                <span className="material-symbols-outlined !text-[20px]">inventory_2</span>
+                <span>Archive</span>
+              </button>
+            )}
           </div>
           {/* User Profile */}
           <div className="flex items-center gap-3 pl-6 border-l border-slate-200 dark:border-slate-700">
             <div className="text-right hidden sm:block">
-              <p className="text-sm font-bold leading-none">{user?.email || 'Dr. Sarah Smith'}</p>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Cardiology Dept.</p>
+              <p className="text-sm font-bold leading-none">{user?.email || 'User'}</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                {user?.role === 'doctor' ? 'Cardiology Dept.' : user?.role === 'patient' ? 'Patient' : 'User'}
+              </p>
             </div>
             <div 
               className="bg-center bg-no-repeat bg-cover rounded-full size-10 border-2 border-slate-100 dark:border-slate-700 cursor-pointer"
@@ -144,9 +189,17 @@ const MedicalDocumentViewer = () => {
           <div className="flex flex-wrap gap-2 mb-4 text-sm">
             <Link to="/dashboard" className="text-slate-500 hover:text-primary transition-colors font-medium">Home</Link>
             <span className="text-slate-400">/</span>
-            <Link to="/dashboard" className="text-slate-500 hover:text-primary transition-colors font-medium">Patients</Link>
-            <span className="text-slate-400">/</span>
-            <Link to={`/patient/${document.patient.id}`} className="text-slate-500 hover:text-primary transition-colors font-medium">{document.patient.name}</Link>
+            {user?.role === 'doctor' ? (
+              <>
+                <Link to="/dashboard" className="text-slate-500 hover:text-primary transition-colors font-medium">Patients</Link>
+                <span className="text-slate-400">/</span>
+                <Link to={`/patient/${document.patient.id}`} className="text-slate-500 hover:text-primary transition-colors font-medium">{document.patient.name}</Link>
+              </>
+            ) : (
+              <>
+                <span className="text-slate-500">My Documents</span>
+              </>
+            )}
             <span className="text-slate-400">/</span>
             <span className="text-slate-900 dark:text-white font-medium">{document.title}</span>
           </div>
@@ -215,7 +268,12 @@ const MedicalDocumentViewer = () => {
 
           <div className="mt-4 flex justify-between items-center text-sm text-slate-500 dark:text-slate-400">
             <span>File: {document.fileName}</span>
-            <a className="text-primary hover:underline font-medium" href="#">View History</a>
+            <button 
+              onClick={() => setShowHistoryModal(true)}
+              className="text-primary hover:underline font-medium"
+            >
+              View History
+            </button>
           </div>
         </main>
 
@@ -307,22 +365,24 @@ const MedicalDocumentViewer = () => {
             </details>
 
             {/* Actions */}
-            <div className="mt-auto pt-6 flex flex-col gap-3">
-              <button 
-                onClick={handleVerifyDocument}
-                className="w-full h-11 bg-primary hover:bg-blue-700 text-white font-bold rounded-lg shadow-md shadow-primary/20 transition-all flex items-center justify-center gap-2"
-              >
-                <span className="material-symbols-outlined !text-[20px]">verified</span>
-                Verify &amp; Sign Off
-              </button>
-              <button 
-                onClick={() => setShowNoteModal(true)}
-                className="w-full h-11 bg-white dark:bg-transparent border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-bold rounded-lg transition-all flex items-center justify-center gap-2"
-              >
-                <span className="material-symbols-outlined !text-[20px]">edit_note</span>
-                Add Clinical Note
-              </button>
-            </div>
+            {user && user.role === 'doctor' && (
+              <div className="mt-auto pt-6 flex flex-col gap-3">
+                <button 
+                  onClick={handleVerifyDocument}
+                  className="w-full h-11 bg-primary hover:bg-blue-700 text-white font-bold rounded-lg shadow-md shadow-primary/20 transition-all flex items-center justify-center gap-2"
+                >
+                  <span className="material-symbols-outlined !text-[20px]">verified</span>
+                  Verify &amp; Sign Off
+                </button>
+                <button 
+                  onClick={() => setShowNoteModal(true)}
+                  className="w-full h-11 bg-white dark:bg-transparent border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-bold rounded-lg transition-all flex items-center justify-center gap-2"
+                >
+                  <span className="material-symbols-outlined !text-[20px]">edit_note</span>
+                  Add Clinical Note
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Disclaimer Footer */}
@@ -362,6 +422,96 @@ const MedicalDocumentViewer = () => {
                 Cancel
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* History Modal */}
+      {showHistoryModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-xl max-w-2xl w-full max-h-[80vh] overflow-hidden shadow-2xl flex flex-col">
+            <div className="p-6 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+              <h3 className="text-xl font-bold text-slate-900 dark:text-white">Document History</h3>
+              <button 
+                onClick={() => setShowHistoryModal(false)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+              >
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+            
+            <div className="p-6 overflow-y-auto flex-1">
+              {/* Upload Info */}
+              <div className="mb-6">
+                <h4 className="text-sm font-bold text-slate-900 dark:text-white mb-3 flex items-center gap-2">
+                  <span className="material-symbols-outlined text-primary">upload</span>
+                  Upload Information
+                </h4>
+                <div className="bg-slate-50 dark:bg-slate-900 rounded-lg p-4">
+                  <p className="text-sm text-slate-700 dark:text-slate-300">
+                    <span className="font-medium">Uploaded:</span> {document.timestamp}
+                  </p>
+                  <p className="text-sm text-slate-700 dark:text-slate-300 mt-1">
+                    <span className="font-medium">Patient:</span> {document.patient.name}
+                  </p>
+                </div>
+              </div>
+
+              {/* Verification Status */}
+              <div className="mb-6">
+                <h4 className="text-sm font-bold text-slate-900 dark:text-white mb-3 flex items-center gap-2">
+                  <span className="material-symbols-outlined text-green-600">verified</span>
+                  Verification Status
+                </h4>
+                <div className="bg-slate-50 dark:bg-slate-900 rounded-lg p-4">
+                  <p className="text-sm text-slate-500 dark:text-slate-400">
+                    No verification records yet. Awaiting doctor review.
+                  </p>
+                </div>
+              </div>
+
+              {/* Clinical Notes */}
+              <div>
+                <h4 className="text-sm font-bold text-slate-900 dark:text-white mb-3 flex items-center gap-2">
+                  <span className="material-symbols-outlined text-blue-600">edit_note</span>
+                  Clinical Notes
+                </h4>
+                <div className="bg-slate-50 dark:bg-slate-900 rounded-lg p-4">
+                  <p className="text-sm text-slate-500 dark:text-slate-400">
+                    No clinical notes added yet.
+                  </p>
+                </div>
+              </div>
+            </div>
+            
+            <div className="p-4 border-t border-gray-200 dark:border-gray-700">
+              <button
+                onClick={() => setShowHistoryModal(false)}
+                className="w-full px-4 py-2 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600 font-medium transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Share Modal */}
+      {showShareModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-xl max-w-md w-full p-6 shadow-2xl">
+            <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-4">Share Document</h3>
+            <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
+              {user?.role === 'patient' 
+                ? 'This document can be shared with your linked doctors via the dashboard.'
+                : 'Document sharing is managed by the patient.'}
+            </p>
+            <button
+              onClick={() => setShowShareModal(false)}
+              className="w-full px-4 py-2 bg-primary text-white rounded-lg hover:bg-blue-700 font-medium transition-colors"
+            >
+              Got it
+            </button>
           </div>
         </div>
       )}

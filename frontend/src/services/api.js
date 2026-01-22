@@ -68,4 +68,26 @@ export const addClinicalNote = (documentId, note) => {
   return api.post(`/documents/${documentId}/notes`, { note });
 };
 
+export const shareDocument = (documentId, doctorId) => {
+  return api.post(`/patient/documents/${documentId}/share/${doctorId}`);
+};
+
+export const unshareDocument = (documentId, doctorId) => {
+  return api.delete(`/patient/documents/${documentId}/share/${doctorId}`);
+};
+
+export const getSharedDoctors = (documentId) => {
+  return api.get(`/patient/documents/${documentId}/shared-doctors`);
+};
+
+export const archiveDocument = (documentId) => {
+  return api.post(`/documents/${documentId}/archive`);
+};
+
+export const downloadDocument = (documentId) => {
+  return api.get(`/documents/${documentId}/download`, {
+    responseType: 'blob'
+  });
+};
+
 export default api;

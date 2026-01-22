@@ -20,8 +20,8 @@ const LinkPatient = ({ onPatientLinked, onClose }) => {
 
     setLoading(true);
     try {
-      const response = await api.post('/doctor/link-patient', null, {
-        params: { access_code: accessCode },
+      const response = await api.post('/doctor/link-patient', {
+        access_code: accessCode,
       });
       setMessage(response.data.message);
       setAccessCode('');

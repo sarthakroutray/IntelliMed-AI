@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import api from '../services/api';
 import Icon from '../components/Icon';
 
 const Settings = () => {
-  const { logout } = useAuth();
-  const [darkMode, setDarkMode] = useState(false);
+  const { logout, user, darkMode, toggleDarkMode } = useAuth();
   const [notifications, setNotifications] = useState({
     email: true,
     push: false,
@@ -19,9 +19,46 @@ const Settings = () => {
     dataRetention: '5-years'
   });
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
 
-  const handleSaveSettings = () => {
-    alert('Settings saved successfully!');
+  useEffect(() => {
+    const fetchSettings = async () => {
+      try {
+        const response = await api.get('/profile');
+        const profile = response.data;
+        setNotifications({
+          email: profile.email_notifications ?? true,
+          push: profile.push_notifications ?? false,
+          documentUploads: true,
+          aiAnalysis: true,
+          doctorMessages: true,
+          securityAlerts: true
+        });
+      } catch (err) {
+        console.error('Failed to fetch settings', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchSettings();
+  }, []);
+
+  const handleSaveSettings = async () => {
+    setSaving(true);
+    try {
+      await api.put('/profile', {
+        dark_mode: darkMode,
+        email_notifications: notifications.email,
+        push_notifications: notifications.push
+      });
+      alert('Settings saved successfully!');
+    } catch (err) {
+      alert('Failed to save settings: ' + (err.response?.data?.detail || 'Unknown error'));
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleDeleteAccount = () => {
@@ -60,8 +97,8 @@ const Settings = () => {
                 <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Use dark theme across the application</p>
               </div>
               <button
-                onClick={() => setDarkMode(!darkMode)}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                onClick={() => toggleDarkMode()}
+                className={`flex w-11 items-center rounded-full transition-colors ${
                   darkMode ? 'bg-primary' : 'bg-gray-300 dark:bg-gray-700'
                 }`}
               >
@@ -272,10 +309,11 @@ const Settings = () => {
         {/* Save Button */}
         <button
           onClick={handleSaveSettings}
-          className="w-full md:w-auto px-6 py-3 rounded-lg bg-primary hover:bg-blue-700 text-white font-bold transition-colors flex items-center justify-center gap-2"
+          disabled={saving}
+          className="w-full md:w-auto px-6 py-3 rounded-lg bg-primary hover:bg-blue-700 text-white font-bold transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <Icon name="save" className="text-[20px]" />
-          <span>Save All Settings</span>
+          <span>{saving ? 'Saving...' : 'Save All Settings'}</span>
         </button>
 
         {/* Danger Zone */}
