@@ -56,4 +56,16 @@ export const deleteDocument = (documentId) => {
   return api.delete(`/patient/documents/${documentId}`);
 };
 
+export const getDocument = (documentId) => {
+  return api.get(`/documents/${documentId}`);
+};
+
+export const verifyDocument = (documentId, notes) => {
+  return api.post(`/documents/${documentId}/verify`, { notes });
+};
+
+export const addClinicalNote = (documentId, note) => {
+  return api.post(`/documents/${documentId}/notes`, { note });
+};
+
 export default api;

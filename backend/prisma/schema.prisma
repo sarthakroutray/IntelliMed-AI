@@ -5,7 +5,7 @@ generator client {
 
 datasource db {
   provider  = "postgresql"
-  url       = env("DIRECT_URL")
+  url       = env("DATABASE_URL")
   directUrl = env("DIRECT_URL")
 }
 
@@ -15,6 +15,23 @@ model User {
   name              String?           @db.VarChar(255)
   hashed_password   String            @db.VarChar(255)
   role              role_enum
+  created_at        DateTime          @default(now())
+  
+  // Profile Information
+  phone             String?           @db.VarChar(50)
+  date_of_birth     DateTime?         @db.Date
+  gender            String?           @db.VarChar(50)
+  address           String?           @db.Text
+  
+  // Emergency Contact
+  emergency_contact String?           @db.VarChar(255)
+  emergency_phone   String?           @db.VarChar(50)
+  
+  // Medical Information
+  blood_type        String?           @db.VarChar(10)
+  allergies         String?           @db.Text
+  chronic_conditions String?          @db.Text
+  
   medical_documents MedicalDocument[]
   doctor_patients   DoctorPatient[]   @relation("doctor_relations")
   patient_doctors   DoctorPatient[]   @relation("patient_relations")

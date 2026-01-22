@@ -3,10 +3,15 @@ from fastapi.security import OAuth2PasswordRequestForm
 from datetime import timedelta
 from pydantic import BaseModel
 
-from backend import auth, schemas
-from backend.prisma_db import get_db
-from backend.google_oauth import verify_google_token
-from backend.prisma_client import Prisma
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+import auth
+import schemas
+from prisma_db import get_db
+from google_oauth import verify_google_token
+from prisma_client import Prisma
 
 router = APIRouter()
 
@@ -48,27 +53,30 @@ async def google_login(request: GoogleLoginRequest, db: Prisma = Depends(get_db)
     email = user_info['email']
     name = user_info.get('name', '')
     
-    if request.role != 'patient':
+    # Validate role
+    if request.role not in ['patient', 'doctor']:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Google login is only available for patient accounts. Doctors must use email/password login."
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid role. Must be 'patient' or 'doctor'."
         )
     
     user = await auth.get_user(db, email=email)
     if not user:
+        # Create new user with the requested role
         user = await db.user.create(
             data={
                 'email': email,
                 'name': name,
                 'hashed_password': auth.get_password_hash(user_info['sub']),
-                'role': 'patient'
+                'role': request.role
             }
         )
     else:
-        if user.role != 'patient':
+        # Check if existing user's role matches the requested role
+        if user.role != request.role:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="This account is not a patient account. Doctors must use email/password login."
+                detail=f"This account is registered as a {user.role}. Please sign in with the correct role."
             )
     
     access_token_expires = timedelta(minutes=auth.ACCESS_TOKEN_EXPIRE_MINUTES)

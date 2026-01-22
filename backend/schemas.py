@@ -1,7 +1,7 @@
 from pydantic import BaseModel, EmailStr
 from typing import Optional, Dict, Any
 from datetime import datetime
-from backend.prisma_client.enums import role_enum as Role
+from prisma_client.enums import role_enum as Role
 
 
 class UserCreate(BaseModel):

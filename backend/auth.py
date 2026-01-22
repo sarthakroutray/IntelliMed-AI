@@ -5,10 +5,10 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 import bcrypt
-from backend.prisma_db import get_db
-from backend.prisma_client import Prisma
+from prisma_db import get_db
+from prisma_client import Prisma
 
-from backend import schemas
+import schemas
 
 SECRET_KEY = "your-secret-key"
 ALGORITHM = "HS256"

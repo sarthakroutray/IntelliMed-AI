@@ -9,8 +9,8 @@ load_dotenv(dotenv_path=env_path, override=True)
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from backend.api import auth_router, patient_router, doctor_router, linking_router
-from backend.prisma_db import db
+from api import auth_router, patient_router, doctor_router, linking_router, document_router, profile_router
+from prisma_db import db
 
 google_client_id = os.getenv('GOOGLE_CLIENT_ID')
 if google_client_id:
@@ -52,6 +52,8 @@ app.include_router(auth_router.router, prefix="/api/auth", tags=["auth"])
 app.include_router(patient_router.router, prefix="/api/patient", tags=["patient"])
 app.include_router(doctor_router.router, prefix="/api/doctor", tags=["doctor"])
 app.include_router(linking_router.router, prefix="/api", tags=["linking"])
+app.include_router(document_router.router, prefix="/api", tags=["documents"])
+app.include_router(profile_router.router, prefix="/api", tags=["profile"])
 
 @app.get("/")
 def read_root():

@@ -4,11 +4,15 @@ import asyncio
 import json
 from pathlib import Path
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, status
-from backend.auth import get_current_user
-from backend.prisma_db import get_db
-from backend.schemas import User, DocumentInfo, DocumentDetail
-from backend.prisma_client import Prisma
-from backend import services
+
+import sys
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from auth import get_current_user
+from prisma_db import get_db
+from schemas import User, DocumentInfo, DocumentDetail
+from prisma_client import Prisma
+import services
 
 router = APIRouter()
 
@@ -127,4 +131,32 @@ async def delete_document(
     )
 
     return None
+
+
+@router.get("/linked-doctors", response_model=List[User])
+async def get_linked_doctors(
+    db: Prisma = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Retrieves a list of all doctors that have been granted access to the patient's records.
+    """
+    if current_user.role != 'patient':
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only patients can view their linked doctors",
+        )
+
+    doctor_links = await db.doctorpatient.find_many(
+        where={
+            'patient_id': current_user.id,
+            'doctor_id': {'not': None}
+        }
+    )
+    doctor_ids = [link.doctor_id for link in doctor_links if link.doctor_id]
+
+    doctors = await db.user.find_many(
+        where={'id': {'in': doctor_ids}}
+    )
+    return doctors
 

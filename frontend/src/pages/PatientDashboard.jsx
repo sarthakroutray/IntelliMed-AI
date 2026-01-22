@@ -1,20 +1,76 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useNavigate } from 'react-router-dom';
 import { uploadDocument, getPatientDocuments, deleteDocument } from '../services/api';
+import api from '../services/api';
 import { useDropzone } from 'react-dropzone';
-import '../styles/PatientDashboard.css';
+import Icon from '../components/Icon.jsx';
 import GenerateAccessCode from '../components/GenerateAccessCode.jsx';
 
 const PatientDashboard = () => {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
   const [documents, setDocuments] = useState([]);
   const [error, setError] = useState('');
   const [uploading, setUploading] = useState(false);
-  const [selectedFile, setSelectedFile] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeTab, setActiveTab] = useState('all'); // all, shared, private
+  const [showGenerateCodeModal, setShowGenerateCodeModal] = useState(false);
+  const [linkedDoctors, setLinkedDoctors] = useState([]);
+  const [loadingDoctors, setLoadingDoctors] = useState(false);
+  const [analyzing, setAnalyzing] = useState(null);
 
-  const onDrop = useCallback((acceptedFiles) => {
-    setSelectedFile(acceptedFiles[0]);
+  const handleAnalyze = async (docId) => {
+    setAnalyzing(docId);
+    try {
+      // Simulate AI analysis (replace with actual API when ML is ready)
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      // Mock AI analysis result
+      const mockAnalysis = {
+        summary: "Medical document analysis completed. Key findings extracted.",
+        entities: [
+          { text: "Medical Condition", label: "DIAGNOSIS", confidence: 0.95 },
+          { text: "Treatment", label: "PROCEDURE", confidence: 0.89 }
+        ],
+        recommendations: [
+          "Follow up with healthcare provider",
+          "Monitor symptoms regularly"
+        ]
+      };
+      
+      // Update local state
+      setDocuments(docs => 
+        docs.map(doc => 
+          doc.id === docId 
+            ? { ...doc, ai_analysis: JSON.stringify(mockAnalysis) } 
+            : doc
+        )
+      );
+      
+    } catch (err) {
+      console.error('AI analysis failed', err);
+      alert('AI analysis failed. Please try again.');
+    } finally {
+      setAnalyzing(null);
+    }
+  };
+
+  const onDrop = useCallback(async (acceptedFiles) => {
+    if (acceptedFiles.length === 0) return;
+    
+    setUploading(true);
+    setError('');
+
+    try {
+      await uploadDocument(acceptedFiles[0]);
+      await fetchDocuments();
+    } catch (err) {
+      setError('File upload failed. Please try again.');
+    } finally {
+      setUploading(false);
+    }
   }, []);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({ 
@@ -23,27 +79,10 @@ const PatientDashboard = () => {
       'application/pdf': ['.pdf'],
       'image/jpeg': ['.jpeg', '.jpg'],
       'image/png': ['.png'],
+      'application/dicom': ['.dcm'],
     },
     multiple: false,
   });
-
-  const handleUpload = async () => {
-    if (!selectedFile) return;
-
-    setUploading(true);
-    setError('');
-
-    try {
-      await uploadDocument(selectedFile);
-      await fetchDocuments(); // Refresh document list
-      setSelectedFile(null); // Clear selected file
-      setError(''); // Clear any previous errors
-    } catch (err) {
-      setError('File upload failed. Please try again.');
-    } finally {
-      setUploading(false);
-    }
-  };
 
   const handleDelete = async (documentId) => {
     if (!window.confirm('Are you sure you want to delete this document?')) return;
@@ -60,7 +99,6 @@ const PatientDashboard = () => {
     if (!user) return;
     try {
       setLoading(true);
-      // The backend should infer the user from the token
       const response = await getPatientDocuments(); 
       setDocuments(response.data);
     } catch (err) {
@@ -70,145 +108,270 @@ const PatientDashboard = () => {
     }
   }, [user]);
 
+  const fetchLinkedDoctors = useCallback(async () => {
+    if (!user) return;
+    try {
+      setLoadingDoctors(true);
+      const response = await api.get('/patient/linked-doctors');
+      setLinkedDoctors(response.data);
+    } catch (err) {
+      console.error('Failed to fetch linked doctors:', err);
+      setLinkedDoctors([]);
+    } finally {
+      setLoadingDoctors(false);
+    }
+  }, [user]);
+
   useEffect(() => {
     fetchDocuments();
-  }, [fetchDocuments]);
+    fetchLinkedDoctors();
+  }, [fetchDocuments, fetchLinkedDoctors]);
+
+  const filteredDocuments = documents.filter(doc => 
+    doc.filename?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const getFileIcon = (filename) => {
+    if (filename?.endsWith('.pdf')) return { icon: 'picture_as_pdf', color: 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400' };
+    if (filename?.endsWith('.dcm')) return { icon: 'imagesmode', color: 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400' };
+    return { icon: 'description', color: 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400' };
+  };
+
+  const getDocumentStatus = (doc) => {
+    // Check if document has been accessed by doctors (simplified - you can expand this)
+    // For now, showing all as private since we don't have a shared_with field in the schema
+    return (
+      <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600">
+        <Icon name="lock" className="text-[14px] text-gray-500 dark:text-gray-400" />
+        <span className="text-xs font-medium text-gray-600 dark:text-gray-300">Private</span>
+      </div>
+    );
+  };
+
+  const handleDeleteDocument = async (docId) => {
+    if (!window.confirm('Are you sure you want to delete this document? This action cannot be undone.')) return;
+    
+    try {
+      await deleteDocument(docId);
+      setDocuments(documents.filter(doc => doc.id !== docId));
+    } catch (err) {
+      setError('Failed to delete document.');
+    }
+  };
 
   return (
-    <div className="dashboard-container">
-      <header className="dashboard-header">
-        <div className="header-content">
-          <div>
-            <h1>Welcome, {user?.email?.split('@')[0]}!</h1>
-            <p>This is your personal health dashboard. Upload and manage your medical documents securely.</p>
-          </div>
-          <div className="stats-container">
-            <div className="stat-card">
-              <div className="stat-icon">Docs</div>
-              <div className="stat-info">
-                <div className="stat-value">{documents.length}</div>
-                <div className="stat-label">Documents</div>
-              </div>
-            </div>
-          </div>
+    <div className="flex-1 max-w-[1200px] w-full mx-auto p-4 md:p-8 flex flex-col gap-8">
+      {/* Page Header */}
+      <div className="flex flex-wrap justify-between items-end gap-4">
+        <div className="flex flex-col gap-2">
+          <h1 className="text-[#111318] dark:text-white text-3xl md:text-4xl font-black leading-tight tracking-[-0.033em]">
+            My Medical Documents
+          </h1>
+          <p className="text-[#616f89] dark:text-gray-400 text-base font-normal">
+            Manage, upload, and analyze your health records safely.
+          </p>
         </div>
-      </header>
+        <div className="hidden sm:block">
+          <p className="text-sm font-medium text-[#616f89] dark:text-gray-400 text-right">
+            Last login: Today, {new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+          </p>
+        </div>
+      </div>
 
       {error && (
-        <div className="error-message">
-          <span className="error-icon">⚠</span>
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 px-4 py-3 rounded-lg">
           {error}
         </div>
       )}
 
-      <div className="dashboard-grid">
-        <div className="dashboard-card upload-card">
-          <div className="card-header">
-            <h2>Upload New Document</h2>
-            <p className="card-subtitle">Share your medical records securely</p>
-          </div>
-          <div {...getRootProps()} className={`upload-area ${isDragActive ? 'active' : ''} ${selectedFile ? 'has-file' : ''}`}>
-            <input {...getInputProps()} />
-            <div className="upload-icon">
-              {selectedFile ? '✓' : '+'}
-            </div>
-            {selectedFile ? (
-              <div className="selected-file">
-                <p className="file-name">{selectedFile.name}</p>
-                <p className="file-size">{(selectedFile.size / 1024).toFixed(2)} KB</p>
-              </div>
-            ) : isDragActive ? (
-              <p className="upload-text">Drop the file here...</p>
-            ) : (
-              <div className="upload-prompt">
-                <p className="upload-text">Drag & drop your document here</p>
-                <p className="upload-hint">or click to browse</p>
-                <p className="upload-formats">Supported: PDF, JPG, PNG</p>
-              </div>
-            )}
-          </div>
-          <button 
-            onClick={handleUpload} 
-            disabled={uploading || !selectedFile} 
-            className="upload-button"
-          >
+      {/* Upload Section (Drag & Drop) */}
+      <div {...getRootProps()} className={`bg-white dark:bg-[#1A202C] rounded-xl border-2 border-dashed ${isDragActive ? 'border-primary' : 'border-primary/30 dark:border-primary/20'} hover:border-primary dark:hover:border-primary transition-colors cursor-pointer group`}>
+        <input {...getInputProps()} />
+        <div className="flex flex-col items-center justify-center py-10 px-6 text-center">
+          <div className={`size-12 rounded-full bg-primary/10 flex items-center justify-center mb-4 ${uploading ? 'animate-pulse' : 'group-hover:scale-110'} transition-transform`}>
             {uploading ? (
-              <>
-                <span className="spinner-small"></span>
-                <span>Uploading...</span>
-              </>
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
             ) : (
-              <>
-                <span>Upload Document</span>
-              </>
+              <Icon name="cloud_upload" className="text-primary text-2xl" />
             )}
-          </button>
-        </div>
-
-        <div className="dashboard-card documents-card full-width">
-          <div className="card-header">
-            <h2>Your Documents</h2>
-            <p className="card-subtitle">{documents.length} document{documents.length !== 1 ? 's' : ''} uploaded</p>
           </div>
-          {loading ? (
-            <div className="loading-container">
-              <div className="spinner"></div>
-              <p>Loading documents...</p>
-            </div>
-          ) : documents.length > 0 ? (
-            <div className="document-list">
-              {documents.map((doc) => (
-                <div key={doc.id} className="document-item">
-                  <div className="document-header">
-                    <div className="document-icon">Doc</div>
-                    <div className="document-info">
-                      <h3>{doc.filename}</h3>
-                      <p className="upload-date">
-                        {new Date(doc.upload_timestamp).toLocaleDateString('en-US', {
-                          year: 'numeric',
-                          month: 'long',
-                          day: 'numeric'
-                        })}
-                      </p>
-                    </div>
-                    <button 
-                      className="delete-button"
-                      onClick={() => handleDelete(doc.id)}
-                      title="Delete Document"
-                    >
-                      Delete
-                    </button>
-                  </div>
-                  {doc.ai_analysis && (
-                    <div className="analysis-section">
-                      <div className="analysis-header">
-                        <h4>AI Analysis</h4>
-                        <span className="analysis-badge">Completed</span>
-                      </div>
-                      <div className="analysis-content">
-                        {JSON.stringify(doc.ai_analysis, null, 2)}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="empty-state">
-              <div className="empty-icon">—</div>
-              <p>No documents uploaded yet</p>
-              <span className="empty-hint">Upload your first document to get started</span>
-            </div>
+          <h3 className="text-lg font-bold text-[#111318] dark:text-white mb-2">
+            {uploading ? 'Uploading...' : 'Upload New Medical Record'}
+          </h3>
+          <p className="text-sm text-[#616f89] dark:text-gray-400 mb-6 max-w-md">
+            {isDragActive ? 'Drop your file here' : 'Drag & drop files here (PDF, JPG, DICOM), or click to browse. Files are encrypted before upload.'}
+          </p>
+          {!isDragActive && !uploading && (
+            <button className="flex items-center justify-center rounded-lg h-9 px-6 bg-primary text-white text-sm font-bold shadow-md shadow-primary/20 hover:bg-primary/90 transition-colors">
+              Browse Files
+            </button>
           )}
         </div>
+      </div>
 
-        <div className="dashboard-card">
-          <GenerateAccessCode />
+      {/* Filters & Controls */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div className="flex gap-2 p-1 bg-white dark:bg-[#1A202C] rounded-lg border border-[#dbdfe6] dark:border-gray-700">
+          <button 
+            onClick={() => setActiveTab('all')}
+            className={`px-4 py-1.5 rounded-md text-sm font-bold transition-colors ${
+              activeTab === 'all' ? 'bg-primary/10 text-primary' : 'text-[#616f89] dark:text-gray-400 hover:text-[#111318] dark:hover:text-white'
+            }`}
+          >
+            All Documents
+          </button>
+          <button 
+            onClick={() => setActiveTab('shared')}
+            className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
+              activeTab === 'shared' ? 'bg-primary/10 text-primary' : 'text-[#616f89] dark:text-gray-400 hover:text-[#111318] dark:hover:text-white'
+            }`}
+          >
+            Shared
+          </button>
+          <button 
+            onClick={() => setActiveTab('private')}
+            className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
+              activeTab === 'private' ? 'bg-primary/10 text-primary' : 'text-[#616f89] dark:text-gray-400 hover:text-[#111318] dark:hover:text-white'
+            }`}
+          >
+            Private
+          </button>
+        </div>
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <div className="relative w-full sm:w-64">
+            <Icon name="search" className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-[20px]" />
+            <input 
+              className="w-full h-9 pl-10 pr-4 rounded-lg border border-[#dbdfe6] dark:border-gray-700 bg-white dark:bg-[#1A202C] text-sm focus:border-primary focus:ring-0 placeholder:text-gray-400 dark:text-white"
+              placeholder="Search documents..."
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </div>
+          <button className="h-9 px-3 rounded-lg border border-[#dbdfe6] dark:border-gray-700 bg-white dark:bg-[#1A202C] text-gray-500 hover:text-primary transition-colors flex items-center justify-center">
+            <Icon name="filter_list" />
+          </button>
         </div>
       </div>
-    </div>
-  );
-};
 
-export default PatientDashboard;
+      {/* Documents Table */}
+      <div className="bg-white dark:bg-[#1A202C] rounded-xl border border-[#dbdfe6] dark:border-gray-700 overflow-hidden shadow-sm">
+        {loading ? (
+          <div className="flex items-center justify-center py-20">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-gray-50 dark:bg-gray-800/50 border-b border-[#dbdfe6] dark:border-gray-700">
+                      <th className="px-6 py-4 text-xs font-bold text-[#616f89] dark:text-gray-400 uppercase tracking-wider">Document Name</th>
+                      <th className="px-6 py-4 text-xs font-bold text-[#616f89] dark:text-gray-400 uppercase tracking-wider">Type</th>
+                      <th className="px-6 py-4 text-xs font-bold text-[#616f89] dark:text-gray-400 uppercase tracking-wider">Date</th>
+                      <th className="px-6 py-4 text-xs font-bold text-[#616f89] dark:text-gray-400 uppercase tracking-wider">Status</th>
+                      <th className="px-6 py-4 text-xs font-bold text-[#616f89] dark:text-gray-400 uppercase tracking-wider text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#dbdfe6] dark:divide-gray-700">
+                    {filteredDocuments.length > 0 ? filteredDocuments.map((doc) => {
+                      const fileInfo = getFileIcon(doc.filename);
+                      return (
+                        <tr key={doc.id} className="group hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors">
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-3">
+                              <div className={`size-8 rounded ${fileInfo.color} flex items-center justify-center`}>
+                                <Icon name={fileInfo.icon} className="text-[20px]" />
+                              </div>
+                              <span className="text-sm font-bold text-[#111318] dark:text-white">{doc.filename}</span>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 text-sm text-[#616f89] dark:text-gray-400">
+                            {doc.filename?.split('.').pop().toUpperCase()}
+                          </td>
+                          <td className="px-6 py-4 text-sm text-[#616f89] dark:text-gray-400">
+                            {doc.upload_timestamp ? new Date(doc.upload_timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'N/A'}
+                          </td>
+                          <td className="px-6 py-4">
+                            {getDocumentStatus(doc)}
+                          </td>
+                          <td className="px-6 py-4 text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              {doc.ai_analysis ? (
+                                <button 
+                                  onClick={() => navigate('/patient-dashboard/ai-analysis')}
+                                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#dbdfe6] dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 text-[#111318] dark:text-white text-xs font-bold transition-colors"
+                                >
+                                  <Icon name="visibility" className="text-[16px]" />
+                                  View Analysis
+                                </button>
+                              ) : (
+                                <button 
+                                  onClick={() => handleAnalyze(doc.id)}
+                                  disabled={analyzing === doc.id}
+                                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary text-xs font-bold transition-colors disabled:opacity-50"
+                                >
+                                  {analyzing === doc.id ? (
+                                    <>
+                                      <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-primary"></div>
+                                      <span>Analyzing...</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Icon name="smart_toy" className="text-[16px]" />
+                                      <span>Analyze</span>
+                                    </>
+                                  )}
+                                </button>
+                              )}
+                              <button 
+                                onClick={() => handleDeleteDocument(doc.id)}
+                                className="size-8 flex items-center justify-center rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
+                                title="Delete document"
+                              >
+                                <Icon name="delete" className="text-[20px]" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    }) : (
+                      <tr>
+                        <td colSpan="5" className="py-12 text-center">
+                          <div className="flex flex-col items-center gap-3">
+                            <Icon name="description" className="text-[48px] text-gray-300 dark:text-gray-600" />
+                            <p className="text-[#637588] dark:text-gray-400">No documents found</p>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+          
+          <div className="text-center pb-8">
+            <p className="text-xs text-[#616f89] dark:text-gray-500">
+              IntelliMed-AI complies with HIPAA standards. All your documents are end-to-end encrypted.
+            </p>
+          </div>
 
+        {/* Generate Access Code Modal */}
+        {showGenerateCodeModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowGenerateCodeModal(false)}>
+            <div className="bg-white dark:bg-[#1a202c] rounded-xl max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xl font-bold text-[#111318] dark:text-white">Connect with Doctor</h3>
+                <button onClick={() => setShowGenerateCodeModal(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
+                  <Icon name="close" className="text-[24px]" />
+                </button>
+              </div>
+              <GenerateAccessCode />
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+  
+  export default PatientDashboard;

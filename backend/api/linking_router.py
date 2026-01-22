@@ -1,9 +1,14 @@
 import secrets
 from fastapi import APIRouter, Depends, HTTPException, status
-from backend.auth import get_current_user
-from backend.prisma_db import get_db
-from backend.schemas import User
-from backend.prisma_client import Prisma
+
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from auth import get_current_user
+from prisma_db import get_db
+from schemas import User
+from prisma_client import Prisma
 
 router = APIRouter(
     tags=["linking"],

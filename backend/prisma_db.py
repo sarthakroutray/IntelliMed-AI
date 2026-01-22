@@ -1,4 +1,4 @@
-from backend.prisma_client import Prisma
+from prisma_client import Prisma
 
 db = Prisma(auto_register=True)
 
