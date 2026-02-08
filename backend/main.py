@@ -7,8 +7,10 @@ if not env_path.exists():
     env_path = Path(__file__).parent.parent / '.env'
 load_dotenv(dotenv_path=env_path, override=True)
 
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from api import auth_router, patient_router, doctor_router, linking_router, document_router, profile_router, sharing_router
 from prisma_db import db
 
@@ -18,18 +20,18 @@ if google_client_id:
 else:
     print("⚠ GOOGLE_CLIENT_ID not found in environment")
 
-app = FastAPI(title="IntelliMed AI")
 
-@app.on_event("startup")
-async def startup():
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     await db.connect()
     print("✓ Database connected")
-
-@app.on_event("shutdown")
-async def shutdown():
+    yield
     if db.is_connected():
         await db.disconnect()
         print("✓ Database disconnected")
+
+
+app = FastAPI(title="IntelliMed AI", lifespan=lifespan)
 
 origins = [
     "http://localhost",
@@ -47,6 +49,11 @@ app.add_middleware(
     allow_headers=["*"],
     expose_headers=["*"],
 )
+
+# Mount uploads directory for serving files
+uploads_dir = Path(__file__).parent / "uploads"
+uploads_dir.mkdir(exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=str(uploads_dir)), name="uploads")
 
 app.include_router(auth_router.router, prefix="/api/auth", tags=["auth"])
 app.include_router(patient_router.router, prefix="/api/patient", tags=["patient"])

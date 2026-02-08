@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { getDocument, verifyDocument, addClinicalNote, archiveDocument, downloadDocument } from '../services/api';
@@ -36,9 +36,41 @@ const MedicalDocumentViewer = () => {
     }
   }, [documentId]);
 
-  const handleZoomIn = () => setZoomLevel(prev => Math.min(prev + 10, 200));
-  const handleZoomOut = () => setZoomLevel(prev => Math.max(prev - 10, 50));
-  const handleResetZoom = () => setZoomLevel(100);
+  // Parse AI analysis from backend format to UI format
+  const parseAIAnalysis = (doc) => {
+    if (!doc || !doc.ai_analysis) return null;
+    
+    try {
+      const analysisData = doc.ai_analysis;
+      
+      if (typeof analysisData === 'object' && analysisData !== null) {
+        const cv = analysisData.cv_result || {};
+        const nlp = analysisData.nlp_result || {};
+        const ocr = analysisData.ocr_result || '';
+        
+        // Use validated document type from backend
+        const documentType = analysisData.detected_type || cv.document_type || nlp.document_type || 'document';
+        
+        return {
+          documentType,
+          cv,
+          nlp,
+          ocr_text: ocr,
+          is_prescription: nlp.is_prescription || false,
+        };
+      }
+    } catch (err) {
+      console.error('Error parsing AI analysis:', err);
+    }
+    
+    return null;
+  };
+
+  const analysis = useMemo(() => document ? parseAIAnalysis(document) : null, [document]);
+
+  const handleZoomIn = useCallback(() => setZoomLevel(prev => Math.min(prev + 10, 200)), []);
+  const handleZoomOut = useCallback(() => setZoomLevel(prev => Math.max(prev - 10, 50)), []);
+  const handleResetZoom = useCallback(() => setZoomLevel(100), []);
 
   const handleVerifyDocument = async () => {
     try {
@@ -220,15 +252,31 @@ const MedicalDocumentViewer = () => {
 
           {/* Viewer Container */}
           <div className="flex-1 min-h-[500px] bg-slate-200 dark:bg-[#0f1520] rounded-xl border border-slate-300 dark:border-slate-700 relative overflow-hidden group shadow-inner flex flex-col">
-            {/* Main Image */}
+            {/* Main Document Display */}
             <div className="absolute inset-0 flex items-center justify-center bg-black">
-              <div 
-                className="w-full h-full bg-contain bg-center bg-no-repeat opacity-90 transition-transform duration-200"
-                style={{
-                  backgroundImage: `url('${document.imageUrl || document.fileUrl}')`,
-                  transform: `scale(${zoomLevel / 100})`
-                }}
-              />
+              {document.fileName && (document.fileName.toLowerCase().endsWith('.pdf') || document.fileType === 'PDF') ? (
+                // PDF Viewer
+                <iframe
+                  src={document.fileUrl || document.imageUrl}
+                  className="w-full h-full"
+                  title="PDF Document"
+                  style={{
+                    transform: `scale(${zoomLevel / 100})`,
+                    transformOrigin: 'center center',
+                    width: `${100 * (100 / zoomLevel)}%`,
+                    height: `${100 * (100 / zoomLevel)}%`,
+                  }}
+                />
+              ) : (
+                // Image Viewer
+                <div 
+                  className="w-full h-full bg-contain bg-center bg-no-repeat opacity-90 transition-transform duration-200"
+                  style={{
+                    backgroundImage: `url('${document.imageUrl || document.fileUrl}')`,
+                    transform: `scale(${zoomLevel / 100})`
+                  }}
+                />
+              )}
             </div>
 
             {/* Floating Toolbar */}
@@ -290,79 +338,209 @@ const MedicalDocumentViewer = () => {
           </div>
 
           <div className="p-6 flex flex-col gap-6 flex-1">
-            {/* Summary Card */}
-            <div className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/10 border border-green-100 dark:border-green-800/30 rounded-xl p-5 shadow-sm">
-              <div className="flex items-start gap-3">
-                <div className="mt-0.5 bg-green-100 dark:bg-green-900/50 rounded-full p-1 text-green-600 dark:text-green-400">
-                  <span className="material-symbols-outlined !text-[20px]">check_circle</span>
-                </div>
-                <div>
-                  <h4 className="text-green-800 dark:text-green-300 font-bold text-sm mb-1">{document.analysis.summary.title}</h4>
-                  <p className="text-green-700/80 dark:text-green-400/80 text-sm leading-relaxed">
-                    {document.analysis.summary.description}
-                  </p>
-                </div>
+            {!analysis ? (
+              <div className="text-center py-8">
+                <span className="material-symbols-outlined text-slate-300 dark:text-slate-600 text-5xl">pending</span>
+                <p className="text-sm text-slate-500 dark:text-slate-400 mt-3">No AI analysis available</p>
               </div>
-            </div>
+            ) : (
+              <>
+                {/* X-ray Classification - Only for X-rays */}
+                {analysis.documentType === 'xray' && analysis.cv.classification && (
+                  <>
+                    {/* Summary Card */}
+                    <div className={`bg-gradient-to-br ${
+                      analysis.cv.classification === 'Normal'
+                        ? 'from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/10 border-green-100 dark:border-green-800/30'
+                        : 'from-red-50 to-rose-50 dark:from-red-900/20 dark:to-rose-900/10 border-red-100 dark:border-red-800/30'
+                    } border rounded-xl p-5 shadow-sm`}>
+                      <div className="flex items-start gap-3">
+                        <div className={`mt-0.5 ${
+                          analysis.cv.classification === 'Normal' 
+                            ? 'bg-green-100 dark:bg-green-900/50 text-green-600 dark:text-green-400' 
+                            : 'bg-red-100 dark:bg-red-900/50 text-red-600 dark:text-red-400'
+                        } rounded-full p-1`}>
+                          <span className="material-symbols-outlined !text-[20px]">
+                            {analysis.cv.classification === 'Normal' ? 'check_circle' : 'warning'}
+                          </span>
+                        </div>
+                        <div>
+                          <h4 className={`${
+                            analysis.cv.classification === 'Normal'
+                              ? 'text-green-800 dark:text-green-300'
+                              : 'text-red-800 dark:text-red-300'
+                          } font-bold text-sm mb-1`}>{analysis.cv.classification}</h4>
+                          <p className={`text-sm leading-relaxed ${
+                            analysis.cv.classification === 'Normal'
+                              ? 'text-green-700/80 dark:text-green-400/80'
+                              : 'text-red-700/80 dark:text-red-400/80'
+                          }`}>
+                            {analysis.cv.recommendation || 'Analysis completed'}
+                          </p>
+                          <p className="text-xs text-slate-500 mt-1">
+                            Confidence: {(analysis.cv.confidence * 100).toFixed(1)}%
+                          </p>
+                        </div>
+                      </div>
+                    </div>
 
-            {/* Findings List */}
-            <div className="flex flex-col gap-4">
-              <div className="flex justify-between items-center">
-                <h4 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">Detected Findings</h4>
-                <span className="text-xs font-medium text-slate-400">Confidence Score</span>
-              </div>
+                    {/* Probabilities */}
+                    {analysis.cv.probabilities && (
+                      <div className="flex flex-col gap-4">
+                        <div className="flex justify-between items-center">
+                          <h4 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">Class Probabilities</h4>
+                          <span className="text-xs font-medium text-slate-400">Confidence</span>
+                        </div>
 
-              {document.analysis.findings.map((finding, index) => (
-                <div key={index} className="group">
-                  <div className="flex justify-between text-sm mb-1.5">
-                    <span className="font-medium text-slate-700 dark:text-slate-200">{finding.label}</span>
-                    <span className={`font-bold ${finding.confidence > 50 ? 'text-primary' : 'text-slate-400'}`}>
-                      {finding.confidence}%
-                    </span>
+                        {Object.entries(analysis.cv.probabilities).map(([label, prob]) => (
+                          <div key={label}>
+                            <div className="flex justify-between text-sm mb-1.5">
+                              <span className="font-medium text-slate-700 dark:text-slate-200">{label}</span>
+                              <span className={`font-bold ${prob > 0.5 ? 'text-primary' : 'text-slate-400'}`}>
+                                {(prob * 100).toFixed(1)}%
+                              </span>
+                            </div>
+                            <div className="h-2 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                              <div 
+                                className={`h-full rounded-full transition-all ${
+                                  label === 'Normal' ? 'bg-green-500' : 'bg-red-500'
+                                }`}
+                                style={{width: `${Math.max(prob * 100, 1)}%`}}
+                              />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {/* Prescription Details - Only for prescriptions */}
+                {analysis.documentType === 'prescription' && (
+                  <>
+                    {/* Summary for prescriptions - only if meaningful */}
+                    {analysis.nlp.summary && !analysis.nlp.summary.includes('No text available') && (
+                      <div className="bg-gradient-to-br from-purple-50 to-violet-50 dark:from-purple-900/20 dark:to-violet-900/10 border border-purple-100 dark:border-purple-800/30 rounded-xl p-5 shadow-sm">
+                        <div className="flex items-start gap-3">
+                          <div className="mt-0.5 bg-purple-100 dark:bg-purple-900/50 rounded-full p-1 text-purple-600 dark:text-purple-400">
+                            <span className="material-symbols-outlined !text-[20px]">description</span>
+                          </div>
+                          <div>
+                            <h4 className="text-purple-800 dark:text-purple-300 font-bold text-sm mb-1">Prescription Document</h4>
+                            <p className="text-purple-700/80 dark:text-purple-400/80 text-sm leading-relaxed">
+                              {analysis.nlp.summary}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {/* Divider */}
+                <div className="h-px bg-slate-100 dark:bg-slate-800 my-2"></div>
+
+                {/* Prescription Details (from NLP) - Only for prescriptions */}
+                {analysis.documentType === 'prescription' && analysis.nlp.prescriptions?.length > 0 && (
+                  <div className="flex flex-col gap-3">
+                    <h4 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                      <span className="material-symbols-outlined text-purple-600 !text-[18px]">medication</span>
+                      Prescription Details
+                    </h4>
+                    {analysis.nlp.prescriptions.map((rx, index) => (
+                      <div key={index} className="p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-100 dark:border-purple-800">
+                        <p className="text-sm font-bold text-purple-900 dark:text-purple-300 capitalize mb-2">{rx.medication}</p>
+                        <div className="grid grid-cols-2 gap-2">
+                          {rx.dosage && (
+                            <div>
+                              <p className="text-[10px] font-bold text-slate-500 uppercase">Dosage</p>
+                              <p className="text-xs font-medium text-slate-800 dark:text-slate-200">{rx.dosage}</p>
+                            </div>
+                          )}
+                          {rx.frequency && (
+                            <div>
+                              <p className="text-[10px] font-bold text-slate-500 uppercase">Frequency</p>
+                              <p className="text-xs font-medium text-slate-800 dark:text-slate-200 capitalize">{rx.frequency}</p>
+                            </div>
+                          )}
+                          {rx.route && (
+                            <div>
+                              <p className="text-[10px] font-bold text-slate-500 uppercase">Route</p>
+                              <p className="text-xs font-medium text-slate-800 dark:text-slate-200 capitalize">{rx.route}</p>
+                            </div>
+                          )}
+                          {rx.duration && (
+                            <div>
+                              <p className="text-[10px] font-bold text-slate-500 uppercase">Duration</p>
+                              <p className="text-xs font-medium text-slate-800 dark:text-slate-200 capitalize">{rx.duration}</p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                  <div className="h-2 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                    <div 
-                      className={`h-full rounded-full ${finding.confidence > 50 ? 'bg-primary' : 'bg-slate-300 dark:bg-slate-600'}`}
-                      style={{width: `${finding.confidence}%`}}
-                    />
+                )}
+
+                {/* NLP Entities - Only for prescriptions */}
+                {analysis.documentType === 'prescription' && analysis.nlp.entities?.length > 0 && (
+                  <div className="flex flex-col gap-3">
+                    <h4 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                      <span className="material-symbols-outlined text-primary !text-[18px]">label</span>
+                      Entities Detected
+                    </h4>
+                    <div className="flex flex-wrap gap-1.5">
+                      {analysis.nlp.entities.slice(0, 12).map((entity, index) => (
+                        <span key={index} className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium border ${
+                          entity.label === 'MEDICATION' ? 'bg-purple-50 text-purple-800 border-purple-200 dark:bg-purple-900/20 dark:text-purple-300 dark:border-purple-800' :
+                          entity.label === 'DOSAGE' ? 'bg-blue-50 text-blue-800 border-blue-200 dark:bg-blue-900/20 dark:text-blue-300 dark:border-blue-800' :
+                          entity.label === 'FREQUENCY' ? 'bg-green-50 text-green-800 border-green-200 dark:bg-green-900/20 dark:text-green-300 dark:border-green-800' :
+                          entity.label === 'ROUTE' ? 'bg-orange-50 text-orange-800 border-orange-200 dark:bg-orange-900/20 dark:text-orange-300 dark:border-orange-800' :
+                          entity.label === 'DURATION' ? 'bg-cyan-50 text-cyan-800 border-cyan-200 dark:bg-cyan-900/20 dark:text-cyan-300 dark:border-cyan-800' :
+                          'bg-slate-50 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700'
+                        }`}>
+                          <span>{entity.text}</span>
+                          <span className="text-[9px] opacity-60">({entity.label})</span>
+                        </span>
+                      ))}
+                    </div>
                   </div>
-                  {finding.description && (
-                    <p className="text-xs text-slate-400 mt-1 hidden group-hover:block transition-all">{finding.description}</p>
-                  )}
-                </div>
-              ))}
-            </div>
+                )}
 
-            {/* Divider */}
-            <div className="h-px bg-slate-100 dark:bg-slate-800 my-2"></div>
+                {/* OCR Extracted Text - Only for prescriptions */}
+                {analysis.documentType === 'prescription' && analysis.ocr_text && (
+                  <details className="group bg-slate-50 dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 overflow-hidden">
+                    <summary className="flex justify-between items-center p-3 cursor-pointer select-none">
+                      <div className="flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-300">
+                        <span className="material-symbols-outlined !text-[18px]">text_fields</span>
+                        OCR Extracted Text
+                      </div>
+                      <span className="material-symbols-outlined text-slate-400 group-open:rotate-180 transition-transform">expand_more</span>
+                    </summary>
+                    <div className="p-3 pt-0 border-t border-slate-200 dark:border-slate-800 overflow-x-auto">
+                      <pre className="text-[11px] font-mono leading-relaxed text-slate-600 dark:text-slate-400 whitespace-pre-wrap">
+                        {analysis.ocr_text}
+                      </pre>
+                    </div>
+                  </details>
+                )}
 
-            {/* Key Metrics Grid */}
-            <div className="grid grid-cols-2 gap-4">
-              <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-100 dark:border-slate-800">
-                <p className="text-xs text-slate-500 dark:text-slate-400 uppercase font-semibold mb-1">CTR Ratio</p>
-                <p className="text-lg font-bold text-slate-900 dark:text-white">{document.analysis.metrics.ctrRatio}</p>
-              </div>
-              <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-100 dark:border-slate-800">
-                <p className="text-xs text-slate-500 dark:text-slate-400 uppercase font-semibold mb-1">Lung Volume</p>
-                <p className="text-lg font-bold text-slate-900 dark:text-white">{document.analysis.metrics.lungVolume}</p>
-              </div>
-            </div>
-
-            {/* Raw JSON Toggle */}
-            <details className="group bg-slate-50 dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 overflow-hidden">
-              <summary className="flex justify-between items-center p-3 cursor-pointer select-none">
-                <div className="flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-300">
-                  <span className="material-symbols-outlined !text-[18px]">data_object</span>
-                  Raw API Response
-                </div>
-                <span className="material-symbols-outlined text-slate-400 group-open:rotate-180 transition-transform">expand_more</span>
-              </summary>
-              <div className="p-3 pt-0 border-t border-slate-200 dark:border-slate-800 overflow-x-auto">
-                <pre className="text-[10px] font-mono leading-tight text-slate-600 dark:text-slate-400">
-                  {JSON.stringify(document.analysis.rawResponse, null, 2)}
-                </pre>
-              </div>
-            </details>
+                {/* Raw JSON Toggle */}
+                <details className="group bg-slate-50 dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 overflow-hidden">
+                  <summary className="flex justify-between items-center p-3 cursor-pointer select-none">
+                    <div className="flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-300">
+                      <span className="material-symbols-outlined !text-[18px]">data_object</span>
+                      Raw API Response
+                    </div>
+                    <span className="material-symbols-outlined text-slate-400 group-open:rotate-180 transition-transform">expand_more</span>
+                  </summary>
+                  <div className="p-3 pt-0 border-t border-slate-200 dark:border-slate-800 overflow-x-auto">
+                    <pre className="text-[10px] font-mono leading-tight text-slate-600 dark:text-slate-400">
+                      {JSON.stringify(document.ai_analysis, null, 2)}
+                    </pre>
+                  </div>
+                </details>
+              </>
+            )}
 
             {/* Actions */}
             {user && user.role === 'doctor' && (

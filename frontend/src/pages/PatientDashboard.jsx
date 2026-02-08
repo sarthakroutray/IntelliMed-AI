@@ -27,30 +27,9 @@ const PatientDashboard = () => {
   const handleAnalyze = async (docId) => {
     setAnalyzing(docId);
     try {
-      // Simulate AI analysis (replace with actual API when ML is ready)
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      // Mock AI analysis result
-      const mockAnalysis = {
-        summary: "Medical document analysis completed. Key findings extracted.",
-        entities: [
-          { text: "Medical Condition", label: "DIAGNOSIS", confidence: 0.95 },
-          { text: "Treatment", label: "PROCEDURE", confidence: 0.89 }
-        ],
-        recommendations: [
-          "Follow up with healthcare provider",
-          "Monitor symptoms regularly"
-        ]
-      };
-      
-      // Update local state
-      setDocuments(docs => 
-        docs.map(doc => 
-          doc.id === docId 
-            ? { ...doc, ai_analysis: JSON.stringify(mockAnalysis) } 
-            : doc
-        )
-      );
+      // Refresh documents to get the latest analysis from server
+      const response = await getPatientDocuments();
+      setDocuments(response.data || []);
       
     } catch (err) {
       console.error('AI analysis failed', err);
@@ -109,17 +88,15 @@ const PatientDashboard = () => {
       console.log('Documents data:', response.data);
       setDocuments(response.data || []);
       
-      // Load shared doctors info for each document
+      // Load shared doctors info for all documents in parallel
       if (response.data && response.data.length > 0) {
-        const shareCounts = {};
-        for (const doc of response.data) {
-          try {
-            const shareResponse = await getSharedDoctors(doc.id);
-            shareCounts[doc.id] = shareResponse.data || [];
-          } catch (err) {
-            shareCounts[doc.id] = [];
-          }
-        }
+        const sharePromises = response.data.map(doc =>
+          getSharedDoctors(doc.id)
+            .then(res => [doc.id, res.data || []])
+            .catch(() => [doc.id, []])
+        );
+        const shareResults = await Promise.all(sharePromises);
+        const shareCounts = Object.fromEntries(shareResults);
         setSharedDoctors(shareCounts);
       }
     } catch (err) {

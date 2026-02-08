@@ -2,15 +2,18 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from fastapi.responses import FileResponse
 from datetime import datetime
+import mimetypes
 import sys
 import os
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+import asyncio
 from auth import get_current_user
 from prisma_db import get_db
 from schemas import User, DocumentDetail
 from prisma_client import Prisma, Json
+import services
 
 router = APIRouter()
 
@@ -57,32 +60,101 @@ async def get_document(
                 detail="You don't have access to this document"
             )
     
-    # Mock AI analysis data (replace with actual AI service call)
-    analysis = {
-        "summary": {
-            "status": "success",
-            "title": "No Urgent Abnormalities",
-            "description": "AI analysis indicates lung fields are clear. No signs of pneumothorax or acute consolidation."
-        },
-        "findings": [
-            {"label": "Calcification", "confidence": 63, "description": "Possible benign calcified granuloma in the right upper lobe."},
-            {"label": "Pleural Effusion", "confidence": 12, "description": ""},
-            {"label": "Infiltration", "confidence": 5, "description": ""}
-        ],
-        "metrics": {
-            "ctrRatio": "0.42",
-            "lungVolume": "4.2 L"
-        },
-        "rawResponse": {
-            "analysis_id": f"AI-{document_id}",
-            "timestamp": datetime.utcnow().isoformat() + "Z",
-            "findings": [
-                {"label": "Calcification", "confidence": 0.63},
-                {"label": "Pleural Effusion", "confidence": 0.12}
-            ],
-            "model_version": "v4.2.1"
+    # Use real AI analysis from DB if available, otherwise provide placeholder
+    stored_analysis = document.ai_analysis_json
+    if stored_analysis and isinstance(stored_analysis, dict):
+        cv_result = stored_analysis.get('cv_result', {})
+        nlp_result = stored_analysis.get('nlp_result', {})
+        ocr_result = stored_analysis.get('ocr_result', '')
+
+        classification = cv_result.get('classification', 'Unknown')
+        confidence = cv_result.get('confidence', 0)
+        probabilities = cv_result.get('probabilities', {})
+        recommendation = cv_result.get('recommendation', '')
+
+        # Build findings from probabilities
+        findings = []
+        for label, prob in probabilities.items():
+            findings.append({
+                "label": label,
+                "confidence": round(prob * 100, 1),
+                "description": f"{label} probability from pneumonia classifier."
+            })
+
+        # Build summary
+        if classification == 'Normal':
+            summary_title = "No Pneumonia Detected"
+            summary_desc = recommendation
+        else:
+            summary_title = f"{classification} Detected"
+            summary_desc = recommendation
+
+        # Extract prescription/medication data from NLP result
+        is_prescription = nlp_result.get('is_prescription', False)
+        medications = nlp_result.get('medications', [])
+        prescriptions = nlp_result.get('prescriptions', [])
+        nlp_entities = nlp_result.get('entities', [])
+        nlp_summary = nlp_result.get('summary', '')
+
+        analysis = {
+            "summary": {
+                "status": "success",
+                "title": summary_title,
+                "description": summary_desc,
+                "classification": classification,
+                "confidence": round(confidence * 100, 1),
+            },
+            "findings": findings,
+            "nlp": {
+                "summary": nlp_summary,
+                "entities": nlp_entities,
+                "medications": medications,
+                "prescriptions": prescriptions,
+                "is_prescription": is_prescription,
+            },
+            "ocr_text": ocr_result if isinstance(ocr_result, str) else str(ocr_result),
+            "rawResponse": {
+                "analysis_id": f"AI-{document_id}",
+                "timestamp": datetime.utcnow().isoformat() + "Z",
+                "cv_result": cv_result,
+                "nlp_result": nlp_result,
+                "model_version": "pneumonia-resnet50-v1"
+            }
         }
+    else:
+        analysis = {
+            "summary": {
+                "status": "pending",
+                "title": "Analysis Not Available",
+                "description": "This document has not been analyzed yet. Click 'Analyze' to run AI analysis."
+            },
+            "findings": [],
+            "rawResponse": None
+        }
+    
+    # Convert file path to URL and compute real metadata
+    file_name = os.path.basename(document.file_path) if document.file_path else "unknown"
+    file_url = f"http://localhost:8000/uploads/{file_name}"
+    
+    # Detect real file type from extension
+    ext = os.path.splitext(file_name)[1].lower()
+    file_type_map = {
+        '.pdf': 'PDF', '.jpg': 'JPEG', '.jpeg': 'JPEG', '.png': 'PNG',
+        '.dcm': 'DICOM', '.dicom': 'DICOM', '.bmp': 'BMP', '.tiff': 'TIFF', '.tif': 'TIFF',
     }
+    file_type = file_type_map.get(ext, ext.upper().lstrip('.'))
+    
+    # Calculate real file size
+    try:
+        size_bytes = os.path.getsize(document.file_path)
+        if size_bytes >= 1_048_576:
+            file_size = f"{size_bytes / 1_048_576:.1f} MB"
+        elif size_bytes >= 1024:
+            file_size = f"{size_bytes / 1024:.1f} KB"
+        else:
+            file_size = f"{size_bytes} B"
+    except OSError:
+        file_size = "Unknown"
     
     return {
         "id": document.id,
@@ -92,14 +164,114 @@ async def get_document(
             "id": document.patient_id
         },
         "timestamp": document.upload_timestamp.strftime("%Y-%m-%d %H:%M:%S") if document.upload_timestamp else "",
-        "status": "Processed",
-        "fileType": "DICOM",
-        "fileSize": "2.4 MB",  # Calculate actual file size if needed
-        "fileName": document.file_path.split('/')[-1] if document.file_path else "unknown",
-        "fileUrl": document.file_path,
-        "imageUrl": document.file_path,  # Use actual file path
+        "status": "Processed" if stored_analysis else "Pending",
+        "fileType": file_type,
+        "fileSize": file_size,
+        "fileName": file_name,
+        "fileUrl": file_url,
+        "imageUrl": file_url,
+        "ai_analysis": stored_analysis,
         "analysis": analysis
     }
+
+
+@router.post("/documents/{document_id}/analyze")
+async def analyze_document(
+    document_id: int,
+    db: Prisma = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Run AI analysis (Pneumonia Classification) on an existing document.
+    Triggers OCR, NLP, and CV services and stores results in DB.
+    """
+    # Find the document
+    document = await db.medicaldocument.find_unique(
+        where={'id': document_id},
+        include={'users': True}
+    )
+
+    if not document:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document not found"
+        )
+
+    # Check access
+    if current_user.role == 'patient':
+        if document.patient_id != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You don't have access to this document"
+            )
+    elif current_user.role == 'doctor':
+        link = await db.doctorpatient.find_first(
+            where={
+                'doctor_id': current_user.id,
+                'patient_id': document.patient_id
+            }
+        )
+        if not link:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You don't have access to this document"
+            )
+
+    file_path = document.file_path
+    if not file_path or not os.path.exists(file_path):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document file not found on server"
+        )
+
+    try:
+        # Run OCR and CV in parallel
+        ocr_task = asyncio.create_task(services.ocr_service(file_path))
+        cv_task = asyncio.create_task(services.cv_service(file_path))
+
+        ocr_result = await ocr_task
+        cv_result = await cv_task
+
+        # Run NLP on OCR output
+        nlp_result = await services.nlp_service(ocr_result)
+
+        # Determine final document type based on content quality
+        is_meaningful_xray = (
+            cv_result.get('classification') and 
+            cv_result.get('confidence', 0) > 0.5 and
+            cv_result.get('document_type') == 'xray'
+        )
+        
+        is_prescription = nlp_result.get('is_prescription', False)
+        
+        # Override document types if not meaningful
+        if not is_meaningful_xray and cv_result.get('document_type') == 'xray':
+            cv_result['document_type'] = 'document'  # Demote random images
+        
+        aggregated_analysis = {
+            "ocr_result": ocr_result,
+            "nlp_result": nlp_result,
+            "cv_result": cv_result,
+            "detected_type": "xray" if is_meaningful_xray else ("prescription" if is_prescription else "document")
+        }
+
+        # Update document with AI analysis
+        await db.medicaldocument.update(
+            where={'id': document_id},
+            data={'ai_analysis_json': Json(aggregated_analysis)}
+        )
+
+        return {
+            "message": "AI analysis completed successfully",
+            "document_id": document_id,
+            "analysis": aggregated_analysis
+        }
+    except Exception as e:
+        print(f"\u2717 AI analysis failed for document {document_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"AI analysis failed: {str(e)}"
+        )
 
 
 @router.post("/documents/{document_id}/verify")

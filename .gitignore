@@ -48,6 +48,42 @@ env/
 
 # Node/Frontend
 node_modules/
+package-lock.json
+
+# Model files (large binary files)
+*.pth
+*.pt
+*.h5
+*.onnx
+*.joblib
+
+# Database
+*.sqlite
+*.sqlite3
+*.db
+
+# Uploads and temporary files
+uploads/
+tmp/
+temp/
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Poetry
+poetry.lock
+
+# Coverage
+htmlcov/
+.coverage
+.pytest_cache/
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*

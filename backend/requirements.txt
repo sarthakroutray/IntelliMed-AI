@@ -8,8 +8,10 @@ python-multipart
 pydantic[email]
 python-dotenv
 prisma
-pytesseract
+easyocr
 Pillow
+PyMuPDF
+opencv-python-headless
 spacy
 torch
 torchvision

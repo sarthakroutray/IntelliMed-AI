@@ -84,6 +84,10 @@ export const archiveDocument = (documentId) => {
   return api.post(`/documents/${documentId}/archive`);
 };
 
+export const analyzeDocument = (documentId) => {
+  return api.post(`/documents/${documentId}/analyze`);
+};
+
 export const downloadDocument = (documentId) => {
   return api.get(`/documents/${documentId}/download`, {
     responseType: 'blob'

@@ -1,4 +1,5 @@
 from typing import List
+import os
 import shutil
 import asyncio
 import json
@@ -50,10 +51,22 @@ async def upload_document(
         cv_result = await cv_task
         nlp_result = await nlp_task
 
+        # Validate document type based on content quality
+        is_meaningful_xray = (
+            cv_result.get('classification') and
+            cv_result.get('confidence', 0) > 0.5 and
+            cv_result.get('document_type') == 'xray'
+        )
+        is_prescription = nlp_result.get('is_prescription', False)
+
+        if not is_meaningful_xray and cv_result.get('document_type') == 'xray':
+            cv_result['document_type'] = 'document'
+
         aggregated_analysis = {
             "ocr_result": ocr_result,
             "nlp_result": nlp_result,
             "cv_result": cv_result,
+            "detected_type": "xray" if is_meaningful_xray else ("prescription" if is_prescription else "document"),
         }
 
         db_document = await db.medicaldocument.create(
@@ -97,7 +110,7 @@ async def get_own_documents(
         return [
             DocumentInfo(
                 id=doc.id,
-                filename=doc.file_path.split('/')[-1],
+                filename=os.path.basename(doc.file_path) if doc.file_path else "unknown",
                 upload_timestamp=doc.upload_timestamp,
                 ai_analysis=doc.ai_analysis_json,
             )

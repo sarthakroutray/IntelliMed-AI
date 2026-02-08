@@ -1,6 +1,6 @@
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
-
+import os
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -71,8 +71,8 @@ async def get_patient_documents_for_doctor(
     return [
         DocumentDetail(
             id=doc.id,
-            filename=doc.file_path.split('/')[-1] if doc.file_path else "N/A",
-            file_url=f"/uploads/{doc.file_path.split('/')[-1]}" if doc.file_path else "",
+            filename=os.path.basename(doc.file_path) if doc.file_path else "N/A",
+            file_url=f"http://localhost:8000/uploads/{os.path.basename(doc.file_path)}" if doc.file_path else "",
             upload_timestamp=doc.upload_timestamp,
             ai_analysis=doc.ai_analysis_json,
             analysis_status="processed" if doc.ai_analysis_json else "pending",

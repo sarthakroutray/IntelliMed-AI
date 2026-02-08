@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import api from '../services/api';
+import api, { analyzeDocument } from '../services/api';
 import Icon from '../components/Icon';
 
 const AIAnalysis = () => {
@@ -21,23 +21,22 @@ const AIAnalysis = () => {
           const patientsResponse = await api.get('/doctor/patients');
           const patients = patientsResponse.data;
           
-          const allDocs = [];
-          for (const patient of patients) {
-            try {
-              const docsResponse = await api.get(`/doctor/patients/${patient.id}/documents`);
-              const docs = docsResponse.data.map(doc => ({
+          // Fetch all patient documents in parallel instead of sequentially
+          const docPromises = patients.map(patient =>
+            api.get(`/doctor/patients/${patient.id}/documents`)
+              .then(res => res.data.map(doc => ({
                 ...doc,
                 patientName: patient.email?.split('@')[0],
                 patientEmail: patient.email
-              }));
-              allDocs.push(...docs);
-            } catch (err) {
-              console.error(`Failed to fetch documents for patient ${patient.id}`, err);
-            }
-          }
-          setDocuments(allDocs);
+              })))
+              .catch(err => {
+                console.error(`Failed to fetch documents for patient ${patient.id}`, err);
+                return [];
+              })
+          );
+          const results = await Promise.all(docPromises);
+          setDocuments(results.flat());
         } else {
-          // Patient view
           const response = await api.get('/patient/documents');
           setDocuments(response.data);
         }
@@ -54,42 +53,109 @@ const AIAnalysis = () => {
   const handleAnalyze = async (docId) => {
     setAnalyzing(docId);
     try {
-      // Trigger AI analysis (simulated - replace with actual API call when ML is ready)
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      // Mock AI analysis result
-      const mockAnalysis = {
-        summary: "Medical document analysis completed. Key findings extracted.",
-        entities: [
-          { text: "Diagnosis", label: "MEDICAL_CONDITION", confidence: 0.95 },
-          { text: "Treatment Plan", label: "PROCEDURE", confidence: 0.89 }
-        ],
+      // Call real AI analysis endpoint
+      const response = await analyzeDocument(docId);
+      const analysisResult = response.data.analysis;
+
+      // Build the structured analysis from backend response
+      const cv = analysisResult.cv_result || {};
+      const nlp = analysisResult.nlp_result || {};
+      const ocr = analysisResult.ocr_result || '';
+
+      const structuredAnalysis = {
+        summary: cv.classification
+          ? `${cv.classification} (${(cv.confidence * 100).toFixed(1)}% confidence). ${cv.recommendation || ''}`
+          : nlp.summary || 'Analysis completed.',
+        entities: nlp.entities || [],
         recommendations: [
-          "Follow up appointment recommended in 2 weeks",
-          "Monitor vital signs daily"
-        ]
+          cv.recommendation,
+          nlp.summary ? `NLP Summary: ${nlp.summary}` : null,
+        ].filter(Boolean),
+        classification: cv.classification,
+        confidence: cv.confidence,
+        probabilities: cv.probabilities,
+        ocr_text: ocr,
+        // New prescription-specific fields
+        is_prescription: nlp.is_prescription || false,
+        medications: nlp.medications || [],
+        prescriptions: nlp.prescriptions || [],
       };
-      
-      // Update local state
-      setDocuments(docs => 
-        docs.map(doc => 
-          doc.id === docId 
-            ? { ...doc, ai_analysis: JSON.stringify(mockAnalysis) } 
+
+      // Update local state with real analysis result
+      setDocuments(docs =>
+        docs.map(doc =>
+          doc.id === docId
+            ? { ...doc, ai_analysis: JSON.stringify(structuredAnalysis) }
             : doc
         )
       );
-      
     } catch (err) {
       console.error('AI analysis failed', err);
-      alert('AI analysis failed. Please try again.');
+      alert(err.response?.data?.detail || 'AI analysis failed. Please try again.');
     } finally {
       setAnalyzing(null);
     }
   };
 
-  const parseAIAnalysis = (analysisString) => {
+  const parseAIAnalysis = (analysisData) => {
     try {
-      return JSON.parse(analysisString);
+      // If it's already an object (from backend), use it directly
+      if (typeof analysisData === 'object' && analysisData !== null) {
+        // Transform backend structure to frontend structure
+        const cv = analysisData.cv_result || {};
+        const nlp = analysisData.nlp_result || {};
+        const ocr = analysisData.ocr_result || '';
+        
+        // Use validated document type from backend (or fall back to individual types)
+        const documentType = analysisData.detected_type || cv.document_type || nlp.document_type || 'document';
+        const isXray = documentType === 'xray';
+        const isPrescription = documentType === 'prescription';
+        
+        // Build context-aware summary and recommendations
+        let summary = '';
+        let recommendations = [];
+        
+        if (isXray && cv.classification) {
+          // For X-rays: use CV data only
+          summary = `${cv.classification} (${(cv.confidence * 100).toFixed(1)}% confidence). ${cv.recommendation || ''}`;
+          if (cv.recommendation) {
+            recommendations.push(cv.recommendation);
+          }
+        } else if (isPrescription && nlp.summary && !nlp.summary.includes('No text available')) {
+          // For prescriptions: use NLP data only (if meaningful)
+          summary = nlp.summary;
+          recommendations.push(nlp.summary);
+        } else if (cv.classification) {
+          // Fallback: has CV classification
+          summary = `${cv.classification} (${(cv.confidence * 100).toFixed(1)}% confidence)`;
+        } else if (nlp.summary && !nlp.summary.includes('No text available')) {
+          // Fallback: has meaningful NLP summary
+          summary = nlp.summary;
+        } else {
+          summary = 'Analysis completed.';
+        }
+        
+        return {
+          summary,
+          entities: isPrescription ? (nlp.entities || []) : [],  // Only show entities for prescriptions
+          recommendations,
+          classification: cv.classification,
+          confidence: cv.confidence,
+          probabilities: cv.probabilities,
+          ocr_text: ocr,
+          is_prescription: nlp.is_prescription || false,
+          medications: nlp.medications || [],
+          prescriptions: nlp.prescriptions || [],
+          document_type: documentType,
+        };
+      }
+      
+      // If it's a string, parse it
+      if (typeof analysisData === 'string') {
+        return JSON.parse(analysisData);
+      }
+      
+      return null;
     } catch {
       return null;
     }
@@ -251,21 +317,76 @@ const AIAnalysis = () => {
                         );
                       }
 
+                      const isXray = analysis.document_type === 'xray';
+                      const isPrescription = analysis.document_type === 'prescription';
+                      
                       return (
                         <>
-                          {/* Summary */}
-                          <div>
-                            <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
-                              <Icon name="summarize" className="text-primary" />
-                              Summary
-                            </h3>
-                            <p className="text-gray-700 dark:text-gray-300 leading-relaxed p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
-                              {analysis.summary}
-                            </p>
-                          </div>
+                          {/* Classification Result - Only show for X-rays */}
+                          {isXray && analysis.classification && (
+                            <div className={`p-4 rounded-lg border ${
+                              analysis.classification === 'Normal'
+                                ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
+                                : 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
+                            }`}>
+                              <div className="flex items-center gap-3 mb-2">
+                                <Icon name={analysis.classification === 'Normal' ? 'check_circle' : 'warning'} 
+                                  className={`text-2xl ${analysis.classification === 'Normal' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`} />
+                                <div>
+                                  <p className={`text-lg font-black ${analysis.classification === 'Normal' ? 'text-green-900 dark:text-green-300' : 'text-red-900 dark:text-red-300'}`}>
+                                    {analysis.classification}
+                                  </p>
+                                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                                    Confidence: {analysis.confidence ? `${(analysis.confidence * 100).toFixed(1)}%` : 'N/A'}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          )}
 
-                          {/* Entities */}
-                          {analysis.entities && analysis.entities.length > 0 && (
+                          {/* Probabilities - Only show for X-rays */}
+                          {isXray && analysis.probabilities && (
+                            <div>
+                              <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+                                <Icon name="bar_chart" className="text-primary" />
+                                Class Probabilities
+                              </h3>
+                              <div className="space-y-3">
+                                {Object.entries(analysis.probabilities).map(([label, prob]) => (
+                                  <div key={label}>
+                                    <div className="flex justify-between text-sm mb-1">
+                                      <span className="font-medium text-gray-700 dark:text-gray-300">{label}</span>
+                                      <span className="text-gray-500 dark:text-gray-400">{(prob * 100).toFixed(1)}%</span>
+                                    </div>
+                                    <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5">
+                                      <div
+                                        className={`h-2.5 rounded-full transition-all duration-500 ${
+                                          label === 'Normal' ? 'bg-green-500' : 'bg-red-500'
+                                        }`}
+                                        style={{ width: `${Math.max(prob * 100, 1)}%` }}
+                                      ></div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Summary - Only show if meaningful */}
+                          {analysis.summary && !analysis.summary.includes('Analysis completed') && (
+                            <div>
+                              <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+                                <Icon name="summarize" className="text-primary" />
+                                Summary
+                              </h3>
+                              <p className="text-gray-700 dark:text-gray-300 leading-relaxed p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
+                                {analysis.summary}
+                              </p>
+                            </div>
+                          )}
+
+                          {/* Entities - Only for prescriptions */}
+                          {isPrescription && analysis.entities && analysis.entities.length > 0 && (
                             <div>
                               <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
                                 <Icon name="label" className="text-primary" />
@@ -305,6 +426,86 @@ const AIAnalysis = () => {
                                     <p className="text-sm text-gray-700 dark:text-gray-300">{rec}</p>
                                   </div>
                                 ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Prescription Details - Only show for prescriptions */}
+                          {isPrescription && analysis.prescriptions && analysis.prescriptions.length > 0 && (
+                            <div>
+                              <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+                                <Icon name="medication" className="text-primary" />
+                                Prescription Details
+                              </h3>
+                              <div className="space-y-3">
+                                {analysis.prescriptions.map((rx, index) => (
+                                  <div key={index} className="p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-200 dark:border-purple-800">
+                                    <div className="flex items-center gap-2 mb-2">
+                                      <Icon name="pill" className="text-purple-600 dark:text-purple-400 text-[18px]" />
+                                      <p className="text-base font-bold text-purple-900 dark:text-purple-300 capitalize">
+                                        {rx.medication}
+                                      </p>
+                                    </div>
+                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-2">
+                                      {rx.dosage && (
+                                        <div className="bg-white dark:bg-gray-800 rounded-md px-3 py-1.5 border border-purple-100 dark:border-purple-800">
+                                          <p className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Dosage</p>
+                                          <p className="text-sm font-bold text-gray-900 dark:text-white">{rx.dosage}</p>
+                                        </div>
+                                      )}
+                                      {rx.frequency && (
+                                        <div className="bg-white dark:bg-gray-800 rounded-md px-3 py-1.5 border border-purple-100 dark:border-purple-800">
+                                          <p className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Frequency</p>
+                                          <p className="text-sm font-bold text-gray-900 dark:text-white capitalize">{rx.frequency}</p>
+                                        </div>
+                                      )}
+                                      {rx.route && (
+                                        <div className="bg-white dark:bg-gray-800 rounded-md px-3 py-1.5 border border-purple-100 dark:border-purple-800">
+                                          <p className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Route</p>
+                                          <p className="text-sm font-bold text-gray-900 dark:text-white capitalize">{rx.route}</p>
+                                        </div>
+                                      )}
+                                      {rx.duration && (
+                                        <div className="bg-white dark:bg-gray-800 rounded-md px-3 py-1.5 border border-purple-100 dark:border-purple-800">
+                                          <p className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Duration</p>
+                                          <p className="text-sm font-bold text-gray-900 dark:text-white capitalize">{rx.duration}</p>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Medications List (if prescription but no structured prescriptions) - Only show for prescriptions */}
+                          {isPrescription && analysis.medications && analysis.medications.length > 0 && (!analysis.prescriptions || analysis.prescriptions.length === 0) && (
+                            <div>
+                              <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+                                <Icon name="medication" className="text-primary" />
+                                Medications Detected
+                              </h3>
+                              <div className="flex flex-wrap gap-2">
+                                {analysis.medications.map((med, index) => (
+                                  <span key={index} className="px-3 py-1.5 bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300 rounded-full text-sm font-bold capitalize">
+                                    {med}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* OCR Extracted Text - Only show for prescriptions */}
+                          {isPrescription && analysis.ocr_text && (
+                            <div>
+                              <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+                                <Icon name="text_fields" className="text-primary" />
+                                OCR Extracted Text
+                              </h3>
+                              <div className="relative">
+                                <pre className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-700 whitespace-pre-wrap font-mono max-h-[300px] overflow-y-auto">
+                                  {analysis.ocr_text}
+                                </pre>
                               </div>
                             </div>
                           )}
