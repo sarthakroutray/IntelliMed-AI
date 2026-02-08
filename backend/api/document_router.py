@@ -66,6 +66,7 @@ async def get_document(
         cv_result = stored_analysis.get('cv_result', {})
         nlp_result = stored_analysis.get('nlp_result', {})
         ocr_result = stored_analysis.get('ocr_result', '')
+        summary_result = stored_analysis.get('summary_result', {})
 
         classification = cv_result.get('classification', 'Unknown')
         confidence = cv_result.get('confidence', 0)
@@ -96,6 +97,10 @@ async def get_document(
         nlp_entities = nlp_result.get('entities', [])
         nlp_summary = nlp_result.get('summary', '')
 
+        # Extract T5 medical summary
+        medical_summary = summary_result.get('medical_summary', '')
+        key_findings = summary_result.get('key_findings', [])
+
         analysis = {
             "summary": {
                 "status": "success",
@@ -112,12 +117,15 @@ async def get_document(
                 "prescriptions": prescriptions,
                 "is_prescription": is_prescription,
             },
+            "medical_summary": medical_summary,
+            "key_findings": key_findings,
             "ocr_text": ocr_result if isinstance(ocr_result, str) else str(ocr_result),
             "rawResponse": {
                 "analysis_id": f"AI-{document_id}",
                 "timestamp": datetime.utcnow().isoformat() + "Z",
                 "cv_result": cv_result,
                 "nlp_result": nlp_result,
+                "summary_result": summary_result,
                 "model_version": "pneumonia-resnet50-v1"
             }
         }
@@ -235,24 +243,45 @@ async def analyze_document(
         # Run NLP on OCR output
         nlp_result = await services.nlp_service(ocr_result)
 
+        # Run T5 medical summarization on OCR text + NLP context
+        summary_result = await services.medical_summarize_service(ocr_result, nlp_result)
+
         # Determine final document type based on content quality
+        # Priority: NLP prescription detection > CV X-ray classification > default
+        is_prescription = nlp_result.get('is_prescription', False)
+        has_medications = len(nlp_result.get('medications', [])) > 0
+        
+        print(f"  Document type detection: is_prescription={is_prescription}, has_medications={has_medications}, medications={nlp_result.get('medications', [])}")
+        
+        # Only consider it an X-ray if NO prescription markers are found
         is_meaningful_xray = (
+            not is_prescription and
+            not has_medications and
             cv_result.get('classification') and 
-            cv_result.get('confidence', 0) > 0.5 and
+            cv_result.get('confidence', 0) > 0.6 and  # Higher threshold to reduce false positives
             cv_result.get('document_type') == 'xray'
         )
-        
-        is_prescription = nlp_result.get('is_prescription', False)
         
         # Override document types if not meaningful
         if not is_meaningful_xray and cv_result.get('document_type') == 'xray':
             cv_result['document_type'] = 'document'  # Demote random images
         
+        # Determine final type: prescription has highest priority
+        if is_prescription or has_medications:
+            final_type = "prescription"
+        elif is_meaningful_xray:
+            final_type = "xray"
+        else:
+            final_type = "document"
+        
+        print(f"  Final document type: {final_type}")
+        
         aggregated_analysis = {
             "ocr_result": ocr_result,
             "nlp_result": nlp_result,
             "cv_result": cv_result,
-            "detected_type": "xray" if is_meaningful_xray else ("prescription" if is_prescription else "document")
+            "summary_result": summary_result,
+            "detected_type": final_type
         }
 
         # Update document with AI analysis

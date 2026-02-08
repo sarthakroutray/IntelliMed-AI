@@ -57,6 +57,8 @@ const MedicalDocumentViewer = () => {
           nlp,
           ocr_text: ocr,
           is_prescription: nlp.is_prescription || false,
+          medical_summary: (analysisData.summary_result || {}).medical_summary || '',
+          key_findings: (analysisData.summary_result || {}).key_findings || [],
         };
       }
     } catch (err) {
@@ -439,6 +441,38 @@ const MedicalDocumentViewer = () => {
 
                 {/* Divider */}
                 <div className="h-px bg-slate-100 dark:bg-slate-800 my-2"></div>
+
+                {/* Medical Summary (T5-generated) */}
+                {analysis.medical_summary && analysis.medical_summary.length > 10 && (
+                  <div className="flex flex-col gap-2">
+                    <h4 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                      <span className="material-symbols-outlined text-emerald-600 dark:text-emerald-400 !text-[18px]">clinical_notes</span>
+                      Medical Summary
+                      <span className="text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 ml-auto">AI</span>
+                    </h4>
+                    <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed p-3 bg-emerald-50 dark:bg-emerald-900/10 rounded-lg border border-emerald-100 dark:border-emerald-800/30">
+                      {analysis.medical_summary}
+                    </p>
+                  </div>
+                )}
+
+                {/* Key Findings */}
+                {analysis.key_findings && analysis.key_findings.length > 0 && (
+                  <div className="flex flex-col gap-2">
+                    <h4 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                      <span className="material-symbols-outlined text-amber-600 dark:text-amber-400 !text-[18px]">fact_check</span>
+                      Key Findings
+                    </h4>
+                    <div className="flex flex-col gap-1.5">
+                      {analysis.key_findings.map((finding, index) => (
+                        <div key={index} className="flex items-start gap-2 p-2 bg-amber-50 dark:bg-amber-900/10 rounded-lg border border-amber-100 dark:border-amber-800/30">
+                          <span className="material-symbols-outlined text-amber-500 !text-[16px] mt-0.5 flex-shrink-0">arrow_right</span>
+                          <p className="text-xs text-slate-700 dark:text-slate-300">{finding}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* Prescription Details (from NLP) - Only for prescriptions */}
                 {analysis.documentType === 'prescription' && analysis.nlp.prescriptions?.length > 0 && (

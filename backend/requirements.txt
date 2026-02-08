@@ -16,3 +16,6 @@ spacy
 torch
 torchvision
 numpy
+transformers
+sentencepiece
+pytesseract

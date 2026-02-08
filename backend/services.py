@@ -17,6 +17,13 @@ except ImportError:
     print("⚠ OCR dependencies (easyocr, Pillow) not found. pip install easyocr Pillow")
 
 try:
+    import pytesseract
+    HAS_TESSERACT = True
+except ImportError:
+    HAS_TESSERACT = False
+    print("⚠ pytesseract not found. Tesseract fallback disabled. pip install pytesseract")
+
+try:
     import cv2
     HAS_CV2 = True
 except ImportError:
@@ -29,6 +36,13 @@ try:
 except ImportError:
     HAS_NLP = False
     print("⚠ NLP dependencies (spacy) not found.")
+
+try:
+    from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+    HAS_SUMMARIZER = True
+except ImportError:
+    HAS_SUMMARIZER = False
+    print("⚠ Hugging Face transformers not found. Medical summarization disabled. pip install transformers")
 
 try:
     import torch
@@ -54,9 +68,13 @@ heavy_semaphore = asyncio.Semaphore(MAX_CONCURRENT_HEAVY)
 _nlp_lock = Lock()
 _cv_lock = Lock()
 _ocr_lock = Lock()
+_summarizer_lock = Lock()
 
 # Global EasyOCR reader (loaded once, reused)
 _ocr_reader = None
+
+# Global T5 summarizer (loaded once, reused)
+_medical_summarizer = None
 
 # --- PDF Support ---
 try:
@@ -253,22 +271,32 @@ async def ocr_service(file_path: str) -> str:
 def _run_enhanced_ocr(file_path: str) -> str:
     """
     Multi-pass OCR using EasyOCR with different preprocessing strategies.
-    Picks the result with the most extracted text.
+    Falls back to Tesseract if available.  Picks the result with the highest
+    score (text length weighted by average confidence).
     """
     reader = _get_ocr_reader()
-    results = []
+    results = []  # (score, text, method)
 
     # --- Pass 1: Direct EasyOCR on original image (works well for clean docs) ---
     try:
-        detections = reader.readtext(file_path, detail=1, paragraph=True)
+        detections = reader.readtext(file_path, detail=1, paragraph=False)
         text = _detections_to_text(detections)
-        print(f"  Pass original: {len(detections)} detections, {len(text)} chars")
+        avg_conf = _avg_confidence(detections)
+        score = len(text.strip()) * avg_conf
+        print(f"  Pass original: {len(detections)} detections, {len(text)} chars, avg_conf={avg_conf:.2f}")
         if text and len(text.strip()) > 2:
-            results.append((len(text.strip()), text.strip(), "original"))
-            # Early exit: if original pass gets substantial text, skip expensive preprocessing
-            if len(text.strip()) > 100:
-                print(f"  ✓ Early exit: original pass got {len(text.strip())} chars")
+            results.append((score, text.strip(), "original"))
+            # Early exit: high-confidence substantial text
+            if len(text.strip()) > 100 and avg_conf > 0.75:
+                print(f"  ✓ Early exit: original pass got {len(text.strip())} chars at {avg_conf:.0%} confidence")
                 return _clean_ocr_text(text.strip())
+        
+        # Early exit for medical images (X-rays, scans) with minimal/no text
+        # If very few detections and very little text, it's likely a medical image without text
+        if len(detections) < 5 and len(text.strip()) < 20:
+            print(f"  ✓ Early exit: medical image detected (minimal text: {len(text.strip())} chars)")
+            return _clean_ocr_text(text.strip()) if text.strip() else ""
+            
     except Exception as e:
         print(f"  Pass original failed: {e}")
 
@@ -278,10 +306,12 @@ def _run_enhanced_ocr(file_path: str) -> str:
             variants = _preprocess_for_handwriting_cv2(file_path)
             for label, img_array in variants:
                 try:
-                    detections = reader.readtext(img_array, detail=1, paragraph=True)
+                    detections = reader.readtext(img_array, detail=1, paragraph=False)
                     text = _detections_to_text(detections)
-                    if text and len(text.strip()) > 2:  # More lenient
-                        results.append((len(text.strip()), text.strip(), label))
+                    avg_conf = _avg_confidence(detections)
+                    score = len(text.strip()) * avg_conf
+                    if text and len(text.strip()) > 2:
+                        results.append((score, text.strip(), label))
                 except Exception as e:
                     print(f"  Pass {label} failed: {e}")
         except Exception as e:
@@ -293,88 +323,157 @@ def _run_enhanced_ocr(file_path: str) -> str:
         for label, pil_img in pil_variants:
             try:
                 img_array = np.array(pil_img)
-                detections = reader.readtext(img_array, detail=1, paragraph=True)
+                detections = reader.readtext(img_array, detail=1, paragraph=False)
                 text = _detections_to_text(detections)
-                if text and len(text.strip()) > 2:  # More lenient
-                    results.append((len(text.strip()), text.strip(), label))
+                avg_conf = _avg_confidence(detections)
+                score = len(text.strip()) * avg_conf
+                if text and len(text.strip()) > 2:
+                    results.append((score, text.strip(), label))
             except Exception as e:
                 print(f"  Pass {label} failed: {e}")
     except Exception as e:
         print(f"  PIL preprocessing failed: {e}")
 
+    # --- Pass 4: Tesseract fallback (if available) ---
+    if HAS_TESSERACT:
+        try:
+            tess_img = Image.open(file_path).convert('L')
+            w, h = tess_img.size
+            if max(w, h) < 1500:
+                tess_img = tess_img.resize((w * 2, h * 2), Image.LANCZOS)
+            tess_img = ImageOps.autocontrast(tess_img, cutoff=2)
+            tess_text = pytesseract.image_to_string(
+                tess_img, lang='eng',
+                config='--oem 3 --psm 6'
+            )
+            if tess_text and len(tess_text.strip()) > 5:
+                score = len(tess_text.strip()) * 0.6
+                results.append((score, tess_text.strip(), "tesseract"))
+                print(f"  Pass tesseract: {len(tess_text.strip())} chars")
+        except Exception as e:
+            print(f"  Tesseract fallback failed: {e}")
+
     if not results:
         print("  ⚠ No text extracted from any OCR pass (image may contain no text)")
         return ""  # Return empty string instead of raising error
 
-    # Pick the result with most content
+    # Pick the result with the highest score (length × confidence)
     results.sort(key=lambda x: x[0], reverse=True)
     best_text = results[0][1]
     best_method = results[0][2]
-    print(f"  ✓ Best OCR result from '{best_method}' ({len(best_text)} chars)")
+    print(f"  ✓ Best OCR result from '{best_method}' (score={results[0][0]:.0f}, {len(best_text)} chars)")
 
     cleaned = _clean_ocr_text(best_text)
     return cleaned
 
 
+def _avg_confidence(detections: list) -> float:
+    """Calculate average confidence from EasyOCR detections."""
+    confs = []
+    for det in detections:
+        if isinstance(det, tuple) and len(det) >= 3:
+            confs.append(float(det[2]))
+    return sum(confs) / len(confs) if confs else 0.5
+
+
 def _run_pdf_ocr(file_path: str) -> str:
     """
     Extract text from a PDF document.
-    First tries native text extraction (for typed PDFs), then falls back to OCR.
+    Uses a hybrid approach: native text extraction per page, falling back
+    to OCR for pages that have little or no embedded text.  This handles
+    mixed PDFs (some pages typed, some scanned) correctly.
     """
     if not HAS_PDF:
         raise RuntimeError("PyMuPDF not installed")
 
-    # --- Phase 1: Try native text extraction (fast, for typed/digital PDFs) ---
     doc = fitz.open(file_path)
-    native_text_parts = []
-    for page in doc:
-        text = page.get_text()
-        if text and text.strip():
-            native_text_parts.append(text.strip())
+    reader = _get_ocr_reader()
+    all_page_texts = []
+
+    for page_num in range(len(doc)):
+        page = doc[page_num]
+
+        # --- Try native text first ---
+        native_text = (page.get_text() or "").strip()
+        if native_text and len(native_text) > 30:
+            print(f"  Page {page_num + 1}: native text ({len(native_text)} chars)")
+            all_page_texts.append(native_text)
+            continue
+
+        # --- Fallback: render to image and OCR ---
+        print(f"  Page {page_num + 1}: no native text, running OCR...")
+        pix = page.get_pixmap(dpi=250)  # higher DPI for better OCR
+        img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+        img_array = np.array(img)
+
+        best_text = ""
+        best_score = 0
+
+        # EasyOCR pass
+        try:
+            detections = reader.readtext(img_array, detail=1, paragraph=False)
+            text = _detections_to_text(detections)
+            avg_conf = _avg_confidence(detections)
+            score = len(text.strip()) * avg_conf
+            if score > best_score:
+                best_score = score
+                best_text = text.strip()
+        except Exception as e:
+            print(f"    EasyOCR page {page_num + 1} failed: {e}")
+
+        # Tesseract pass (if available)
+        if HAS_TESSERACT:
+            try:
+                tess_text = pytesseract.image_to_string(
+                    img, lang='eng', config='--oem 3 --psm 6'
+                )
+                tess_score = len(tess_text.strip()) * 0.6
+                if tess_score > best_score:
+                    best_score = tess_score
+                    best_text = tess_text.strip()
+            except Exception as e:
+                print(f"    Tesseract page {page_num + 1} failed: {e}")
+
+        if best_text:
+            print(f"    ✓ Page {page_num + 1}: extracted {len(best_text)} chars")
+            all_page_texts.append(best_text)
+        else:
+            print(f"    ⚠ Page {page_num + 1}: no text extracted")
+
     doc.close()
 
-    native_text = '\n'.join(native_text_parts)
-    if native_text and len(native_text.strip()) > 20:
-        print(f"  PDF native text extraction: {len(native_text)} chars")
-        return _clean_ocr_text(native_text)
-
-    # --- Phase 2: OCR each page as image (for scanned/handwritten PDFs) ---
-    print("  PDF has no native text, running OCR on rendered pages...")
-    reader = _get_ocr_reader()
-    images = _pdf_to_images(file_path)
-    all_text = []
-
-    for i, img in enumerate(images):
-        img_array = np.array(img)
-        try:
-            detections = reader.readtext(img_array, detail=1, paragraph=True)
-            page_text = _detections_to_text(detections)
-            print(f"  Page {i+1}: {len(detections)} detections, {len(page_text)} chars")
-            if page_text and len(page_text.strip()) > 2:  # More lenient
-                all_text.append(page_text.strip())
-                print(f"    ✓ Extracted {len(page_text)} chars from page {i+1}")
-        except Exception as e:
-            print(f"  Page {i+1} OCR failed: {e}")
-
-    if not all_text:
+    if not all_page_texts:
         print("  ⚠ PDF OCR extracted no text (may be image-only or low quality)")
-        return ""  # Return empty instead of raising
+        return ""
 
-    combined = '\n\n'.join(all_text)
+    combined = '\n\n'.join(all_page_texts)
     return _clean_ocr_text(combined)
 
 
-def _detections_to_text(detections: list) -> str:
-    """Convert EasyOCR detection results to plain text."""
-    lines = []
+def _detections_to_text(detections: list, min_confidence: float = 0.15) -> str:
+    """
+    Convert EasyOCR detection results to plain text.
+    Filters by confidence threshold and sorts by vertical position for
+    correct reading order.
+    """
+    entries = []
     for det in detections:
         if isinstance(det, tuple) and len(det) >= 2:
             # detail=1 returns (bbox, text, confidence)
-            text = det[1] if len(det) >= 2 else str(det)
-            lines.append(str(text))
+            bbox = det[0] if len(det) >= 3 else None
+            text = str(det[1])
+            confidence = float(det[2]) if len(det) >= 3 else 1.0
+            if confidence < min_confidence:
+                continue
+            # Use top-left Y coordinate for vertical ordering
+            y_pos = bbox[0][1] if bbox and len(bbox) >= 1 else 0
+            entries.append((y_pos, text, confidence))
         elif isinstance(det, str):
-            lines.append(det)
-    return '\n'.join(lines)
+            entries.append((0, det, 1.0))
+
+    # Sort by vertical position for proper reading order
+    entries.sort(key=lambda e: e[0])
+    return '\n'.join(e[1] for e in entries)
 
 
 def _preprocess_for_handwriting_cv2(file_path: str) -> list:
@@ -527,6 +626,7 @@ def _clean_ocr_text(text: str) -> str:
     # Remove excessive whitespace but preserve line structure
     lines = text.split('\n')
     cleaned_lines = []
+    prev_line = ""
     for line in lines:
         # Clean up each line
         line = line.strip()
@@ -540,8 +640,38 @@ def _clean_ocr_text(text: str) -> str:
             continue  # Skip lines with too few letters (OCR noise)
         # Normalize multiple spaces
         line = re.sub(r'\s+', ' ', line)
+        # Fix common OCR misreads in medical context
+        line = _fix_medical_ocr_errors(line)
+        # Deduplicate consecutive identical lines
+        if line.lower() == prev_line.lower():
+            continue
         cleaned_lines.append(line)
+        prev_line = line
     return '\n'.join(cleaned_lines)
+
+
+def _fix_medical_ocr_errors(text: str) -> str:
+    """
+    Fix common OCR misreads specific to medical/prescription text.
+    E.g., '0' misread as 'O' in dosages, 'l' misread as '1', etc.
+    """
+    # Fix dosage-adjacent letter/digit confusion: "5OOmg" -> "500mg", "1O mg" -> "10 mg"
+    text = re.sub(r'(\d)O(\d)', r'\g<1>0\2', text)
+    text = re.sub(r'(\d)O\b', r'\g<1>0', text)
+    # Fix "l" misread as "1" in common words
+    text = re.sub(r'\b1ake\b', 'take', text, flags=re.IGNORECASE)
+    text = re.sub(r'\b1ablet', 'tablet', text, flags=re.IGNORECASE)
+    text = re.sub(r'\bcapsu1e', 'capsule', text, flags=re.IGNORECASE)
+    text = re.sub(r'\bdai1y\b', 'daily', text, flags=re.IGNORECASE)
+    text = re.sub(r'\bora1\b', 'oral', text, flags=re.IGNORECASE)
+    # Fix "rn" misread as "m" or vice versa in medication names
+    # Fix common unit errors
+    text = re.sub(r'\b(\d+)\s*rng\b', r'\1 mg', text)
+    text = re.sub(r'\b(\d+)\s*rnl\b', r'\1 ml', text)
+    text = re.sub(r'\b(\d+)\s*rneg\b', r'\1 mg', text)
+    # Normalize Rx/rx variations
+    text = re.sub(r'\bRX\b|\brx\b|\bR[xX]:', 'Rx:', text)
+    return text
 
 
 # --- NLP Service (Enhanced for Prescription / Medical Text) ---
@@ -659,8 +789,10 @@ def _run_regex_medical_extraction(text: str) -> dict:
     prescriptions = []
     text_lower = text.lower()
 
-    # --- Extract medications (using pre-compiled patterns) ---
+    # --- Extract medications (using pre-compiled patterns PLUS flexible detection) ---
     found_meds = set()
+    
+    # Method 1: Known medications from dictionary
     for med, pattern in _MEDICATION_PATTERNS.items():
         matches = list(pattern.finditer(text_lower))
         if matches:
@@ -674,6 +806,72 @@ def _run_regex_medical_extraction(text: str) -> dict:
                     "start": match.start(),
                     "end": match.end(),
                 })
+    
+    # Method 2: Flexible pattern-based detection for prescription formats
+    # Match patterns like "TAB. SOMETHING", "CAP. SOMETHING", "INJ. SOMETHING"
+    # Improved pattern to capture medication names followed by newline or dosage
+    medication_form_pattern = re.compile(
+        r'(?:tab\.?|tablet|cap\.?|capsule|inj\.?|injection|syp\.?|syrup)\s+([A-Z][A-Z0-9\s\-/]+?)(?:\s*\n|\s+\d+\s*(?:mg|mcg|ml|g)|(?:\s+od|\s+bd|\s+tid))',
+        re.IGNORECASE | re.MULTILINE
+    )
+    
+    # Common timing/instruction words to exclude
+    timing_exclusions = {
+        'morning', 'night', 'evening', 'afternoon', 'noon', 'daily', 'weekly', 'monthly',
+        'od', 'bd', 'tid', 'qid', 'sos', 'prn', 'stat', 'before', 'after', 'im', 'iv', 'po'
+    }
+    
+    for match in medication_form_pattern.finditer(text):
+        med_name = match.group(1).strip()
+        med_name_lower = med_name.lower()
+        
+        # Remove trailing dosage info if captured
+        med_name = re.sub(r'\s+\d+\s*(?:mg|mcg|ml|g).*$', '', med_name, flags=re.IGNORECASE).strip()
+        
+        # Filter out timing words, short names, and common words
+        if (len(med_name) >= 3 and 
+            med_name_lower not in timing_exclusions and
+            med_name_lower not in ('the', 'and', 'for', 'with', 'take', 'use', 'from', 'day', 'week')):
+            found_meds.add(med_name.lower())
+            entities.append({
+                "text": match.group(0),
+                "label": "MEDICATION",
+                "confidence": 0.85,
+                "start": match.start(),
+                "end": match.end(),
+            })
+    
+    # Method 3: Line-by-line parser for multi-line prescription formats
+    # Handle cases where TAB./CAP. is on one line and drug name is 2-3 lines below
+    lines = text.split('\n')
+    for i, line in enumerate(lines):
+        # Check if this line starts with a number and medication form
+        if re.search(r'^\d+\)\s*(?:tab\.?|cap\.?|inj\.?|syp\.?)', line.strip(), re.IGNORECASE):
+            # Look at the next 3 lines for the medication name
+            for j in range(1, min(4, len(lines) - i)):
+                next_line = lines[i + j].strip()
+                # Skip empty lines and timing words
+                if not next_line or next_line.lower() in timing_exclusions:
+                    continue
+                # Check if this line is likely a drug name (mostly uppercase, alphanumeric)
+                if (len(next_line) >= 3 and 
+                    re.match(r'^[A-Z][A-Z0-9\s\-/]+$', next_line) and
+                    next_line.lower() not in timing_exclusions and
+                    'days' not in next_line.lower() and 
+                    'tab' not in next_line.lower() and
+                    'tot:' not in next_line.lower()):
+                    # Clean up the drug name
+                    drug_name = re.sub(r'\s+\d+\s*(?:mg|mcg|ml|g).*$', '', next_line, flags=re.IGNORECASE).strip()
+                    if len(drug_name) >= 3:
+                        found_meds.add(drug_name.lower())
+                        entities.append({
+                            "text": drug_name,
+                            "label": "MEDICATION",
+                            "confidence": 0.90,
+                            "start": 0,  # Line-based extraction doesn't have exact char positions
+                            "end": 0,
+                        })
+                    break  # Found the drug name, move to next TAB/CAP line
 
     # --- Extract dosages (using pre-compiled pattern) ---
     for match in _DOSAGE_PATTERN.finditer(text_lower):
@@ -1011,3 +1209,347 @@ def _run_pneumonia_classifier(file_path: str) -> dict:
         "recommendation": recommendation,
         "document_type": "xray"  # Identify as X-ray document
     }
+
+
+# =============================================================================
+# MEDICAL TEXT SUMMARIZATION SERVICE (T5-Large)
+# =============================================================================
+
+# Model name - can be overridden via env var
+SUMMARIZER_MODEL = os.getenv(
+    'MEDICAL_SUMMARIZER_MODEL',
+    'Falconsai/medical_summarization'
+)
+
+# Summarization limits
+SUMMARY_MAX_LENGTH = int(os.getenv('SUMMARY_MAX_LENGTH', '512'))
+SUMMARY_MIN_LENGTH = int(os.getenv('SUMMARY_MIN_LENGTH', '60'))
+# Maximum input characters to feed the model (T5 context window ≈ 512 tokens)
+SUMMARIZER_MAX_INPUT_CHARS = int(os.getenv('SUMMARIZER_MAX_INPUT_CHARS', '3000'))
+
+
+def _get_medical_summarizer():
+    """Lazy-load and cache the T5 medical summarization model and tokenizer (thread-safe)."""
+    global _medical_summarizer
+    with _summarizer_lock:
+        if _medical_summarizer is None:
+            print(f"Loading medical summarization model '{SUMMARIZER_MODEL}' ...")
+            device = 'cuda' if (HAS_CV and torch.cuda.is_available()) else 'cpu'
+            tokenizer = AutoTokenizer.from_pretrained(SUMMARIZER_MODEL)
+            model = AutoModelForSeq2SeqLM.from_pretrained(SUMMARIZER_MODEL)
+            model = model.to(device)
+            model.eval()
+            _medical_summarizer = {'model': model, 'tokenizer': tokenizer, 'device': device}
+            print("✓ Medical summarization model loaded")
+    return _medical_summarizer
+
+
+def _chunk_text(text: str, max_chars: int) -> list:
+    """
+    Split long text into chunks that fit within the model's context window.
+    Splits at paragraph boundaries when possible, otherwise at sentences.
+    """
+    if len(text) <= max_chars:
+        return [text]
+
+    chunks = []
+    paragraphs = text.split('\n\n')
+    current_chunk = ""
+
+    for para in paragraphs:
+        if len(current_chunk) + len(para) + 2 <= max_chars:
+            current_chunk = (current_chunk + "\n\n" + para).strip()
+        else:
+            if current_chunk:
+                chunks.append(current_chunk)
+            # If a single paragraph is too long, split at sentence boundaries
+            if len(para) > max_chars:
+                sentences = re.split(r'(?<=[.!?])\s+', para)
+                current_chunk = ""
+                for sent in sentences:
+                    if len(current_chunk) + len(sent) + 1 <= max_chars:
+                        current_chunk = (current_chunk + " " + sent).strip()
+                    else:
+                        if current_chunk:
+                            chunks.append(current_chunk)
+                        current_chunk = sent[:max_chars]  # hard truncate if single sentence is huge
+            else:
+                current_chunk = para
+
+    if current_chunk:
+        chunks.append(current_chunk)
+    return chunks
+
+
+def _run_medical_summarization(text: str) -> str:
+    """
+    Summarize medical text using the T5 model.
+    Handles long texts by chunking and summarizing each chunk, then
+    combining.
+    """
+    summarizer_dict = _get_medical_summarizer()
+    model = summarizer_dict['model']
+    tokenizer = summarizer_dict['tokenizer']
+    device = summarizer_dict['device']
+    
+    chunks = _chunk_text(text, SUMMARIZER_MAX_INPUT_CHARS)
+
+    chunk_summaries = []
+    for i, chunk in enumerate(chunks):
+        if len(chunk.strip()) < 30:
+            chunk_summaries.append(chunk.strip())
+            continue
+
+        try:
+            # Tokenize input
+            inputs = tokenizer(
+                "summarize: " + chunk,
+                max_length=512,
+                truncation=True,
+                return_tensors="pt"
+            ).to(device)
+            
+            # Dynamically set max_length relative to input length
+            input_len = len(chunk.split())
+            max_len = min(SUMMARY_MAX_LENGTH, max(SUMMARY_MIN_LENGTH, input_len // 2))
+            min_len = min(SUMMARY_MIN_LENGTH, max_len - 10)
+            
+            # Generate summary
+            with torch.no_grad():
+                outputs = model.generate(
+                    inputs.input_ids,
+                    max_length=max_len,
+                    min_length=max(10, min_len),
+                    num_beams=4,
+                    early_stopping=True,
+                    no_repeat_ngram_size=3
+                )
+            
+            summary_text = tokenizer.decode(outputs[0], skip_special_tokens=True).strip()
+            if summary_text:
+                chunk_summaries.append(summary_text)
+                print(f"  Chunk {i + 1}/{len(chunks)}: {len(chunk)} chars → {len(summary_text)} chars")
+        except Exception as e:
+            print(f"  ⚠ Summarization chunk {i + 1} failed: {e}")
+            # Fall back to simple truncation for this chunk
+            chunk_summaries.append(chunk[:300] + "...")
+
+    return ' '.join(chunk_summaries)
+
+
+def _build_prescription_summary(text: str, nlp_result: dict) -> dict:
+    """
+    Build a structured summary for prescription documents.
+    Uses NLP extracted data instead of T5 to avoid hallucinations.
+    """
+    medications = nlp_result.get('medications', [])
+    prescriptions = nlp_result.get('prescriptions', [])
+    entities = nlp_result.get('entities', [])
+    
+    # Filter out timing/instruction words from medications list
+    timing_words = {'morning', 'night', 'evening', 'afternoon', 'noon', 'daily', 'weekly', 
+                    'od', 'bd', 'tid', 'qid', 'sos', 'before', 'after', 'im', 'iv', 'po'}
+    medications = [m for m in medications if m.lower() not in timing_words]
+    
+    summary_parts = []
+    
+    # Extract patient info
+    persons = [e['text'] for e in entities if e['label'] in ('PERSON', 'PATIENT')]
+    dates = [e['text'] for e in entities if e['label'] == 'DATE']
+    orgs = [e['text'] for e in entities if e['label'] in ('ORGANIZATION', 'ORG')]
+    
+    # Build summary with actual prescription content
+    if medications:
+        if len(medications) == 1:
+            summary_parts.append(f"Prescription for {medications[0].capitalize()}.")
+        else:
+            med_list = ', '.join(m.capitalize() for m in medications[:4])
+            summary_parts.append(f"Prescription for {len(medications)} medications: {med_list}.")
+    else:
+        summary_parts.append("Prescription document detected.")
+    
+    # Add prescription details
+    rx_details = []
+    for rx in prescriptions[:3]:  # Limit to first 3 for summary
+        parts = [rx.get('medication', '').capitalize()]
+        if rx.get('dosage'):
+            parts.append(rx['dosage'])
+        if rx.get('frequency'):
+            freq = rx['frequency']
+            # Clean up frequency
+            if freq not in parts:
+                parts.append(freq)
+        if rx.get('duration'):
+            dur = rx['duration']
+            if 'day' in dur.lower() or 'week' in dur.lower():
+                parts.append(f"for {dur}" if not dur.startswith('for') else dur)
+        rx_details.append(' '.join(parts))
+    
+    if rx_details:
+        summary_parts.append("; ".join(rx_details) + ".")
+    
+    # Add context info
+    context_parts = []
+    if dates:
+        context_parts.append(f"Dated {dates[0]}")
+    if orgs and len(orgs[0]) > 2:
+        context_parts.append(f"from {orgs[0]}")
+    
+    if context_parts:
+        summary_parts.append(" ".join(context_parts) + ".")
+    
+    medical_summary = ' '.join(summary_parts)
+    
+    # Build key findings
+    key_findings = []
+    if medications and len(medications) > 0:
+        key_findings.append(f"Medications prescribed: {', '.join(set(m.capitalize() for m in medications))}")
+    
+    # Extract diagnosis if mentioned
+    diagnosis_keywords = ['malaria', 'fever', 'infection', 'diabetes', 'hypertension', 'asthma', 'pneumonia']
+    text_lower = text.lower()
+    for keyword in diagnosis_keywords:
+        if keyword in text_lower:
+            key_findings.append(f"Diagnosis: {keyword.capitalize()}")
+            break
+    
+    # Add route and duration info
+    routes = set(rx.get('route') for rx in prescriptions if rx.get('route'))
+    if routes:
+        key_findings.append(f"Route: {', '.join(sorted(routes)).capitalize()}")
+    
+    durations = [rx.get('duration') for rx in prescriptions if rx.get('duration')]
+    if durations:
+        key_findings.append(f"Duration: {', '.join(durations[:2])}")
+    
+    # Add any special instructions from text
+    if 'bed rest' in text_lower or 'take rest' in text_lower or 'take bed rest' in text_lower:
+        key_findings.append("Advice: Bed rest recommended")
+    if 'after meal' in text_lower or 'after food' in text_lower:
+        key_findings.append("Instruction: Take after meals")
+    elif 'before meal' in text_lower or 'before food' in text_lower:
+        key_findings.append("Instruction: Take before meals")
+    if 'do not eat outside' in text_lower or 'avoid outside food' in text_lower:
+        key_findings.append("Instruction: Avoid outside food")
+    
+    return {
+        "medical_summary": medical_summary,
+        "key_findings": key_findings,
+        "original_length": len(text),
+        "summary_length": len(medical_summary),
+    }
+
+
+async def medical_summarize_service(text: str, nlp_result: dict = None) -> dict:
+    """
+    Medical text summarization service.
+    Takes raw OCR text and optional NLP results, produces a polished medical summary.
+    For prescriptions: uses structured NLP data to build summary.
+    For other documents: uses T5 model or extractive fallback.
+    Returns a dict with:
+      - medical_summary: Generated summary of the medical text
+      - key_findings: bullet-point list of extracted key findings
+      - original_length: character count of input
+      - summary_length: character count of output summary
+    """
+    print("Starting Medical Text Summarization")
+
+    if not text or len(text.strip()) < 20:
+        return {
+            "medical_summary": "Insufficient text for summarization.",
+            "key_findings": [],
+            "original_length": len(text) if text else 0,
+            "summary_length": 0,
+        }
+
+    # Check if this is a prescription - use custom prescription summarizer
+    is_prescription = nlp_result and nlp_result.get('is_prescription', False)
+    has_medications = nlp_result and len(nlp_result.get('medications', [])) > 0
+    
+    if is_prescription or has_medications:
+        return _build_prescription_summary(text, nlp_result)
+
+    # --- Build key findings from NLP entities ---
+    key_findings = []
+    if nlp_result:
+        medications = nlp_result.get('medications', [])
+        prescriptions = nlp_result.get('prescriptions', [])
+        is_prescription = nlp_result.get('is_prescription', False)
+
+        if is_prescription and medications:
+            key_findings.append(f"Medications identified: {', '.join(m.capitalize() for m in medications)}")
+        for rx in prescriptions:
+            parts = [rx.get('medication', '').capitalize()]
+            if rx.get('dosage'):
+                parts.append(rx['dosage'])
+            if rx.get('frequency'):
+                parts.append(rx['frequency'])
+            if rx.get('route'):
+                parts.append(f"via {rx['route']}")
+            if rx.get('duration'):
+                dur = rx['duration']
+                parts.append(f"for {dur}" if not dur.startswith('for') else dur)
+            if len(parts) > 1:
+                key_findings.append(' - '.join(parts))
+
+        # Add entity-based findings
+        entity_groups = {}
+        for ent in nlp_result.get('entities', []):
+            label = ent.get('label', 'OTHER')
+            if label not in ('MEDICATION', 'DOSAGE', 'FREQUENCY', 'ROUTE', 'DURATION'):
+                entity_groups.setdefault(label, []).append(ent['text'])
+        for label, items in entity_groups.items():
+            unique_items = list(dict.fromkeys(items))[:5]  # dedupe, limit
+            key_findings.append(f"{label}: {', '.join(unique_items)}")
+
+    # --- Generate T5 summary ---
+    if HAS_SUMMARIZER:
+        try:
+            async with heavy_semaphore:
+                medical_summary = await asyncio.to_thread(_run_medical_summarization, text)
+                print(f"✓ Medical summarization complete ({len(medical_summary)} chars)")
+        except Exception as e:
+            print(f"⚠ T5 summarization failed: {e}")
+            traceback.print_exc()
+            medical_summary = _fallback_extractive_summary(text)
+    else:
+        print("⚠ Transformers not available, using extractive fallback")
+        medical_summary = _fallback_extractive_summary(text)
+
+    return {
+        "medical_summary": medical_summary,
+        "key_findings": key_findings,
+        "original_length": len(text),
+        "summary_length": len(medical_summary),
+    }
+
+
+def _fallback_extractive_summary(text: str, max_sentences: int = 5) -> str:
+    """
+    Simple extractive summary fallback when T5 model is unavailable.
+    Picks the most information-dense sentences using a basic scoring heuristic.
+    """
+    sentences = re.split(r'(?<=[.!?])\s+', text.strip())
+    if len(sentences) <= max_sentences:
+        return text.strip()
+
+    # Score each sentence by: length (prefers longer, more informative)
+    # + presence of medical keywords
+    medical_keywords = (
+        COMMON_MEDICATIONS | DOSAGE_FORMS | {'diagnosis', 'treatment', 'patient',
+        'history', 'examination', 'symptoms', 'findings', 'prescribed', 'condition',
+        'assessment', 'plan', 'recommendation', 'follow-up', 'review'}
+    )
+    scored = []
+    for i, sent in enumerate(sentences):
+        words = sent.lower().split()
+        keyword_hits = sum(1 for w in words if w in medical_keywords)
+        # Slight preference for earlier sentences (often contain key info)
+        position_bonus = max(0, (len(sentences) - i) / len(sentences) * 2)
+        score = len(words) * 0.3 + keyword_hits * 3 + position_bonus
+        scored.append((score, i, sent))
+
+    scored.sort(key=lambda x: x[0], reverse=True)
+    # Take top N but restore original order
+    top = sorted(scored[:max_sentences], key=lambda x: x[1])
+    return ' '.join(t[2] for t in top)

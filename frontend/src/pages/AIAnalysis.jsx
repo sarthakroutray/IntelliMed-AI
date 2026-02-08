@@ -79,6 +79,9 @@ const AIAnalysis = () => {
         is_prescription: nlp.is_prescription || false,
         medications: nlp.medications || [],
         prescriptions: nlp.prescriptions || [],
+        // T5 Medical Summary fields
+        medical_summary: analysisResult.summary_result?.medical_summary || '',
+        key_findings: analysisResult.summary_result?.key_findings || [],
       };
 
       // Update local state with real analysis result
@@ -110,6 +113,11 @@ const AIAnalysis = () => {
         const documentType = analysisData.detected_type || cv.document_type || nlp.document_type || 'document';
         const isXray = documentType === 'xray';
         const isPrescription = documentType === 'prescription';
+
+        // Extract T5 summary data
+        const summaryResult = analysisData.summary_result || {};
+        const medicalSummary = summaryResult.medical_summary || analysisData.medical_summary || '';
+        const keyFindings = summaryResult.key_findings || analysisData.key_findings || [];
         
         // Build context-aware summary and recommendations
         let summary = '';
@@ -147,6 +155,8 @@ const AIAnalysis = () => {
           medications: nlp.medications || [],
           prescriptions: nlp.prescriptions || [],
           document_type: documentType,
+          medical_summary: medicalSummary,
+          key_findings: keyFindings,
         };
       }
       
@@ -212,21 +222,30 @@ const AIAnalysis = () => {
                 </div>
                 <div className="max-h-[400px] overflow-y-auto divide-y divide-gray-200 dark:divide-gray-800">
                   {analyzedDocs.map((doc) => (
-                    <button
-                      key={doc.id}
-                      onClick={() => setSelectedDoc(doc)}
-                      className={`w-full p-4 text-left hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors ${
-                        selectedDoc?.id === doc.id ? 'bg-primary/10 dark:bg-primary/20' : ''
-                      }`}
-                    >
-                      <p className="text-sm font-bold text-gray-900 dark:text-white truncate">{doc.filename}</p>
-                      {user.role === 'doctor' && (
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Patient: {doc.patientName}</p>
-                      )}
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                        {new Date(doc.upload_timestamp).toLocaleDateString()}
-                      </p>
-                    </button>
+                    <div key={doc.id} className="relative group">
+                      <button
+                        onClick={() => setSelectedDoc(doc)}
+                        className={`w-full p-4 text-left hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors ${
+                          selectedDoc?.id === doc.id ? 'bg-primary/10 dark:bg-primary/20' : ''
+                        }`}
+                      >
+                        <p className="text-sm font-bold text-gray-900 dark:text-white truncate pr-8">{doc.filename}</p>
+                        {user.role === 'doctor' && (
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Patient: {doc.patientName}</p>
+                        )}
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                          {new Date(doc.upload_timestamp).toLocaleDateString()}
+                        </p>
+                      </button>
+                      <button
+                        onClick={() => handleAnalyze(doc.id)}
+                        disabled={analyzing === doc.id}
+                        className="absolute top-2 right-2 p-1.5 rounded-md bg-primary/10 hover:bg-primary/20 text-primary transition-colors disabled:opacity-50"
+                        title="Re-analyze"
+                      >
+                        <Icon name="refresh" className="text-[16px]" />
+                      </button>
+                    </div>
                   ))}
                   {analyzedDocs.length === 0 && (
                     <div className="p-8 text-center text-gray-500 dark:text-gray-400 text-sm">
@@ -382,6 +401,38 @@ const AIAnalysis = () => {
                               <p className="text-gray-700 dark:text-gray-300 leading-relaxed p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
                                 {analysis.summary}
                               </p>
+                            </div>
+                          )}
+
+                          {/* Medical Summary (T5-generated) */}
+                          {analysis.medical_summary && analysis.medical_summary.length > 10 && (
+                            <div>
+                              <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+                                <Icon name="clinical_notes" className="text-emerald-600 dark:text-emerald-400" />
+                                Medical Summary
+                                <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 ml-auto">AI Generated</span>
+                              </h3>
+                              <p className="text-gray-700 dark:text-gray-300 leading-relaxed p-4 bg-emerald-50 dark:bg-emerald-900/10 rounded-lg border border-emerald-200 dark:border-emerald-800">
+                                {analysis.medical_summary}
+                              </p>
+                            </div>
+                          )}
+
+                          {/* Key Findings */}
+                          {analysis.key_findings && analysis.key_findings.length > 0 && (
+                            <div>
+                              <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+                                <Icon name="fact_check" className="text-amber-600 dark:text-amber-400" />
+                                Key Findings
+                              </h3>
+                              <div className="space-y-2">
+                                {analysis.key_findings.map((finding, index) => (
+                                  <div key={index} className="flex items-start gap-3 p-3 bg-amber-50 dark:bg-amber-900/10 rounded-lg border border-amber-200 dark:border-amber-800">
+                                    <Icon name="arrow_right" className="text-amber-600 dark:text-amber-400 text-[18px] mt-0.5 flex-shrink-0" />
+                                    <p className="text-sm text-gray-700 dark:text-gray-300">{finding}</p>
+                                  </div>
+                                ))}
+                              </div>
                             </div>
                           )}
 
