@@ -1,5 +1,5 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
-import { login as apiLogin, register as apiRegister, googleLogin as apiGoogleLogin } from '../services/api.js';
+import { login as apiLogin, register as apiRegister, googleLogin as apiGoogleLogin, invalidateCache } from '../services/api.js';
 import { jwtDecode } from 'jwt-decode'; // Corrected import
 
 const AuthContext = createContext(null);
@@ -78,6 +78,8 @@ export const AuthProvider = ({ children }) => {
     localStorage.removeItem('token');
     setToken(null);
     setUser(null);
+    // Clear all cached API data on logout
+    invalidateCache.all();
   };
 
   const toggleDarkMode = () => {

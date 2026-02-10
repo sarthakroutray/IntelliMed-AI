@@ -32,12 +32,12 @@ class UpdateProfileRequest(BaseModel):
 
 @router.get("/profile")
 async def get_profile(
-    current_user: dict = Depends(auth.get_current_user),
+    current_user = Depends(auth.get_current_user),
     db: Prisma = Depends(get_db)
 ):
     """Get current user profile"""
     try:
-        user = await db.user.find_unique(where={"id": current_user["id"]})
+        user = await db.user.find_unique(where={"id": current_user.id})
         if not user:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -74,7 +74,7 @@ async def get_profile(
 @router.put("/profile")
 async def update_profile(
     profile_data: UpdateProfileRequest,
-    current_user: dict = Depends(auth.get_current_user),
+    current_user = Depends(auth.get_current_user),
     db: Prisma = Depends(get_db)
 ):
     """Update current user profile"""
@@ -93,7 +93,7 @@ async def update_profile(
         
         # Update user profile
         updated_user = await db.user.update(
-            where={"id": current_user["id"]},
+            where={"id": current_user.id},
             data=update_data
         )
         

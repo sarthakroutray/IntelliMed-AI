@@ -51,22 +51,45 @@ async def upload_document(
         cv_result = await cv_task
         nlp_result = await nlp_task
 
-        # Validate document type based on content quality
+        # Run T5 medical summarization on OCR text + NLP context
+        summary_result = await services.medical_summarize_service(ocr_result, nlp_result)
+
+        # Determine final document type based on content quality
+        # Priority: NLP prescription detection > CV X-ray classification > default
+        is_prescription = nlp_result.get('is_prescription', False)
+        has_medications = len(nlp_result.get('medications', [])) > 0
+        
+        print(f"  Document type detection: is_prescription={is_prescription}, has_medications={has_medications}, medications={nlp_result.get('medications', [])}")
+        
+        # Only consider it an X-ray if NO prescription markers are found
         is_meaningful_xray = (
-            cv_result.get('classification') and
-            cv_result.get('confidence', 0) > 0.5 and
+            not is_prescription and
+            not has_medications and
+            cv_result.get('classification') and 
+            cv_result.get('confidence', 0) > 0.6 and  # Higher threshold to reduce false positives
             cv_result.get('document_type') == 'xray'
         )
-        is_prescription = nlp_result.get('is_prescription', False)
-
+        
+        # Override document types if not meaningful
         if not is_meaningful_xray and cv_result.get('document_type') == 'xray':
-            cv_result['document_type'] = 'document'
+            cv_result['document_type'] = 'document'  # Demote random images
+        
+        # Determine final type: prescription has highest priority
+        if is_prescription or has_medications:
+            final_type = "prescription"
+        elif is_meaningful_xray:
+            final_type = "xray"
+        else:
+            final_type = "document"
+        
+        print(f"  Final document type: {final_type}")
 
         aggregated_analysis = {
             "ocr_result": ocr_result,
             "nlp_result": nlp_result,
             "cv_result": cv_result,
-            "detected_type": "xray" if is_meaningful_xray else ("prescription" if is_prescription else "document"),
+            "summary_result": summary_result,
+            "detected_type": final_type,
         }
 
         db_document = await db.medicaldocument.create(

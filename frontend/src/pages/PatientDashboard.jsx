@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { uploadDocument, getPatientDocuments, deleteDocument, shareDocument, unshareDocument, getSharedDoctors } from '../services/api';
-import api from '../services/api';
+import { uploadDocument, getPatientDocuments, deleteDocument, shareDocument, unshareDocument, getSharedDoctors, getLinkedDoctors } from '../services/api';
 import { useDropzone } from 'react-dropzone';
 import Icon from '../components/Icon.jsx';
 import GenerateAccessCode from '../components/GenerateAccessCode.jsx';
@@ -111,7 +110,7 @@ const PatientDashboard = () => {
     if (!user) return;
     try {
       setLoadingDoctors(true);
-      const response = await api.get('/patient/linked-doctors');
+      const response = await getLinkedDoctors();
       setLinkedDoctors(response.data);
     } catch (err) {
       console.error('Failed to fetch linked doctors:', err);
@@ -303,8 +302,46 @@ const PatientDashboard = () => {
       {/* Documents Table */}
       <div className="bg-white dark:bg-[#1A202C] rounded-xl border border-[#dbdfe6] dark:border-gray-700 overflow-hidden shadow-sm">
         {loading ? (
-          <div className="flex items-center justify-center py-20">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-gray-50 dark:bg-gray-800/50 border-b border-[#dbdfe6] dark:border-gray-700">
+                  <th className="px-6 py-4 text-xs font-bold text-[#616f89] dark:text-gray-400 uppercase tracking-wider">Document Name</th>
+                  <th className="px-6 py-4 text-xs font-bold text-[#616f89] dark:text-gray-400 uppercase tracking-wider">Type</th>
+                  <th className="px-6 py-4 text-xs font-bold text-[#616f89] dark:text-gray-400 uppercase tracking-wider">Date</th>
+                  <th className="px-6 py-4 text-xs font-bold text-[#616f89] dark:text-gray-400 uppercase tracking-wider">Status</th>
+                  <th className="px-6 py-4 text-xs font-bold text-[#616f89] dark:text-gray-400 uppercase tracking-wider text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#dbdfe6] dark:divide-gray-700">
+                {[1, 2, 3, 4, 5].map(i => (
+                  <tr key={i} className="animate-pulse">
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-3">
+                        <div className="size-8 bg-gray-200 dark:bg-gray-700 rounded"></div>
+                        <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-40"></div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-12"></div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-24"></div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="h-6 bg-gray-200 dark:bg-gray-700 rounded-full w-20"></div>
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <div className="size-8 bg-gray-200 dark:bg-gray-700 rounded"></div>
+                        <div className="size-8 bg-gray-200 dark:bg-gray-700 rounded"></div>
+                        <div className="size-8 bg-gray-200 dark:bg-gray-700 rounded"></div>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         ) : (
           <div className="overflow-x-auto">

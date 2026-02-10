@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Routes, Route, useNavigate, Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import Icon from '../components/Icon';
 import GenerateAccessCode from '../components/GenerateAccessCode';
+import { getLinkedDoctors } from '../services/api';
 
 // Import pages
 import PatientDashboard from './PatientDashboard';
@@ -16,6 +17,26 @@ const PatientDashboardLayout = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [showGenerateCodeModal, setShowGenerateCodeModal] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
+  const [linkedDoctors, setLinkedDoctors] = useState([]);
+  const [loadingDoctors, setLoadingDoctors] = useState(false);
+
+  const fetchLinkedDoctors = useCallback(async () => {
+    if (!user) return;
+    try {
+      setLoadingDoctors(true);
+      const response = await getLinkedDoctors();
+      setLinkedDoctors(response.data);
+    } catch (err) {
+      console.error('Failed to fetch linked doctors:', err);
+      setLinkedDoctors([]);
+    } finally {
+      setLoadingDoctors(false);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    fetchLinkedDoctors();
+  }, [fetchLinkedDoctors]);
 
   const handleNavigate = (path, tab) => {
     setActiveTab(tab);
@@ -104,12 +125,50 @@ const PatientDashboardLayout = () => {
           
           <hr className="border-[#dbdfe6] dark:border-gray-700 my-2" />
           
-          {/* Quick Access */}
+          {/* Connected Doctors */}
           <div className="flex flex-col gap-3">
-            <h2 className="px-3 text-xs font-bold text-[#616f89] dark:text-gray-500 uppercase tracking-wider">Quick Actions</h2>
+            <div className="flex items-center justify-between px-3">
+              <h2 className="text-xs font-bold text-[#616f89] dark:text-gray-500 uppercase tracking-wider">Connected Doctors</h2>
+              {linkedDoctors.length > 0 && (
+                <span className="px-2 py-0.5 bg-primary/10 text-primary text-xs font-bold rounded-full">{linkedDoctors.length}</span>
+              )}
+            </div>
+            
+            {loadingDoctors ? (
+              <div className="flex items-center justify-center py-4">
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+              </div>
+            ) : linkedDoctors.length === 0 ? (
+              <div className="px-3 py-2 text-xs text-[#616f89] dark:text-gray-500">
+                No doctors connected yet
+              </div>
+            ) : (
+              <div className="flex flex-col gap-2 max-h-48 overflow-y-auto">
+                {linkedDoctors.map((doctor) => (
+                  <div 
+                    key={doctor.id} 
+                    className="flex items-center gap-2 px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+                  >
+                    <div className="size-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center flex-shrink-0">
+                      <Icon name="person" className="text-white text-[16px]" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-bold text-[#111318] dark:text-white truncate">
+                        Dr. {doctor.email?.split('@')[0]}
+                      </p>
+                      <div className="flex items-center gap-1">
+                        <div className="size-1.5 rounded-full bg-green-500"></div>
+                        <span className="text-xs text-green-600 dark:text-green-400">Active</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            
             <button 
               onClick={() => setShowGenerateCodeModal(true)}
-              className="flex items-center gap-2 px-3 py-2 text-primary hover:text-primary/80 hover:bg-primary/5 rounded-lg text-sm font-medium transition-colors"
+              className="flex items-center gap-2 px-3 py-2 text-primary hover:text-primary/80 hover:bg-primary/5 rounded-lg text-sm font-medium transition-colors mt-1"
             >
               <Icon name="add_link" className="text-[18px]" />
               Connect with Doctor
@@ -195,6 +254,41 @@ const PatientDashboardLayout = () => {
             </button>
 
             <hr className="border-gray-200 dark:border-gray-700 my-2" />
+
+            {/* Connected Doctors in Mobile */}
+            {linkedDoctors.length > 0 && (
+              <>
+                <div className="px-3 py-2">
+                  <p className="text-xs font-bold text-[#616f89] dark:text-gray-500 uppercase tracking-wider mb-2">
+                    Connected Doctors ({linkedDoctors.length})
+                  </p>
+                  <div className="space-y-2">
+                    {linkedDoctors.slice(0, 3).map((doctor) => (
+                      <div 
+                        key={doctor.id}
+                        className="flex items-center gap-2 py-1"
+                      >
+                        <div className="size-6 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center flex-shrink-0">
+                          <Icon name="person" className="text-white text-[12px]" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-bold text-[#111318] dark:text-white truncate">
+                            Dr. {doctor.email?.split('@')[0]}
+                          </p>
+                        </div>
+                        <div className="size-1.5 rounded-full bg-green-500"></div>
+                      </div>
+                    ))}
+                    {linkedDoctors.length > 3 && (
+                      <p className="text-xs text-[#616f89] dark:text-gray-400 pl-8">
+                        +{linkedDoctors.length - 3} more
+                      </p>
+                    )}
+                  </div>
+                </div>
+                <hr className="border-gray-200 dark:border-gray-700 my-2" />
+              </>
+            )}
 
             <button 
               onClick={() => {

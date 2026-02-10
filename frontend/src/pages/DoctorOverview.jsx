@@ -25,31 +25,41 @@ const DoctorOverview = () => {
         const patientsResponse = await api.get('/doctor/patients');
         const patients = patientsResponse.data;
         
-        // Fetch documents for each patient to calculate stats
+        // Fetch documents for ALL patients in parallel (much faster!)
+        const documentPromises = patients.map(patient =>
+          api.get(`/doctor/patients/${patient.id}/documents`)
+            .then(docsResponse => ({
+              patient,
+              docs: docsResponse.data,
+              success: true
+            }))
+            .catch(err => {
+              console.error(`Failed to fetch documents for patient ${patient.id}`, err);
+              return { patient, docs: [], success: false };
+            })
+        );
+        
+        const results = await Promise.all(documentPromises);
+        
+        // Calculate stats
         let totalDocs = 0;
         let aiCompleted = 0;
         const activities = [];
         
-        for (const patient of patients) {
-          try {
-            const docsResponse = await api.get(`/doctor/patients/${patient.id}/documents`);
-            const docs = docsResponse.data;
-            totalDocs += docs.length;
-            
-            docs.forEach(doc => {
-              if (doc.ai_analysis) aiCompleted++;
-              activities.push({
-                type: 'upload',
-                patientName: patient.email?.split('@')[0],
-                documentName: doc.filename,
-                timestamp: doc.upload_timestamp,
-                hasAI: !!doc.ai_analysis
-              });
+        results.forEach(({ patient, docs }) => {
+          totalDocs += docs.length;
+          
+          docs.forEach(doc => {
+            if (doc.ai_analysis) aiCompleted++;
+            activities.push({
+              type: 'upload',
+              patientName: patient.email?.split('@')[0],
+              documentName: doc.filename,
+              timestamp: doc.upload_timestamp,
+              hasAI: !!doc.ai_analysis
             });
-          } catch (err) {
-            console.error(`Failed to fetch documents for patient ${patient.id}`, err);
-          }
-        }
+          });
+        });
         
         // Sort activities by most recent
         activities.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
@@ -107,9 +117,48 @@ const DoctorOverview = () => {
         </div>
 
         {loading ? (
-          <div className="flex items-center justify-center py-20">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
-          </div>
+          <>
+            {/* Skeleton Stats Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              {[1, 2, 3, 4].map(i => (
+                <div key={i} className="bg-white dark:bg-[#1a202c] rounded-xl p-6 border border-gray-200 dark:border-gray-800 animate-pulse">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-24 mb-3"></div>
+                      <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded w-16"></div>
+                    </div>
+                    <div className="size-12 bg-gray-200 dark:bg-gray-700 rounded-lg"></div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            
+            {/* Skeleton Quick Actions */}
+            <div className="bg-white dark:bg-[#1a202c] rounded-xl border border-gray-200 dark:border-gray-800 p-6 animate-pulse">
+              <div className="h-6 bg-gray-200 dark:bg-gray-700 rounded w-32 mb-4"></div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {[1, 2, 3].map(i => (
+                  <div key={i} className="h-20 bg-gray-200 dark:bg-gray-700 rounded-lg"></div>
+                ))}
+              </div>
+            </div>
+            
+            {/* Skeleton Recent Activity */}
+            <div className="bg-white dark:bg-[#1a202c] rounded-xl border border-gray-200 dark:border-gray-800 p-6 animate-pulse">
+              <div className="h-6 bg-gray-200 dark:bg-gray-700 rounded w-40 mb-4"></div>
+              <div className="space-y-4">
+                {[1, 2, 3, 4, 5].map(i => (
+                  <div key={i} className="flex items-center gap-4 p-3 rounded-lg">
+                    <div className="size-10 bg-gray-200 dark:bg-gray-700 rounded-full"></div>
+                    <div className="flex-1">
+                      <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-3/4 mb-2"></div>
+                      <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-1/2"></div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </>
         ) : (
           <>
             {/* Stats Grid */}
