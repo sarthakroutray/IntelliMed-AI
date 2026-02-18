@@ -1,6 +1,6 @@
 from typing import List
 import os
-import shutil
+import tempfile
 import asyncio
 import json
 from pathlib import Path
@@ -15,11 +15,13 @@ from schemas import User, DocumentInfo, DocumentDetail
 from prisma_client import Prisma
 from prisma_client.fields import Json
 import services
+import supabase_storage
+
+from fastapi_cache import FastAPICache
 
 router = APIRouter()
 
-UPLOAD_DIR = Path("./uploads")
-UPLOAD_DIR.mkdir(exist_ok=True)
+MAX_UPLOAD_SIZE_MB = int(os.getenv("MAX_UPLOAD_SIZE_MB", "10"))
 
 
 @router.post("/upload/", response_model=DocumentInfo)
@@ -38,12 +40,33 @@ async def upload_document(
         raise HTTPException(status_code=400, detail="No file provided")
 
     try:
-        file_path = UPLOAD_DIR / file.filename
-        with file_path.open("wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+        # Read file content
+        file_bytes = await file.read()
 
-        ocr_task = asyncio.create_task(services.ocr_service(str(file_path)))
-        cv_task = asyncio.create_task(services.cv_service(str(file_path)))
+        # Enforce upload size limit
+        max_bytes = MAX_UPLOAD_SIZE_MB * 1024 * 1024
+        if len(file_bytes) > max_bytes:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail=f"File too large. Maximum allowed size is {MAX_UPLOAD_SIZE_MB} MB.",
+            )
+
+        # Write to a temp file so AI services can read it from disk
+        suffix = Path(file.filename).suffix or ".bin"
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+            tmp.write(file_bytes)
+            tmp_path = tmp.name
+
+        # Upload to Supabase Storage
+        storage_path = f"patients/{current_user.id}/{file.filename}"
+        public_url = supabase_storage.upload_file(
+            file_bytes=file_bytes,
+            destination_path=storage_path,
+            content_type=file.content_type,
+        )
+
+        ocr_task = asyncio.create_task(services.ocr_service(tmp_path))
+        cv_task = asyncio.create_task(services.cv_service(tmp_path))
 
         ocr_result = await ocr_task
         nlp_task = asyncio.create_task(services.nlp_service(ocr_result))
@@ -95,10 +118,16 @@ async def upload_document(
         db_document = await db.medicaldocument.create(
             data={
                 'patient_id': current_user.id,
-                'file_path': str(file_path),
+                'file_path': public_url,
                 'ai_analysis_json': Json(aggregated_analysis),
             }
         )
+
+        # Clean up temp file
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
 
         print(f"✓ Document uploaded successfully: {db_document.id}")
         return DocumentInfo(
@@ -113,6 +142,13 @@ async def upload_document(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Document upload failed: {str(e)}"
         )
+    finally:
+        # Invalidate the cached document list for this patient (non-fatal)
+        try:
+            cache_key = f"patient-docs:user:{current_user.id}"
+            await FastAPICache.get_backend().clear(namespace=None, key=cache_key)
+        except Exception:
+            pass
 
 @router.get("/documents", response_model=List[DocumentInfo])
 async def get_own_documents(
@@ -133,7 +169,7 @@ async def get_own_documents(
         return [
             DocumentInfo(
                 id=doc.id,
-                filename=os.path.basename(doc.file_path) if doc.file_path else "unknown",
+                filename=Path(doc.file_path.split("?")[0]).name if doc.file_path else "unknown",
                 upload_timestamp=doc.upload_timestamp,
                 ai_analysis=doc.ai_analysis_json,
             )
@@ -173,15 +209,30 @@ async def delete_document(
         )
 
     try:
-        file_path = Path(document.file_path)
-        if file_path.exists():
-            file_path.unlink()
-    except Exception as e:
-        print(f"Error deleting file: {e}")
+        # Delete from Supabase Storage if a file URL is stored
+        if document.file_path:
+            try:
+                storage_path = supabase_storage.public_url_to_storage_path(document.file_path)
+                supabase_storage.delete_file(storage_path)
+            except Exception as e:
+                print(f"Warning: could not delete file from storage: {e}")
 
-    await db.medicaldocument.delete(
-        where={'id': document_id}
-    )
+        await db.medicaldocument.delete(
+            where={'id': document_id}
+        )
+    except Exception as e:
+        print(f"✗ Failed to delete document: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete document: {str(e)}",
+        )
+    finally:
+        # Invalidate cached document list for this patient (non-fatal)
+        try:
+            cache_key = f"patient-docs:user:{current_user.id}"
+            await FastAPICache.get_backend().clear(namespace=None, key=cache_key)
+        except Exception:
+            pass
 
     return None
 

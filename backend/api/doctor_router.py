@@ -71,8 +71,8 @@ async def get_patient_documents_for_doctor(
     return [
         DocumentDetail(
             id=doc.id,
-            filename=os.path.basename(doc.file_path) if doc.file_path else "N/A",
-            file_url=f"http://localhost:8000/uploads/{os.path.basename(doc.file_path)}" if doc.file_path else "",
+            filename=Path(doc.file_path.split("?")[0]).name if doc.file_path else "N/A",
+            file_url=doc.file_path or "",
             upload_timestamp=doc.upload_timestamp,
             ai_analysis=doc.ai_analysis_json,
             analysis_status="processed" if doc.ai_analysis_json else "pending",

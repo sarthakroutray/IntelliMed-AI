@@ -1,5 +1,7 @@
 fastapi[all]
 uvicorn
+supabase
+fastapi-cache2
 sqlalchemy
 psycopg2-binary
 python-jose[cryptography]

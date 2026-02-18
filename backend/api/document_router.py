@@ -1,6 +1,8 @@
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Request
+from fastapi.responses import RedirectResponse
+from fastapi_cache import FastAPICache
+from fastapi_cache.decorator import cache
 from datetime import datetime
 import mimetypes
 import sys
@@ -14,10 +16,37 @@ from prisma_db import get_db
 from schemas import User, DocumentDetail
 from prisma_client import Prisma, Json
 import services
+import supabase_storage
 
 router = APIRouter()
 
+CACHE_TTL = int(os.getenv("CACHE_TTL_SECONDS", "300"))
+
+
+def _doc_key_builder(
+    func,
+    namespace: str = "",
+    *,
+    request: Request = None,
+    response=None,
+    args: tuple = (),
+    kwargs: dict = {},
+) -> str:
+    """Stable per-document-id cache key."""
+    doc_id = kwargs.get("document_id", "?")
+    return f"{namespace}:{doc_id}"
+
+
+async def _invalidate_document_cache(document_id: int) -> None:
+    """Evict a single document's cached GET response. Non-fatal if cache miss."""
+    try:
+        key = f"document:{document_id}"
+        await FastAPICache.get_backend().clear(namespace=None, key=key)
+    except Exception:
+        pass
+
 @router.get("/documents/{document_id}")
+@cache(namespace="document", expire=CACHE_TTL, key_builder=_doc_key_builder)
 async def get_document(
     document_id: int,
     db: Prisma = Depends(get_db),
@@ -140,10 +169,10 @@ async def get_document(
             "rawResponse": None
         }
     
-    # Convert file path to URL and compute real metadata
-    file_name = os.path.basename(document.file_path) if document.file_path else "unknown"
-    file_url = f"http://localhost:8000/uploads/{file_name}"
-    
+    # Build public URL and file metadata from Supabase storage path
+    file_url = document.file_path or ""
+    file_name = Path(file_url.split("?")[0]).name if file_url else "unknown"
+
     # Detect real file type from extension
     ext = os.path.splitext(file_name)[1].lower()
     file_type_map = {
@@ -151,18 +180,9 @@ async def get_document(
         '.dcm': 'DICOM', '.dicom': 'DICOM', '.bmp': 'BMP', '.tiff': 'TIFF', '.tif': 'TIFF',
     }
     file_type = file_type_map.get(ext, ext.upper().lstrip('.'))
-    
-    # Calculate real file size
-    try:
-        size_bytes = os.path.getsize(document.file_path)
-        if size_bytes >= 1_048_576:
-            file_size = f"{size_bytes / 1_048_576:.1f} MB"
-        elif size_bytes >= 1024:
-            file_size = f"{size_bytes / 1024:.1f} KB"
-        else:
-            file_size = f"{size_bytes} B"
-    except OSError:
-        file_size = "Unknown"
+
+    # File size is not available without downloading; omit gracefully
+    file_size = "Unknown"
     
     return {
         "id": document.id,
@@ -226,16 +246,21 @@ async def analyze_document(
             )
 
     file_path = document.file_path
-    if not file_path or not os.path.exists(file_path):
+    if not file_path:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Document file not found on server"
+            detail="Document file not found"
         )
 
+    tmp_path: str | None = None
     try:
+        # Download from Supabase to a temp file for AI processing
+        storage_path = supabase_storage.public_url_to_storage_path(file_path)
+        tmp_path = supabase_storage.download_to_temp(storage_path)
+
         # Run OCR and CV in parallel
-        ocr_task = asyncio.create_task(services.ocr_service(file_path))
-        cv_task = asyncio.create_task(services.cv_service(file_path))
+        ocr_task = asyncio.create_task(services.ocr_service(tmp_path))
+        cv_task = asyncio.create_task(services.cv_service(tmp_path))
 
         ocr_result = await ocr_task
         cv_result = await cv_task
@@ -301,6 +326,14 @@ async def analyze_document(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"AI analysis failed: {str(e)}"
         )
+    finally:
+        if tmp_path:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+        # Evict stale cached GET response
+        await _invalidate_document_cache(document_id)
 
 
 @router.post("/documents/{document_id}/verify")
@@ -353,12 +386,14 @@ async def verify_document(
         }
     )
     
+    await _invalidate_document_cache(document_id)
     return {
         "message": "Document verified successfully",
         "verified_by": current_user.email,
         "verified_at": verified_at.isoformat(),
         "notes": notes
     }
+
 
 
 @router.post("/documents/{document_id}/notes")
@@ -422,6 +457,7 @@ async def add_clinical_note(
         where={'id': document_id},
         data={'clinical_notes': Json(existing_notes)}
     )
+    await _invalidate_document_cache(document_id)
     
     return {
         "message": "Clinical note added successfully",
@@ -479,11 +515,13 @@ async def archive_document(
         }
     )
     
+    await _invalidate_document_cache(document_id)
     return {
         "message": "Document archived successfully",
         "archived_by": current_user.email,
         "archived_at": archived_at.isoformat()
     }
+
 
 
 @router.get("/documents/{document_id}/download")
@@ -524,18 +562,13 @@ async def download_document(
                 detail="You don't have access to this document"
             )
     
-    # Check if file exists
+    # Check if file path exists in DB
     file_path = document.file_path
-    if not os.path.exists(file_path):
+    if not file_path:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="File not found on server"
+            detail="File not found"
         )
-    
-    # Return file for download
-    filename = os.path.basename(file_path)
-    return FileResponse(
-        path=file_path,
-        filename=filename,
-        media_type='application/octet-stream'
-    )
+
+    # Redirect to the Supabase public URL so the browser downloads directly
+    return RedirectResponse(url=file_path)

@@ -11,6 +11,8 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi_cache import FastAPICache
+from fastapi_cache.backends.inmemory import InMemoryBackend
 from api import auth_router, patient_router, doctor_router, linking_router, document_router, profile_router, sharing_router
 from prisma_db import db
 
@@ -25,6 +27,8 @@ else:
 async def lifespan(app: FastAPI):
     await db.connect()
     print("✓ Database connected")
+    FastAPICache.init(InMemoryBackend(), prefix="intellimed-cache")
+    print("✓ In-memory cache initialised")
     yield
     if db.is_connected():
         await db.disconnect()
@@ -33,13 +37,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="IntelliMed AI", lifespan=lifespan)
 
-origins = [
-    "http://localhost",
-    "http://localhost:3000",
-    "http://localhost:3001",
-    "http://127.0.0.1:3000",
-    "http://127.0.0.1:3001",
-]
+origins = [o.strip() for o in os.getenv("CORS_ORIGINS", "").split(",") if o.strip()]
 
 app.add_middleware(
     CORSMiddleware,

@@ -38,9 +38,22 @@ const PatientDashboard = () => {
     }
   };
 
-  const onDrop = useCallback(async (acceptedFiles) => {
+  const MAX_FILE_SIZE_MB = 10;
+  const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
+
+  const onDrop = useCallback(async (acceptedFiles, rejectedFiles) => {
+    // Handle rejected files (e.g. too large)
+    if (rejectedFiles && rejectedFiles.length > 0) {
+      const rejection = rejectedFiles[0];
+      const isTooBig = rejection.errors?.some(e => e.code === 'file-too-large');
+      setError(isTooBig
+        ? `File is too large. Maximum allowed size is ${MAX_FILE_SIZE_MB} MB.`
+        : 'File type not supported. Please upload a PDF, JPEG, PNG, or DICOM file.');
+      return;
+    }
+
     if (acceptedFiles.length === 0) return;
-    
+
     setUploading(true);
     setError('');
 
@@ -50,7 +63,13 @@ const PatientDashboard = () => {
       await fetchDocuments();
     } catch (err) {
       console.error('Upload error:', err);
-      setError('File upload failed. Please try again.');
+      if (err.response?.status === 413) {
+        setError(`File is too large. Maximum allowed size is ${MAX_FILE_SIZE_MB} MB.`);
+      } else if (err.response?.data?.detail) {
+        setError(err.response.data.detail);
+      } else {
+        setError('File upload failed. Please try again.');
+      }
     } finally {
       setUploading(false);
     }
@@ -65,6 +84,7 @@ const PatientDashboard = () => {
       'application/dicom': ['.dcm'],
     },
     multiple: false,
+    maxSize: MAX_FILE_SIZE_BYTES,
   });
 
   const handleDelete = async (documentId) => {
@@ -243,8 +263,11 @@ const PatientDashboard = () => {
           <h3 className="text-lg font-bold text-[#111318] dark:text-white mb-2">
             {uploading ? 'Uploading...' : 'Upload New Medical Record'}
           </h3>
-          <p className="text-sm text-[#616f89] dark:text-gray-400 mb-6 max-w-md">
+          <p className="text-sm text-[#616f89] dark:text-gray-400 mb-1 max-w-md">
             {isDragActive ? 'Drop your file here' : 'Drag & drop files here (PDF, JPG, DICOM), or click to browse. Files are encrypted before upload.'}
+          </p>
+          <p className="text-xs text-[#9aa3b0] dark:text-gray-500 mb-6">
+            Maximum file size: {MAX_FILE_SIZE_MB} MB
           </p>
           {!isDragActive && !uploading && (
             <button className="flex items-center justify-center rounded-lg h-9 px-6 bg-primary text-white text-sm font-bold shadow-md shadow-primary/20 hover:bg-primary/90 transition-colors">
