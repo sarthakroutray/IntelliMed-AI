@@ -38,10 +38,12 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="IntelliMed AI", lifespan=lifespan)
 
 origins = [o.strip() for o in os.getenv("CORS_ORIGINS", "").split(",") if o.strip()]
+origin_regex = os.getenv("CORS_ORIGIN_REGEX") or None
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
+    allow_origin_regex=origin_regex,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

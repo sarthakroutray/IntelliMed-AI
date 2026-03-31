@@ -10,7 +10,9 @@ python-multipart
 pydantic[email]
 python-dotenv
 prisma
+modal
 easyocr
+opendataloader-pdf
 Pillow
 PyMuPDF
 opencv-python-headless

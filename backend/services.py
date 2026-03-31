@@ -6,6 +6,7 @@ import traceback
 from pathlib import Path
 from functools import lru_cache
 from threading import Lock
+from tempfile import TemporaryDirectory
 
 # Try importing AI libraries, handle missing dependencies gracefully
 try:
@@ -36,6 +37,13 @@ try:
 except ImportError:
     HAS_NLP = False
     print("⚠ NLP dependencies (spacy) not found.")
+
+try:
+    import opendataloader_pdf
+    HAS_OPENDATALOADER = True
+except ImportError:
+    HAS_OPENDATALOADER = False
+    print("⚠ OpenDataLoader PDF not found. Structured PDF parsing disabled. pip install opendataloader-pdf")
 
 try:
     from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
@@ -107,6 +115,13 @@ def _pdf_to_images(file_path: str) -> list:
 
 def _is_pdf(file_path: str) -> bool:
     return file_path.lower().endswith('.pdf')
+
+
+USE_OPENDATALOADER_FOR_PDFS = os.getenv('USE_OPENDATALOADER_FOR_PDFS', 'true').lower() == 'true'
+OPENDATALOADER_USE_STRUCT_TREE = os.getenv('OPENDATALOADER_USE_STRUCT_TREE', 'true').lower() == 'true'
+OPENDATALOADER_HYBRID = os.getenv('OPENDATALOADER_HYBRID', 'off')
+OPENDATALOADER_HYBRID_URL = os.getenv('OPENDATALOADER_HYBRID_URL', '').strip()
+OPENDATALOADER_HYBRID_TIMEOUT = os.getenv('OPENDATALOADER_HYBRID_TIMEOUT', '30000').strip()
 
 
 # =============================================================================
@@ -234,14 +249,82 @@ def _get_ocr_reader():
     return _ocr_reader
 
 
+def _can_use_opendataloader(file_path: str) -> bool:
+    return HAS_OPENDATALOADER and _is_pdf(file_path) and USE_OPENDATALOADER_FOR_PDFS
+
+
+def _strip_markdown_artifacts(text: str) -> str:
+    """Flatten structured markdown output into OCR-friendly plain text."""
+    text = re.sub(r'[`*_>#-]+', ' ', text)
+    text = re.sub(r'\[(.*?)\]\((.*?)\)', r'\1', text)
+    text = re.sub(r'\|', ' ', text)
+    text = re.sub(r'\n{3,}', '\n\n', text)
+    return text.strip()
+
+
+def _find_best_output_file(output_dir: Path, input_path: Path, suffixes: tuple[str, ...]) -> Path | None:
+    """Find the most likely OpenDataLoader output file for a single converted PDF."""
+    candidates = [p for p in output_dir.rglob('*') if p.is_file() and p.suffix.lower() in suffixes]
+    if not candidates:
+        return None
+
+    same_stem = [p for p in candidates if p.stem == input_path.stem]
+    pool = same_stem or candidates
+    pool.sort(key=lambda p: (p.stat().st_size, len(str(p))), reverse=True)
+    return pool[0]
+
+
+def _run_opendataloader_parse(file_path: str) -> str:
+    """
+    Parse a PDF with OpenDataLoader and export markdown-derived plain text.
+    Best suited for digital prescription PDFs where reading order matters.
+    """
+    input_path = Path(file_path)
+    with TemporaryDirectory(prefix='opendataloader_') as tmp_dir:
+        output_dir = Path(tmp_dir)
+        convert_kwargs = {
+            "input_path": [str(input_path)],
+            "output_dir": str(output_dir),
+            "format": "markdown",
+            "use_struct_tree": OPENDATALOADER_USE_STRUCT_TREE,
+        }
+        if OPENDATALOADER_HYBRID and OPENDATALOADER_HYBRID.lower() != 'off':
+            convert_kwargs["hybrid"] = OPENDATALOADER_HYBRID
+        if OPENDATALOADER_HYBRID_URL:
+            convert_kwargs["hybrid_url"] = OPENDATALOADER_HYBRID_URL
+        if OPENDATALOADER_HYBRID_TIMEOUT.isdigit():
+            convert_kwargs["hybrid_timeout"] = int(OPENDATALOADER_HYBRID_TIMEOUT)
+
+        opendataloader_pdf.convert(
+            **convert_kwargs,
+        )
+        markdown_file = _find_best_output_file(output_dir, input_path, ('.md', '.markdown', '.txt'))
+        if markdown_file is None:
+            raise RuntimeError("OpenDataLoader conversion completed but produced no markdown/text output")
+        text = markdown_file.read_text(encoding='utf-8', errors='ignore')
+    return _clean_ocr_text(_strip_markdown_artifacts(text))
+
+
 async def ocr_service(file_path: str) -> str:
     """
     Extracts text from medical documents / handwritten prescriptions.
     Supports images (jpg, png, etc.) and PDFs.
-    Uses EasyOCR (pure Python, no Tesseract needed) with image preprocessing.
+    Uses OpenDataLoader first for PDFs, then falls back to the EasyOCR pipeline.
+    Image inputs continue through the existing EasyOCR preprocessing flow.
     Returns empty string if no text found (not an error - some images have no text).
     """
     print(f"Starting OCR for {file_path}")
+
+    if _can_use_opendataloader(file_path):
+        try:
+            async with heavy_semaphore:
+                parsed_text = await asyncio.to_thread(_run_opendataloader_parse, file_path)
+            if parsed_text and len(parsed_text.strip()) >= 40:
+                print(f"✓ OpenDataLoader parsing successful for {file_path} ({len(parsed_text)} chars)")
+                return parsed_text
+            print("  OpenDataLoader output too small, falling back to EasyOCR pipeline")
+        except Exception as e:
+            print(f"  OpenDataLoader parsing failed, falling back to EasyOCR: {e}")
 
     if HAS_OCR:
         try:

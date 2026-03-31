@@ -31,6 +31,7 @@ IntelliMed-AI is a comprehensive medical application designed to bridge the gap 
 - **Multiple Tesseract PSM modes** for optimal text extraction across document layouts
 - **Graceful fallback strategy** with multiple preprocessing variants
 - **OCR output cleaning** to remove noise and normalize extracted text
+- **OpenDataLoader-powered PDF parsing** for layout-aware prescription/document extraction, with optional hybrid mode support and EasyOCR fallback for scanned or handwritten image-heavy prescriptions
 
 #### 💊 Medical NLP & Prescription Parsing
 - **Medical entity recognition** with 150+ common medications (antibiotics, cardiac, diabetes, psychiatric, respiratory, etc.)
@@ -86,6 +87,12 @@ IntelliMed-AI is a comprehensive medical application designed to bridge the gap 
 - **Styling**: [Tailwind CSS](https://tailwindcss.com/)
 - **Routing**: React Router
 - **HTTP Client**: Axios
+
+## Deployment
+
+- Frontend: Vercel from `frontend/`
+- Backend: Modal from `backend/modal_app.py` using `backend/Dockerfile`
+- Setup guide: `DEPLOYMENT.md`
 
 ## Getting Started
 

@@ -1,8 +1,14 @@
 import axios from 'axios';
 import { apiCache, withCache, cacheKeys, invalidateCache } from '../utils/cache';
 
+const rawApiBaseUrl = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api').trim();
+const normalizedApiBaseUrl = rawApiBaseUrl.replace(/\/+$/, '');
+const apiBaseUrl = normalizedApiBaseUrl.endsWith('/api')
+  ? normalizedApiBaseUrl
+  : `${normalizedApiBaseUrl}/api`;
+
 const api = axios.create({
-  baseURL: 'http://localhost:8000/api',
+  baseURL: apiBaseUrl,
 });
 
 api.interceptors.request.use(
