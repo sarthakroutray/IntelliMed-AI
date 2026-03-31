@@ -1,6 +1,7 @@
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException, status
 import os
+from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi_cache.decorator import cache
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -9,10 +10,42 @@ from auth import get_current_user
 from prisma_db import get_db
 from schemas import User, DocumentDetail
 from prisma_client import Prisma
+from request_cache import doctor_has_patient_access
 
 router = APIRouter()
+CACHE_TTL = int(os.getenv("CACHE_TTL_SECONDS", "300"))
+
+
+def _doctor_patients_key_builder(
+    func,
+    namespace: str = "",
+    *,
+    request: Request = None,
+    response=None,
+    args: tuple = (),
+    kwargs: dict = {},
+) -> str:
+    current_user = kwargs.get("current_user")
+    doctor_id = getattr(current_user, "id", "anonymous")
+    return f"{namespace}:doctor:{doctor_id}"
+
+
+def _doctor_patient_documents_key_builder(
+    func,
+    namespace: str = "",
+    *,
+    request: Request = None,
+    response=None,
+    args: tuple = (),
+    kwargs: dict = {},
+) -> str:
+    current_user = kwargs.get("current_user")
+    doctor_id = getattr(current_user, "id", "anonymous")
+    patient_id = kwargs.get("patient_id", "unknown")
+    return f"{namespace}:doctor:{doctor_id}:patient:{patient_id}"
 
 @router.get("/patients", response_model=List[User])
+@cache(namespace="doctor-patients", expire=CACHE_TTL, key_builder=_doctor_patients_key_builder)
 async def get_doctor_patients(
     db: Prisma = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -27,16 +60,23 @@ async def get_doctor_patients(
         )
 
     patient_links = await db.doctorpatient.find_many(
-        where={'doctor_id': current_user.id}
+        where={'doctor_id': current_user.id},
+        include={'patient': True}
     )
-    patient_ids = [link.patient_id for link in patient_links]
 
-    patients = await db.user.find_many(
-        where={'id': {'in': patient_ids}}
-    )
-    return patients
+    unique_patients = []
+    seen_patient_ids = set()
+    for link in patient_links:
+        patient = link.patient
+        if not patient or patient.id in seen_patient_ids:
+            continue
+        seen_patient_ids.add(patient.id)
+        unique_patients.append(patient)
+
+    return unique_patients
 
 @router.get("/patients/{patient_id}/documents", response_model=List[DocumentDetail])
+@cache(namespace="doctor-patient-docs", expire=CACHE_TTL, key_builder=_doctor_patient_documents_key_builder)
 async def get_patient_documents_for_doctor(
     patient_id: int,
     db: Prisma = Depends(get_db),
@@ -51,14 +91,8 @@ async def get_patient_documents_for_doctor(
             detail="Only doctors can view patient documents",
         )
 
-    link = await db.doctorpatient.find_first(
-        where={
-            'doctor_id': current_user.id,
-            'patient_id': patient_id,
-        }
-    )
-
-    if not link:
+    has_access = await doctor_has_patient_access(db, current_user.id, patient_id)
+    if not has_access:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You do not have access to this patient's documents",

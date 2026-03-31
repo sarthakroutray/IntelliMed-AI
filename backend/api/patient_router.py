@@ -2,26 +2,66 @@ from typing import List
 import os
 import tempfile
 import asyncio
-import json
 from pathlib import Path
-from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, status
+from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, status, Request
 
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from auth import get_current_user
 from prisma_db import get_db
-from schemas import User, DocumentInfo, DocumentDetail
+from schemas import User, DocumentInfo
 from prisma_client import Prisma
 from prisma_client.fields import Json
 import services
 import supabase_storage
 
 from fastapi_cache import FastAPICache
+from fastapi_cache.decorator import cache
 
 router = APIRouter()
 
 MAX_UPLOAD_SIZE_MB = int(os.getenv("MAX_UPLOAD_SIZE_MB", "10"))
+CACHE_TTL = int(os.getenv("CACHE_TTL_SECONDS", "300"))
+
+
+def _patient_documents_key_builder(
+    func,
+    namespace: str = "",
+    *,
+    request: Request = None,
+    response=None,
+    args: tuple = (),
+    kwargs: dict = {},
+) -> str:
+    current_user = kwargs.get("current_user")
+    user_id = getattr(current_user, "id", "anonymous")
+    return f"{namespace}:user:{user_id}"
+
+
+def _linked_doctors_key_builder(
+    func,
+    namespace: str = "",
+    *,
+    request: Request = None,
+    response=None,
+    args: tuple = (),
+    kwargs: dict = {},
+) -> str:
+    current_user = kwargs.get("current_user")
+    user_id = getattr(current_user, "id", "anonymous")
+    return f"{namespace}:user:{user_id}"
+
+
+async def _invalidate_patient_related_caches(patient_id: int) -> None:
+    try:
+        backend = FastAPICache.get_backend()
+        await backend.clear(namespace=None, key=f"patient-docs:user:{patient_id}")
+        await backend.clear(namespace=None, key=f"linked-doctors:user:{patient_id}")
+        # Doctor caches can include this patient's documents.
+        await backend.clear(namespace="doctor-patient-docs")
+    except Exception:
+        pass
 
 
 @router.post("/upload/", response_model=DocumentInfo)
@@ -143,14 +183,10 @@ async def upload_document(
             detail=f"Document upload failed: {str(e)}"
         )
     finally:
-        # Invalidate the cached document list for this patient (non-fatal)
-        try:
-            cache_key = f"patient-docs:user:{current_user.id}"
-            await FastAPICache.get_backend().clear(namespace=None, key=cache_key)
-        except Exception:
-            pass
+        await _invalidate_patient_related_caches(current_user.id)
 
 @router.get("/documents", response_model=List[DocumentInfo])
+@cache(namespace="patient-docs", expire=CACHE_TTL, key_builder=_patient_documents_key_builder)
 async def get_own_documents(
     db: Prisma = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -227,17 +263,13 @@ async def delete_document(
             detail=f"Failed to delete document: {str(e)}",
         )
     finally:
-        # Invalidate cached document list for this patient (non-fatal)
-        try:
-            cache_key = f"patient-docs:user:{current_user.id}"
-            await FastAPICache.get_backend().clear(namespace=None, key=cache_key)
-        except Exception:
-            pass
+        await _invalidate_patient_related_caches(current_user.id)
 
     return None
 
 
 @router.get("/linked-doctors", response_model=List[User])
+@cache(namespace="linked-doctors", expire=CACHE_TTL, key_builder=_linked_doctors_key_builder)
 async def get_linked_doctors(
     db: Prisma = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -255,12 +287,18 @@ async def get_linked_doctors(
         where={
             'patient_id': current_user.id,
             'doctor_id': {'not': None}
-        }
+        },
+        include={'doctor': True}
     )
-    doctor_ids = [link.doctor_id for link in doctor_links if link.doctor_id]
 
-    doctors = await db.user.find_many(
-        where={'id': {'in': doctor_ids}}
-    )
-    return doctors
+    unique_doctors = []
+    seen_doctor_ids = set()
+    for link in doctor_links:
+        doctor = link.doctor
+        if not doctor or doctor.id in seen_doctor_ids:
+            continue
+        seen_doctor_ids.add(doctor.id)
+        unique_doctors.append(doctor)
+
+    return unique_doctors
 

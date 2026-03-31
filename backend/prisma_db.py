@@ -1,4 +1,46 @@
+import os
+from pathlib import Path
+
 from prisma_client import Prisma
+from prisma_client.client import BINARY_PATHS
+
+
+def _configure_query_engine_path() -> None:
+    """Set PRISMA_QUERY_ENGINE_BINARY when Prisma cache layout differs from generated path."""
+    if os.getenv('PRISMA_QUERY_ENGINE_BINARY'):
+        return
+
+    candidates: list[Path] = []
+
+    for configured in BINARY_PATHS.query_engine.values():
+        configured_path = Path(configured)
+        candidates.append(configured_path)
+
+        # Legacy local fallback name used by prisma-client-py.
+        if configured_path.name.startswith('query-engine-'):
+            candidates.append(Path.cwd() / f"prisma-{configured_path.name}")
+
+        # Prisma 5+ places engine executables under node_modules/@prisma/engines.
+        parts = list(configured_path.parts)
+        for idx in range(len(parts) - 1):
+            if parts[idx].lower() == 'node_modules' and parts[idx + 1].lower() == 'prisma':
+                prefix = Path(*parts[: idx + 1])
+                candidates.append(prefix / '@prisma' / 'engines' / configured_path.name)
+                break
+
+    seen: set[str] = set()
+    for candidate in candidates:
+        candidate_str = str(candidate)
+        if candidate_str in seen:
+            continue
+        seen.add(candidate_str)
+
+        if candidate.exists():
+            os.environ['PRISMA_QUERY_ENGINE_BINARY'] = candidate_str
+            return
+
+
+_configure_query_engine_path()
 
 db = Prisma(auto_register=True)
 

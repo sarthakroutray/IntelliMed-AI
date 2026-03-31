@@ -7,6 +7,7 @@ from jose import JWTError, jwt
 import bcrypt
 from prisma_db import get_db
 from prisma_client import Prisma
+from request_cache import get_cached_user, set_cached_user, invalidate_user_cache
 
 import schemas
 
@@ -45,7 +46,18 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
 
 
 async def get_user(db: Prisma, email: str):
-    return await db.user.find_unique(where={'email': email})
+    cached_user = get_cached_user(email)
+    if cached_user is not None:
+        return cached_user
+
+    user = await db.user.find_unique(where={'email': email})
+    if user is not None:
+        set_cached_user(user)
+    return user
+
+
+def invalidate_cached_user(*, email: Optional[str] = None, user_id: Optional[int] = None):
+    invalidate_user_cache(email=email, user_id=user_id)
 
 
 async def get_current_user(

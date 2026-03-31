@@ -293,7 +293,8 @@ def _run_opendataloader_parse(file_path: str) -> str:
         if OPENDATALOADER_HYBRID_URL:
             convert_kwargs["hybrid_url"] = OPENDATALOADER_HYBRID_URL
         if OPENDATALOADER_HYBRID_TIMEOUT.isdigit():
-            convert_kwargs["hybrid_timeout"] = int(OPENDATALOADER_HYBRID_TIMEOUT)
+            # OpenDataLoader expects this value as a string (milliseconds).
+            convert_kwargs["hybrid_timeout"] = OPENDATALOADER_HYBRID_TIMEOUT
 
         opendataloader_pdf.convert(
             **convert_kwargs,

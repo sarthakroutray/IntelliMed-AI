@@ -1,10 +1,9 @@
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.responses import RedirectResponse
 from fastapi_cache import FastAPICache
 from fastapi_cache.decorator import cache
 from datetime import datetime
-import mimetypes
 import sys
 import os
 from pathlib import Path
@@ -13,8 +12,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import asyncio
 from auth import get_current_user
 from prisma_db import get_db
-from schemas import User, DocumentDetail
+from schemas import User
 from prisma_client import Prisma, Json
+from request_cache import doctor_has_patient_access
 import services
 import supabase_storage
 
@@ -32,16 +32,20 @@ def _doc_key_builder(
     args: tuple = (),
     kwargs: dict = {},
 ) -> str:
-    """Stable per-document-id cache key."""
+    """Stable, user-scoped per-document cache key."""
     doc_id = kwargs.get("document_id", "?")
-    return f"{namespace}:{doc_id}"
+    current_user = kwargs.get("current_user")
+    user_id = getattr(current_user, "id", "anonymous")
+    return f"{namespace}:doc:{doc_id}:user:{user_id}"
 
 
 async def _invalidate_document_cache(document_id: int) -> None:
-    """Evict a single document's cached GET response. Non-fatal if cache miss."""
+    """Evict related document/list caches. Non-fatal if cache backend is unavailable."""
     try:
-        key = f"document:{document_id}"
-        await FastAPICache.get_backend().clear(namespace=None, key=key)
+        backend = FastAPICache.get_backend()
+        await backend.clear(namespace="document")
+        await backend.clear(namespace="patient-docs")
+        await backend.clear(namespace="doctor-patient-docs")
     except Exception:
         pass
 
@@ -77,13 +81,8 @@ async def get_document(
             )
     elif current_user.role == 'doctor':
         # Doctors can view documents of their linked patients
-        link = await db.doctorpatient.find_first(
-            where={
-                'doctor_id': current_user.id,
-                'patient_id': document.patient_id
-            }
-        )
-        if not link:
+        has_access = await doctor_has_patient_access(db, current_user.id, document.patient_id)
+        if not has_access:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You don't have access to this document"
@@ -233,13 +232,8 @@ async def analyze_document(
                 detail="You don't have access to this document"
             )
     elif current_user.role == 'doctor':
-        link = await db.doctorpatient.find_first(
-            where={
-                'doctor_id': current_user.id,
-                'patient_id': document.patient_id
-            }
-        )
-        if not link:
+        has_access = await doctor_has_patient_access(db, current_user.id, document.patient_id)
+        if not has_access:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You don't have access to this document"
@@ -363,13 +357,8 @@ async def verify_document(
         )
     
     # Check if doctor has access to this patient
-    link = await db.doctorpatient.find_first(
-        where={
-            'doctor_id': current_user.id,
-            'patient_id': document.patient_id
-        }
-    )
-    if not link:
+    has_access = await doctor_has_patient_access(db, current_user.id, document.patient_id)
+    if not has_access:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You don't have access to this document"
@@ -422,13 +411,8 @@ async def add_clinical_note(
         )
     
     # Check if doctor has access to this patient
-    link = await db.doctorpatient.find_first(
-        where={
-            'doctor_id': current_user.id,
-            'patient_id': document.patient_id
-        }
-    )
-    if not link:
+    has_access = await doctor_has_patient_access(db, current_user.id, document.patient_id)
+    if not has_access:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You don't have access to this document"
@@ -492,13 +476,8 @@ async def archive_document(
         )
     
     # Check if doctor has access to this patient
-    link = await db.doctorpatient.find_first(
-        where={
-            'doctor_id': current_user.id,
-            'patient_id': document.patient_id
-        }
-    )
-    if not link:
+    has_access = await doctor_has_patient_access(db, current_user.id, document.patient_id)
+    if not has_access:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You don't have access to this document"
@@ -550,13 +529,8 @@ async def download_document(
                 detail="You don't have access to this document"
             )
     elif current_user.role == 'doctor':
-        link = await db.doctorpatient.find_first(
-            where={
-                'doctor_id': current_user.id,
-                'patient_id': document.patient_id
-            }
-        )
-        if not link:
+        has_access = await doctor_has_patient_access(db, current_user.id, document.patient_id)
+        if not has_access:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You don't have access to this document"

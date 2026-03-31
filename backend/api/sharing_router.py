@@ -1,5 +1,8 @@
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException, status
+import os
+from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi_cache import FastAPICache
+from fastapi_cache.decorator import cache
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -10,6 +13,30 @@ from schemas import User
 from prisma_client import Prisma
 
 router = APIRouter()
+CACHE_TTL = int(os.getenv("CACHE_TTL_SECONDS", "300"))
+
+
+def _shared_doctors_key_builder(
+    func,
+    namespace: str = "",
+    *,
+    request: Request = None,
+    response=None,
+    args: tuple = (),
+    kwargs: dict = {},
+) -> str:
+    current_user = kwargs.get("current_user")
+    user_id = getattr(current_user, "id", "anonymous")
+    document_id = kwargs.get("document_id", "unknown")
+    return f"{namespace}:doc:{document_id}:user:{user_id}"
+
+
+async def _invalidate_shared_doctors_cache(document_id: int, user_id: int) -> None:
+    try:
+        cache_key = f"shared-doctors:doc:{document_id}:user:{user_id}"
+        await FastAPICache.get_backend().clear(namespace=None, key=cache_key)
+    except Exception:
+        pass
 
 @router.post("/documents/{document_id}/share/{doctor_id}")
 async def share_document(
@@ -70,6 +97,7 @@ async def share_document(
                 'update': {},
             }
         )
+        await _invalidate_shared_doctors_cache(document_id, current_user.id)
         
         print(f"✓ Document {document_id} shared with doctor {doctor_id}")
         return {"message": "Document shared successfully"}
@@ -118,6 +146,7 @@ async def unshare_document(
                 }
             }
         )
+        await _invalidate_shared_doctors_cache(document_id, current_user.id)
         
         print(f"✓ Document {document_id} unshared with doctor {doctor_id}")
         return {"message": "Document access revoked successfully"}
@@ -130,6 +159,7 @@ async def unshare_document(
 
 
 @router.get("/documents/{document_id}/shared-doctors")
+@cache(namespace="shared-doctors", expire=CACHE_TTL, key_builder=_shared_doctors_key_builder)
 async def get_shared_doctors(
     document_id: int,
     db: Prisma = Depends(get_db),
