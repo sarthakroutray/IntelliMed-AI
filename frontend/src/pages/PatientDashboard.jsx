@@ -96,17 +96,6 @@ const PatientDashboard = () => {
     maxSize: MAX_FILE_SIZE_BYTES,
   });
 
-  const handleDelete = async (documentId) => {
-    if (!window.confirm('Are you sure you want to delete this document?')) return;
-    
-    try {
-      await deleteDocument(documentId);
-      setDocuments(documents.filter(doc => doc.id !== documentId));
-    } catch (err) {
-      setError('Failed to delete document.');
-    }
-  };
-
   const fetchDocuments = useCallback(async () => {
     if (!user) return;
     try {
@@ -224,12 +213,26 @@ const PatientDashboard = () => {
 
   const handleDeleteDocument = async (docId) => {
     if (!window.confirm('Are you sure you want to delete this document? This action cannot be undone.')) return;
-    
+
+    // Optimistically remove from UI first for immediate feedback.
+    setDocuments(prev => prev.filter(doc => doc.id !== docId));
+    setSharedDoctors(prev => {
+      const next = { ...prev };
+      delete next[docId];
+      return next;
+    });
+
     try {
       await deleteDocument(docId);
-      setDocuments(documents.filter(doc => doc.id !== docId));
+
+      // Re-sync from backend to avoid drift when cache or network timing is involved.
+      await fetchDocuments();
     } catch (err) {
+      console.error('Delete error:', err);
       setError('Failed to delete document.');
+
+      // Attempt to recover UI state from source of truth if delete fails.
+      await fetchDocuments();
     }
   };
 
