@@ -12,7 +12,7 @@ app = modal.App(APP_NAME)
 
 image = modal.Image.from_dockerfile(
     Path(__file__).with_name("Dockerfile"),
-    context_dir=Path(__file__).resolve().parent.parent,
+    context_dir=Path(__file__).resolve().parent,
 )
 
 

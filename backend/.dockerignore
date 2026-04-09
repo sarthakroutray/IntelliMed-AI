@@ -9,5 +9,7 @@ htmlcov/
 .env
 .env.local
 venv/
+.venv/
 uploads/
 models/easyocr/
+prisma_client/

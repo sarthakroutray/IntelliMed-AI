@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.7
 FROM python:3.11-slim-bookworm
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -7,10 +8,14 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 ARG INSTALL_SPACY_MODEL=0
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=30 update && \
+    apt-get install -y --no-install-recommends \
     build-essential \
     curl \
     git \
+    libatomic1 \
     libgl1 \
     libglib2.0-0 \
     tesseract-ocr \
@@ -27,10 +32,11 @@ RUN pip install --upgrade pip && \
 
 RUN if [ "$INSTALL_SPACY_MODEL" = "1" ]; then python -m spacy download en_core_web_sm; fi
 
-COPY prisma /app/backend/prisma
-RUN prisma generate --schema=/app/backend/prisma/schema.prisma
-
 COPY . /app/backend
+
+RUN set -eux; \
+    prisma generate --schema=/app/backend/prisma/schema.prisma; \
+    prisma py fetch || true
 
 RUN mkdir -p /app/backend/uploads
 

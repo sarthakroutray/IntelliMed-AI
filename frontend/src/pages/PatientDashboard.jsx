@@ -58,7 +58,18 @@ const PatientDashboard = () => {
     try {
       const uploadResponse = await uploadDocument(acceptedFiles[0]);
       console.log('Upload response:', uploadResponse);
-      await fetchDocuments();
+      const refreshed = await getPatientDocuments();
+      setDocuments(refreshed.data || []);
+
+      if (refreshed.data && refreshed.data.length > 0) {
+        const sharePromises = refreshed.data.map(doc =>
+          getSharedDoctors(doc.id)
+            .then(res => [doc.id, res.data || []])
+            .catch(() => [doc.id, []])
+        );
+        const shareResults = await Promise.all(sharePromises);
+        setSharedDoctors(Object.fromEntries(shareResults));
+      }
     } catch (err) {
       console.error('Upload error:', err);
       if (err.response?.status === 413) {

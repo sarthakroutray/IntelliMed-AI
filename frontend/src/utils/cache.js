@@ -61,10 +61,10 @@ class Cache {
 
   /**
    * Clear cache entries matching a pattern
-   * @param {string} pattern - Pattern to match keys against
+   * @param {string|RegExp} pattern - Pattern to match keys against
    */
   clearPattern(pattern) {
-    const regex = new RegExp(pattern);
+    const regex = pattern instanceof RegExp ? pattern : new RegExp(pattern);
     for (const key of this.cache.keys()) {
       if (regex.test(key)) {
         this.delete(key);
