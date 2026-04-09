@@ -99,7 +99,7 @@ async def upload_document(
 
         # Upload to Supabase Storage
         storage_path = f"patients/{current_user.id}/{file.filename}"
-        public_url = supabase_storage.upload_file(
+        stored_path = supabase_storage.upload_file(
             file_bytes=file_bytes,
             destination_path=storage_path,
             content_type=file.content_type,
@@ -158,7 +158,7 @@ async def upload_document(
         db_document = await db.medicaldocument.create(
             data={
                 'patient_id': current_user.id,
-                'file_path': public_url,
+                'file_path': stored_path,
                 'ai_analysis_json': Json(aggregated_analysis),
             }
         )
@@ -205,7 +205,7 @@ async def get_own_documents(
         return [
             DocumentInfo(
                 id=doc.id,
-                filename=Path(doc.file_path.split("?")[0]).name if doc.file_path else "unknown",
+                filename=Path(supabase_storage.to_storage_path(doc.file_path)).name if doc.file_path else "unknown",
                 upload_timestamp=doc.upload_timestamp,
                 ai_analysis=doc.ai_analysis_json,
             )
@@ -248,7 +248,7 @@ async def delete_document(
         # Delete from Supabase Storage if a file URL is stored
         if document.file_path:
             try:
-                storage_path = supabase_storage.public_url_to_storage_path(document.file_path)
+                storage_path = supabase_storage.to_storage_path(document.file_path)
                 supabase_storage.delete_file(storage_path)
             except Exception as e:
                 print(f"Warning: could not delete file from storage: {e}")

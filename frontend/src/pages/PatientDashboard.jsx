@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { uploadDocument, getPatientDocuments, deleteDocument, shareDocument, unshareDocument, getSharedDoctors, getLinkedDoctors } from '../services/api';
+import { uploadDocument, getPatientDocuments, deleteDocument, shareDocument, unshareDocument, getSharedDoctors, getLinkedDoctors, analyzeDocument } from '../services/api';
 import { useDropzone } from 'react-dropzone';
 import Icon from '../components/Icon.jsx';
 import GenerateAccessCode from '../components/GenerateAccessCode.jsx';
@@ -26,13 +26,11 @@ const PatientDashboard = () => {
   const handleAnalyze = async (docId) => {
     setAnalyzing(docId);
     try {
-      // Refresh documents to get the latest analysis from server
-      const response = await getPatientDocuments();
-      setDocuments(response.data || []);
-      
+      await analyzeDocument(docId);
+      await fetchDocuments();
     } catch (err) {
       console.error('AI analysis failed', err);
-      alert('AI analysis failed. Please try again.');
+      alert(err.response?.data?.detail || 'AI analysis failed. Please try again.');
     } finally {
       setAnalyzing(null);
     }

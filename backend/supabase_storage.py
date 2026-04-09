@@ -5,12 +5,14 @@ import os
 import tempfile
 import mimetypes
 from pathlib import Path
+from urllib.parse import urlparse
 
 from supabase import create_client, Client
 
 SUPABASE_URL: str = os.getenv("SUPABASE_URL", "")
 SUPABASE_SERVICE_KEY: str = os.getenv("SUPABASE_SERVICE_KEY", "")
 STORAGE_BUCKET: str = os.getenv("SUPABASE_STORAGE_BUCKET", "medical-documents")
+SIGNED_URL_EXPIRES_SECONDS: int = int(os.getenv("SUPABASE_SIGNED_URL_EXPIRES_SECONDS", "300"))
 
 _client: Client | None = None
 
@@ -36,7 +38,7 @@ def upload_file(file_bytes: bytes, destination_path: str, content_type: str | No
         content_type:     MIME type; detected from destination_path when omitted.
 
     Returns:
-        Public URL of the uploaded file.
+        Storage path of the uploaded file.
     """
     if content_type is None:
         content_type, _ = mimetypes.guess_type(destination_path)
@@ -48,8 +50,7 @@ def upload_file(file_bytes: bytes, destination_path: str, content_type: str | No
         file=file_bytes,
         file_options={"content-type": content_type, "upsert": "true"},
     )
-    url = client.storage.from_(STORAGE_BUCKET).get_public_url(destination_path)
-    return url
+    return destination_path
 
 
 def delete_file(storage_path: str) -> None:
@@ -74,15 +75,50 @@ def download_to_temp(storage_path: str) -> str:
     return tmp.name
 
 
-def public_url_to_storage_path(public_url: str) -> str:
+def to_storage_path(file_ref: str) -> str:
     """
-    Derive the in-bucket storage path from a Supabase public URL.
+    Normalize a storage reference into an in-bucket path.
 
-    E.g. https://<project>.supabase.co/storage/v1/object/public/medical-documents/patients/1/file.pdf
-    -> patients/1/file.pdf
+    Supports both legacy public/signed Supabase URLs and direct storage paths.
     """
-    marker = f"/object/public/{STORAGE_BUCKET}/"
-    idx = public_url.find(marker)
-    if idx == -1:
-        raise ValueError(f"URL does not belong to bucket '{STORAGE_BUCKET}': {public_url}")
-    return public_url[idx + len(marker):]
+    if not file_ref:
+        raise ValueError("File reference is empty")
+
+    if not file_ref.startswith("http://") and not file_ref.startswith("https://"):
+        return file_ref.lstrip("/")
+
+    parsed = urlparse(file_ref)
+    path = parsed.path
+    markers = (
+        f"/object/public/{STORAGE_BUCKET}/",
+        f"/object/sign/{STORAGE_BUCKET}/",
+    )
+
+    for marker in markers:
+        idx = path.find(marker)
+        if idx != -1:
+            return path[idx + len(marker):].lstrip("/")
+
+    raise ValueError(f"URL does not belong to bucket '{STORAGE_BUCKET}': {file_ref}")
+
+
+def create_signed_url(storage_path: str, expires_in: int | None = None) -> str:
+    """Create a short-lived signed URL for private file access."""
+    client = get_supabase_client()
+    effective_expiry = expires_in or SIGNED_URL_EXPIRES_SECONDS
+    result = client.storage.from_(STORAGE_BUCKET).create_signed_url(storage_path, effective_expiry)
+
+    signed_url = None
+    if isinstance(result, dict):
+        signed_url = result.get("signedURL") or result.get("signedUrl") or result.get("signed_url")
+
+    if not signed_url:
+        raise RuntimeError(f"Failed to create signed URL for: {storage_path}")
+
+    if signed_url.startswith("http://") or signed_url.startswith("https://"):
+        return signed_url
+
+    if not SUPABASE_URL:
+        raise RuntimeError("SUPABASE_URL is not configured for signed URL construction")
+
+    return f"{SUPABASE_URL.rstrip('/')}{signed_url}"

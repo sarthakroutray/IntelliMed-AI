@@ -5,6 +5,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
     PORT=8000
 
+ARG INSTALL_SPACY_MODEL=0
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     curl \
@@ -17,17 +19,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-COPY backend/requirements.txt /app/backend/requirements.txt
+COPY requirements.txt /app/backend/requirements.txt
 
 RUN pip install --upgrade pip && \
     pip install -r /app/backend/requirements.txt && \
-    pip install modal && \
-    python -m spacy download en_core_web_sm
+    pip install modal
 
-COPY backend /app/backend
+RUN if [ "$INSTALL_SPACY_MODEL" = "1" ]; then python -m spacy download en_core_web_sm; fi
 
-RUN mkdir -p /app/backend/uploads && \
-    prisma generate --schema=/app/backend/prisma/schema.prisma
+COPY prisma /app/backend/prisma
+RUN prisma generate --schema=/app/backend/prisma/schema.prisma
+
+COPY . /app/backend
+
+RUN mkdir -p /app/backend/uploads
 
 WORKDIR /app/backend
 

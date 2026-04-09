@@ -11,6 +11,7 @@ from prisma_db import get_db
 from schemas import User, DocumentDetail
 from prisma_client import Prisma
 from request_cache import doctor_has_patient_access
+import supabase_storage
 
 router = APIRouter()
 CACHE_TTL = int(os.getenv("CACHE_TTL_SECONDS", "300"))
@@ -102,15 +103,26 @@ async def get_patient_documents_for_doctor(
         where={'patient_id': patient_id}
     )
     
-    return [
-        DocumentDetail(
-            id=doc.id,
-            filename=Path(doc.file_path.split("?")[0]).name if doc.file_path else "N/A",
-            file_url=doc.file_path or "",
-            upload_timestamp=doc.upload_timestamp,
-            ai_analysis=doc.ai_analysis_json,
-            analysis_status="processed" if doc.ai_analysis_json else "pending",
+    result = []
+    for doc in documents:
+        file_url = ""
+        filename = "N/A"
+
+        if doc.file_path:
+            storage_path = Path(supabase_storage.to_storage_path(doc.file_path))
+            filename = storage_path.name
+            file_url = supabase_storage.create_signed_url(str(storage_path))
+
+        result.append(
+            DocumentDetail(
+                id=doc.id,
+                filename=filename,
+                file_url=file_url,
+                upload_timestamp=doc.upload_timestamp,
+                ai_analysis=doc.ai_analysis_json,
+                analysis_status="processed" if doc.ai_analysis_json else "pending",
+            )
         )
-        for doc in documents
-    ]
+
+    return result
 

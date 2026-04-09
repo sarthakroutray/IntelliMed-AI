@@ -117,6 +117,8 @@ For local end-to-end testing with both frontend and backend:
 docker compose up --build
 ```
 
+To include the optional spaCy model in the backend image, set `INSTALL_SPACY_MODEL=1` before running Compose.
+
 Services:
 
 - Frontend: `http://localhost:5173`

@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from datetime import timedelta
 from pydantic import BaseModel
+import os
 
 import sys
 from pathlib import Path
@@ -14,6 +15,9 @@ from google_oauth import verify_google_token
 from prisma_client import Prisma
 
 router = APIRouter()
+DOCTOR_ACCESS_CODE = os.getenv("DOCTOR_ACCESS_CODE", "")
+ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "admin@intellimed.ai")
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD")
 
 
 class GoogleLoginRequest(BaseModel):
@@ -25,7 +29,7 @@ class GoogleLoginRequest(BaseModel):
 async def login_for_access_token(
     db: Prisma = Depends(get_db), form_data: OAuth2PasswordRequestForm = Depends()
 ):
-    if form_data.username == "admin@intellimed.ai" and form_data.password == "adminpassword":
+    if ADMIN_PASSWORD and form_data.username == ADMIN_EMAIL and form_data.password == ADMIN_PASSWORD:
         access_token_expires = timedelta(minutes=auth.ACCESS_TOKEN_EXPIRE_MINUTES)
         access_token = auth.create_access_token(
             data={"sub": form_data.username, "role": "admin"}, expires_delta=access_token_expires
@@ -88,11 +92,17 @@ async def google_login(request: GoogleLoginRequest, db: Prisma = Depends(get_db)
 
 @router.post("/register", response_model=schemas.UserInDB)
 async def register_user(user: schemas.UserCreate, db: Prisma = Depends(get_db)):
-    if user.role == 'doctor' and user.doctor_access_code != "DOCTOR_SECRET":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Invalid doctor access code.",
-        )
+    if user.role == 'doctor':
+        if not DOCTOR_ACCESS_CODE:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Doctor registration is not configured",
+            )
+        if user.doctor_access_code != DOCTOR_ACCESS_CODE:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Invalid doctor access code.",
+            )
 
     db_user = await auth.get_user(db, email=user.email)
     if db_user:

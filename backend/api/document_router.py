@@ -1,9 +1,10 @@
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Request, Body, Query
 from fastapi.responses import RedirectResponse
 from fastapi_cache import FastAPICache
 from fastapi_cache.decorator import cache
 from datetime import datetime
+from pydantic import BaseModel
 import sys
 import os
 from pathlib import Path
@@ -21,6 +22,14 @@ import supabase_storage
 router = APIRouter()
 
 CACHE_TTL = int(os.getenv("CACHE_TTL_SECONDS", "300"))
+
+
+class VerifyDocumentRequest(BaseModel):
+    notes: Optional[str] = None
+
+
+class ClinicalNoteRequest(BaseModel):
+    note: str
 
 
 def _doc_key_builder(
@@ -168,9 +177,13 @@ async def get_document(
             "rawResponse": None
         }
     
-    # Build public URL and file metadata from Supabase storage path
-    file_url = document.file_path or ""
-    file_name = Path(file_url.split("?")[0]).name if file_url else "unknown"
+    # Build short-lived signed URL and file metadata from storage path
+    file_url = ""
+    file_name = "unknown"
+    if document.file_path:
+        storage_path = supabase_storage.to_storage_path(document.file_path)
+        file_name = Path(storage_path).name
+        file_url = supabase_storage.create_signed_url(storage_path)
 
     # Detect real file type from extension
     ext = os.path.splitext(file_name)[1].lower()
@@ -249,7 +262,7 @@ async def analyze_document(
     tmp_path: str | None = None
     try:
         # Download from Supabase to a temp file for AI processing
-        storage_path = supabase_storage.public_url_to_storage_path(file_path)
+        storage_path = supabase_storage.to_storage_path(file_path)
         tmp_path = supabase_storage.download_to_temp(storage_path)
 
         # Run OCR and CV in parallel
@@ -333,7 +346,8 @@ async def analyze_document(
 @router.post("/documents/{document_id}/verify")
 async def verify_document(
     document_id: int,
-    notes: Optional[str] = None,
+    payload: VerifyDocumentRequest | None = Body(default=None),
+    notes: Optional[str] = Query(default=None),
     db: Prisma = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -364,6 +378,8 @@ async def verify_document(
             detail="You don't have access to this document"
         )
     
+    effective_notes = payload.notes if payload and payload.notes is not None else notes
+
     # Update document with verification
     verified_at = datetime.utcnow()
     updated_doc = await db.medicaldocument.update(
@@ -371,7 +387,7 @@ async def verify_document(
         data={
             'verified_by': current_user.id,
             'verified_at': verified_at,
-            'verification_notes': notes
+            'verification_notes': effective_notes
         }
     )
     
@@ -380,7 +396,7 @@ async def verify_document(
         "message": "Document verified successfully",
         "verified_by": current_user.email,
         "verified_at": verified_at.isoformat(),
-        "notes": notes
+        "notes": effective_notes
     }
 
 
@@ -388,7 +404,8 @@ async def verify_document(
 @router.post("/documents/{document_id}/notes")
 async def add_clinical_note(
     document_id: int,
-    note: str,
+    payload: ClinicalNoteRequest | None = Body(default=None),
+    note: Optional[str] = Query(default=None),
     db: Prisma = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -401,6 +418,13 @@ async def add_clinical_note(
             detail="Only doctors can add clinical notes"
         )
     
+    effective_note = payload.note if payload and payload.note is not None else note
+    if not effective_note or not effective_note.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Clinical note cannot be empty"
+        )
+
     # Find the document
     document = await db.medicaldocument.find_unique(where={'id': document_id})
     
@@ -424,7 +448,7 @@ async def add_clinical_note(
     # Add new note
     added_at = datetime.utcnow()
     new_note = {
-        "note": note,
+        "note": effective_note,
         "added_by": current_user.email,
         "added_by_id": current_user.id,
         "added_at": added_at.isoformat()
@@ -445,7 +469,7 @@ async def add_clinical_note(
     
     return {
         "message": "Clinical note added successfully",
-        "note": note,
+        "note": effective_note,
         "added_by": current_user.email,
         "added_at": added_at.isoformat()
     }
@@ -544,5 +568,7 @@ async def download_document(
             detail="File not found"
         )
 
-    # Redirect to the Supabase public URL so the browser downloads directly
-    return RedirectResponse(url=file_path)
+    # Redirect to a short-lived signed URL for private object access
+    storage_path = supabase_storage.to_storage_path(file_path)
+    signed_url = supabase_storage.create_signed_url(storage_path)
+    return RedirectResponse(url=signed_url)

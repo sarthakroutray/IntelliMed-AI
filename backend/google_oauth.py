@@ -1,10 +1,11 @@
 import os
 import logging
-import json
-import base64
 from pathlib import Path
 from dotenv import load_dotenv
 from fastapi import HTTPException, status
+from google.auth.exceptions import GoogleAuthError
+from google.auth.transport import requests as google_requests
+from google.oauth2 import id_token
 
 env_path = Path(__file__).parent / '.env'
 if not env_path.exists():
@@ -15,34 +16,12 @@ logger = logging.getLogger(__name__)
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
 
 
-def decode_token(token: str):
-    """
-    Decode JWT token without verification (frontend already verified it).
-    This is a simplified approach since the frontend uses Google's own verification.
-    """
-    try:
-        parts = token.split('.')
-        if len(parts) != 3:
-            raise ValueError("Invalid token format")
-        
-        payload = parts[1]
-        padding = 4 - len(payload) % 4
-        if padding != 4:
-            payload += '=' * padding
-        
-        decoded = base64.urlsafe_b64decode(payload)
-        return json.loads(decoded)
-    except Exception as e:
-        logger.error(f"Token decoding error: {str(e)}")
-        raise ValueError(f"Failed to decode token: {str(e)}")
-
-
 def verify_google_token(token: str):
     """
     Verify Google OAuth2 token and return user information.
     
-    The frontend already verified the token with Google's servers,
-    so we just need to decode it and extract the user info.
+    Uses Google's verification endpoint and validates signature, issuer,
+    audience, and token claims.
     
     Args:
         token: The ID token from Google
@@ -61,12 +40,16 @@ def verify_google_token(token: str):
         )
     
     try:
-        logger.info("Decoding Google token")
-        idinfo = decode_token(token)
-        
-        token_aud = idinfo.get('aud')
-        if token_aud != GOOGLE_CLIENT_ID:
-            logger.warning(f"Token audience mismatch. Expected {GOOGLE_CLIENT_ID}, got {token_aud}")
+        logger.info("Verifying Google token signature and claims")
+        request = google_requests.Request()
+        idinfo = id_token.verify_oauth2_token(token, request, GOOGLE_CLIENT_ID)
+
+        issuer = idinfo.get("iss")
+        if issuer not in {"accounts.google.com", "https://accounts.google.com"}:
+            raise ValueError("Invalid token issuer")
+
+        if not idinfo.get("email_verified", False):
+            raise ValueError("Google account email is not verified")
         
         user_info = {
             'email': idinfo.get('email'),
@@ -77,7 +60,7 @@ def verify_google_token(token: str):
         logger.info(f"Successfully decoded token for user: {user_info.get('email')}")
         return user_info
         
-    except ValueError as e:
+    except (GoogleAuthError, ValueError) as e:
         logger.error(f"Token validation error: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
