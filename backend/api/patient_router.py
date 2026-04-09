@@ -56,8 +56,10 @@ def _linked_doctors_key_builder(
 async def _invalidate_patient_related_caches(patient_id: int) -> None:
     try:
         backend = FastAPICache.get_backend()
-        await backend.clear(namespace=None, key=f"patient-docs:user:{patient_id}")
-        await backend.clear(namespace=None, key=f"linked-doctors:user:{patient_id}")
+        # Clear full namespaces because key-level invalidation is backend-specific
+        # and can miss entries depending on key serialization.
+        await backend.clear(namespace="patient-docs")
+        await backend.clear(namespace="linked-doctors")
         # Doctor caches can include this patient's documents.
         await backend.clear(namespace="doctor-patient-docs")
     except Exception:
@@ -186,7 +188,6 @@ async def upload_document(
         await _invalidate_patient_related_caches(current_user.id)
 
 @router.get("/documents", response_model=List[DocumentInfo])
-@cache(namespace="patient-docs", expire=CACHE_TTL, key_builder=_patient_documents_key_builder)
 async def get_own_documents(
     db: Prisma = Depends(get_db),
     current_user: User = Depends(get_current_user),
