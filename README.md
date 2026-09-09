@@ -7,6 +7,13 @@ The system supports:
 - Patient-doctor linking with access codes
 - Medical document upload, sharing, review, and archival
 - AI pipelines for OCR, medical NLP extraction, and chest X-ray classification
+- Lab report understanding pipeline (v2) with traceable, rule-based flagging
+- On-device Flutter app (Android-first) that syncs structured results to `/api/v2`
+
+API versioning: the website uses `/api/v1/*` (frozen contract); the mobile
+app uses `/api/v2/*` (structured ingest tagged `source: "app"`). Doctor-side
+verification happens on the backend/dashboard; the app only produces and
+syncs structured context for review, never raw documents.
 
 ## 1. Project Overview
 
@@ -59,9 +66,25 @@ IntelliMed-AI provides a centralized application where patients can upload medic
 - Uses spaCy when available, with fallback behavior for robustness
 
 ### Chest X-Ray Analysis
-- ResNet50-based classifier
+- ResNet50-based classifier (fine-tuned; `backend/models/best_model_optimized.pkl`)
 - Classes: Normal, Bacterial Pneumonia, Viral Pneumonia
 - Returns probabilities and a primary classification label
+- On-device twin: converted to `mobile/assets/models/pneumonia_resnet50.onnx`
+  via `backend/scripts/export_pneumonia_onnx.py`, run with flutter_onnxruntime
+
+### Lab Report Understanding (v2)
+- Stage 1: OpenDataLoader extraction with bounding boxes (EasyOCR fallback)
+- Stage 2: deterministic normalization, optional SLM via OpenAI-compatible hook
+- Stage 3: deterministic rule engine (`backend/lab_pipeline/`, external `rules.json`)
+- Endpoints under `/api/v2` (upload + patient/doctor reads + structured ingest)
+
+### Medical Text Standardizer (shared backend/app checkpoint)
+- Falconsai T5 summarizer (`Falconsai/medical_summarization`, T5-small 60M)
+  behind `medical_summarize_service` for non-prescription documents
+- On-device twin: quantized encoder/decoder ONNX
+  (`mobile/assets/models/t5_encoder_q8.onnx` + `t5_decoder_q8.onnx`, ~94 MB int8)
+  via `backend/scripts/export_t5_summarizer_onnx.py`, with a Dart
+  SentencePiece port (`mobile/lib/t5_tokenizer.dart`) parity-pinned to HF vectors
 
 ## 4. Architecture
 
@@ -80,7 +103,8 @@ IntelliMed-AI provides a centralized application where patients can upload medic
 Core entities include:
 - User
 - DoctorPatient
-- MedicalDocument
+- MedicalDocument (with `source` tag: `web` | `app`)
+- LabReport (v2 pipeline results, with `source` tag)
 - DocumentShare
 
 Schema file:
@@ -102,6 +126,14 @@ Schema file:
 - spaCy
 - Pillow
 - NumPy
+- transformers + sentencepiece (Falconsai T5 standardizer)
+- onnx / onnxruntime + optimum (model export + parity checks)
+
+### Mobile (mobile/)
+- Flutter 3.44 / Dart 3.12, Android-first (minSdk 26)
+- flutter_onnxruntime (X-ray ResNet50 + T5 standardizer, on-device)
+- google_mlkit_text_recognition (on-device OCR), image_picker (capture)
+- sqflite (result store: pending/synced/failed), connectivity_plus + http (v2 sync)
 
 ### Frontend
 - React 18
@@ -116,11 +148,20 @@ Schema file:
 .
 ├─ backend/
 │  ├─ api/
+│  │  ├─ v2/                     (lab report understanding + structured ingest)
+│  ├─ lab_pipeline/              (OCR stage, SLM/deterministic stage, rule engine)
+│  ├─ scripts/                   (ONNX export + SLM fine-tune dataset prep)
+│  ├─ tests/                     (rule engine + ingest schema tests)
 │  ├─ prisma/
-│  ├─ models/
+│  ├─ models/                    (checkpoints; converted artifacts via LFS)
 │  ├─ main.py
 │  ├─ services.py
 │  └─ requirements.txt
+├─ mobile/                       (on-device Flutter app, Android-first)
+│  ├─ lib/                       (CNN, T5 runtime + tokenizer, store, sync)
+│  ├─ assets/models/             (tracked ONNX artifacts)
+│  ├─ test/                      (tokenizer parity, normalization, queue tests)
+│  └─ docs/                      (APP_SPIKE.md decision log, MEMORY_REPORT.md)
 ├─ frontend/
 │  ├─ src/
 │  │  ├─ components/
@@ -207,6 +248,32 @@ npm run dev
 App URL:
 - http://localhost:5173
 
+### Mobile App Setup
+
+```bash
+cd mobile
+flutter pub get
+```
+
+Run (point at the backend; Android emulator uses `10.0.2.2` for host localhost):
+
+```bash
+flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8000
+```
+
+Model assets are already tracked under `mobile/assets/models/` (LFS):
+pneumonia ResNet50 ONNX + quantized T5 encoder/decoder + tokenizer.
+
+Validate:
+
+```bash
+flutter test
+flutter analyze
+```
+
+Details: `mobile/README.md`, decision log `mobile/docs/APP_SPIKE.md`,
+measurement gate `mobile/docs/MEMORY_REPORT.md`.
+
 ## 8. Docker Setup
 
 Run both services:
@@ -236,11 +303,9 @@ Compose file:
 - DOCTOR_ACCESS_CODE
 - ADMIN_EMAIL
 - ADMIN_PASSWORD
-- USE_OPENDATALOADER_FOR_PDFS
-- OPENDATALOADER_USE_STRUCT_TREE
-- OPENDATALOADER_HYBRID
-- OPENDATALOADER_HYBRID_URL
-- OPENDATALOADER_HYBRID_TIMEOUT
+- LAB_OPENDATALOADER_HYBRID (+ MODE/URL/TIMEOUT)
+- LAB_MIN_EXTRACT_TEXT_CHARS
+- LAB_SLM_PROVIDER (+ URL/MODEL/API_KEY; empty = deterministic normalizer)
 
 ### frontend/.env
 - VITE_API_BASE_URL
@@ -248,43 +313,63 @@ Compose file:
 
 ## 10. API Surface (High-Level)
 
-### Auth
-- POST /api/auth/token
-- POST /api/auth/google-login
-- POST /api/auth/register
+All website routes live under `/api/v1/*` (frozen contract). The mobile app
+uses `/api/v2/*` only.
 
-### Patient
-- POST /api/patient/upload/
-- GET /api/patient/documents
-- DELETE /api/patient/documents/{document_id}
-- GET /api/patient/linked-doctors
+### Auth (`/api/v1`)
+- POST /api/v1/auth/token
+- POST /api/v1/auth/google-login
+- POST /api/v1/auth/register
 
-### Doctor
-- GET /api/doctor/patients
-- GET /api/doctor/patients/{patient_id}/documents
+### Patient (`/api/v1`)
+- POST /api/v1/patient/upload/
+- GET /api/v1/patient/documents
+- DELETE /api/v1/patient/documents/{document_id}
+- GET /api/v1/patient/linked-doctors
 
-### Linking
-- POST /api/patient/generate-access-code
-- POST /api/doctor/link-patient
+### Doctor (`/api/v1`)
+- GET /api/v1/doctor/patients
+- GET /api/v1/doctor/patients/{patient_id}/documents
 
-### Documents
-- GET /api/documents/{document_id}
-- POST /api/documents/{document_id}/analyze
-- POST /api/documents/{document_id}/verify
-- POST /api/documents/{document_id}/notes
-- POST /api/documents/{document_id}/archive
-- GET /api/documents/{document_id}/download
+### Linking (`/api/v1`)
+- POST /api/v1/patient/generate-access-code
+- POST /api/v1/doctor/link-patient
 
-### Profile
-- GET /api/profile
-- PUT /api/profile
+### Documents (`/api/v1`)
+- GET /api/v1/documents/{document_id}
+- POST /api/v1/documents/{document_id}/analyze
+- POST /api/v1/documents/{document_id}/verify
+- POST /api/v1/documents/{document_id}/notes
+- POST /api/v1/documents/{document_id}/archive
+- GET /api/v1/documents/{document_id}/download
 
-### Sharing
-- POST /api/patient/documents/{document_id}/share/{doctor_id}
-- DELETE /api/patient/documents/{document_id}/share/{doctor_id}
-- GET /api/patient/documents/{document_id}/shared-doctors
+### Profile (`/api/v1`)
+- GET /api/v1/profile
+- PUT /api/v1/profile
+
+### Sharing (`/api/v1`)
+- POST /api/v1/patient/documents/{document_id}/share/{doctor_id}
+- DELETE /api/v1/patient/documents/{document_id}/share/{doctor_id}
+- GET /api/v1/patient/documents/{document_id}/shared-doctors
+
+### Lab reports (`/api/v2`)
+- POST /api/v2/lab-reports/upload (file + full Stages 1-3 pipeline)
+- POST /api/v2/lab-reports/upload-structured (app structured ingest, `source: "app"`)
+- GET /api/v2/lab-reports (patient's own)
+- GET /api/v2/lab-reports/patient/{patient_id} (doctor view)
+- GET /api/v2/lab-reports/{id} (full annotated structure)
 
 ## 11. Testing
+
+### Backend
+
+```bash
+cd backend
+python -m pytest tests/ -v
+```
+
+- `tests/test_rule_engine.py` — Stage 3 flagging + pattern detection (pure, no DB)
+- `tests/test_v2_structured_ingest.py` — app ingest payload validation (no DB)
 
 ### Backend smoke test script
 
@@ -301,6 +386,18 @@ Note:
 3. Upload a sample document
 4. Trigger AI analysis
 5. Verify doctor can review, add notes, and verify
+
+### Mobile
+
+```bash
+cd mobile
+flutter test
+flutter analyze
+```
+
+- `test/t5_tokenizer_test.dart` — Dart SentencePiece port vs HF reference vectors
+- `test/widget_test.dart` — normalization schema correctness (never flag fields)
+- `test/sync_queue_test.dart` — queue serialization, preprocess layout, `source: "app"`
 
 ## 12. Deployment
 
@@ -325,8 +422,8 @@ Use this README as your base and structure your report with these sections:
 
 1. Introduction and problem statement
 2. Objectives and scope
-3. System architecture (frontend, backend, DB, storage, AI)
-4. Feature modules (auth, linking, documents, AI analysis)
+3. System architecture (frontend, backend, DB, storage, AI, mobile)
+4. Feature modules (auth, linking, documents, AI analysis, lab pipeline, app sync)
 5. Database design (Prisma schema entities and relations)
 6. API design and endpoint mapping
 7. AI pipeline details and limitations
@@ -337,9 +434,10 @@ Use this README as your base and structure your report with these sections:
 12. Conclusion
 
 Suggested quantitative items to include in your report:
-- Number of API endpoints
-- Number of core DB entities
-- AI service components (OCR/NLP/CV)
+- Number of API endpoints (v1 frozen + v2 lab/ingest)
+- Number of core DB entities (incl. LabReport)
+- AI service components (OCR/NLP/CV + T5 standardizer)
+- On-device parity evidence (ONNX checker, HF greedy-prefix match, tokenizer vectors)
 - Measured response times for analyze endpoint (local and deployed)
 - Error/fallback cases tested
 
@@ -355,4 +453,5 @@ Do not commit:
 - Cache and bytecode (__pycache__/, .pytest_cache/, .mypy_cache/)
 - Local uploads/temp artifacts
 - Secret env files (.env)
-- Large generated binaries unless intentionally versioned
+- Large generated binaries unless intentionally versioned (tracked exceptions:
+  mobile ONNX/tokenizer artifacts + backend T5 export configs, via LFS)
