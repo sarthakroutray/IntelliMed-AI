@@ -1,0 +1,62 @@
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+# Local backend pointer for on-device runs (see .env.example).
+.env.local
+# Bundled model binaries: the pneumonia ResNet50 ONNX and the quantized T5
+# summarizer are tracked build artifacts (see backend/scripts/). All other
+# binaries (future .tflite/.gguf, SLM candidates) stay untracked.
+assets/models/*.tflite
+assets/models/*.gguf
+assets/models/*.onnx
+!assets/models/pneumonia_resnet50.onnx
+!assets/models/t5_encoder_q8.onnx
+!assets/models/t5_decoder_q8.onnx
+assets/models/*.json
+!assets/models/t5_tokenizer.json
+!assets/models/.gitkeep
+assets/sample/*
+!assets/sample/.gitkeep
+!assets/sample/t5_parity_vectors.txt
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# The .vscode folder contains launch configuration and tasks you configure in
+# VS Code which you may wish to be included in version control, so this line
+# is commented out by default.
+#.vscode/
+
+# Flutter/Dart/Pub related
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/build/
+/coverage/
+
+# Symbolication related
+app.*.symbols
+
+# Obfuscation related
+app.*.map.json
+
+# Android Studio will place build artifacts here
+/android/app/debug
+/android/app/profile
+/android/app/release
