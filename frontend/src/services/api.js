@@ -1,11 +1,11 @@
 import axios from 'axios';
 import { apiCache, withCache, cacheKeys, invalidateCache } from '../utils/cache';
 
-const rawApiBaseUrl = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api').trim();
+const rawApiBaseUrl = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1').trim();
 const normalizedApiBaseUrl = rawApiBaseUrl.replace(/\/+$/, '');
-const apiBaseUrl = normalizedApiBaseUrl.endsWith('/api')
+const apiBaseUrl = normalizedApiBaseUrl.endsWith('/api/v1')
   ? normalizedApiBaseUrl
-  : `${normalizedApiBaseUrl}/api`;
+  : `${normalizedApiBaseUrl}/api/v1`;
 
 const api = axios.create({
   baseURL: apiBaseUrl,
@@ -138,7 +138,7 @@ export const getLinkedDoctors = withCache(
 );
 
 export const linkDoctor = (accessCode) => {
-  return api.post('/patient/link-doctor', { access_code: accessCode }).then(result => {
+  return api.post('/doctor/link-patient', { access_code: accessCode }).then(result => {
     // Invalidate linked doctors cache after linking
     invalidateCache.linkedDoctors();
     return result;

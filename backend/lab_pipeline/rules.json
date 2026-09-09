@@ -1,0 +1,35 @@
+{
+  "_comment": "PLACEHOLDER — replace with clinically reviewed rules before real use. JSON does not support comments, so placeholder markers live in these _comment fields.",
+  "_review_status": "UNREVIEWED PLACEHOLDERS — DO NOT USE ON REAL PATIENT DATA WITHOUT CLINICAL REVIEW",
+  "rules": [
+    {
+      "_comment": "PLACEHOLDER — replace with clinically reviewed rules before real use",
+      "pattern_name": "PLACEHOLDER_example_combined_low_pattern",
+      "conditions": [
+        { "test_name": "Hemoglobin", "direction": "low" },
+        { "test_name": "Hematocrit", "direction": "low" }
+      ],
+      "match_type": "all",
+      "surfaced_text": "Pattern consistent with PLACEHOLDER combined low pattern — recommend clinical review"
+    },
+    {
+      "_comment": "PLACEHOLDER — replace with clinically reviewed rules before real use",
+      "pattern_name": "PLACEHOLDER_example_combined_high_pattern",
+      "conditions": [
+        { "test_name": "White Blood Cell Count", "direction": "high" },
+        { "test_name": "C-Reactive Protein", "direction": "high" }
+      ],
+      "match_type": "all",
+      "surfaced_text": "Pattern consistent with PLACEHOLDER combined high pattern — recommend clinical review"
+    },
+    {
+      "_comment": "PLACEHOLDER — replace with clinically reviewed rules before real use",
+      "pattern_name": "PLACEHOLDER_example_single_test_pattern",
+      "conditions": [
+        { "test_name": "Glycated Hemoglobin (HbA1c)", "direction": "high" }
+      ],
+      "match_type": "all",
+      "surfaced_text": "Pattern consistent with PLACEHOLDER single-test pattern — recommend clinical review"
+    }
+  ]
+}

@@ -13,7 +13,7 @@ prisma
 google-auth
 modal
 easyocr
-opendataloader-pdf
+opendataloader-pdf[hybrid]
 Pillow
 PyMuPDF
 opencv-python-headless
@@ -24,3 +24,4 @@ numpy
 transformers
 sentencepiece
 pytesseract
+pytest

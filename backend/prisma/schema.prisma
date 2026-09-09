@@ -38,6 +38,7 @@ model User {
   push_notifications Boolean          @default(false)
   
   medical_documents MedicalDocument[]
+  lab_reports       LabReport[]
   doctor_patients   DoctorPatient[]   @relation("doctor_relations")
   patient_doctors   DoctorPatient[]   @relation("patient_relations")
   shared_documents  DocumentShare[]   @relation("shared_documents")
@@ -64,6 +65,7 @@ model MedicalDocument {
   file_path        String    @db.VarChar(255)
   upload_timestamp DateTime? @default(now()) @db.Timestamptz(6)
   ai_analysis_json Json?
+  source           String    @default("web") @db.VarChar(10)
   verified_by      Int?
   verified_at      DateTime?
   verification_notes String? @db.Text
@@ -76,6 +78,22 @@ model MedicalDocument {
 
   @@index([patient_id], map: "idx_medical_documents_patient_id")
   @@map("medical_documents")
+}
+
+model LabReport {
+  id                 Int       @id @default(autoincrement())
+  patient_id         Int?
+  file_path          String    @db.VarChar(255)
+  upload_timestamp   DateTime? @default(now()) @db.Timestamptz(6)
+  source             String    @default("web") @db.VarChar(10)
+  result_json        Json?
+  verified_by        Int?
+  verified_at        DateTime?
+  verification_notes String?   @db.Text
+  users              User?     @relation(fields: [patient_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([patient_id], map: "idx_lab_reports_patient_id")
+  @@map("lab_reports")
 }
 
 model DocumentShare {
