@@ -1,0 +1,2 @@
+# Model binaries (*.tflite, *.gguf, *.onnx) are device-specific build inputs.
+# Drop the converted models here for local runs; never commit them to git.

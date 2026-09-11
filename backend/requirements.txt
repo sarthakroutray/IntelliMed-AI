@@ -2,6 +2,7 @@ fastapi[all]
 uvicorn
 supabase
 fastapi-cache2
+jinja2
 sqlalchemy
 psycopg2-binary
 python-jose[cryptography]
@@ -13,7 +14,7 @@ prisma
 google-auth
 modal
 easyocr
-opendataloader-pdf
+opendataloader-pdf[hybrid]
 Pillow
 PyMuPDF
 opencv-python-headless
@@ -24,3 +25,4 @@ numpy
 transformers
 sentencepiece
 pytesseract
+pytest

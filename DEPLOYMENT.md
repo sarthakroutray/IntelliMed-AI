@@ -18,7 +18,8 @@ Create a Vercel project with the root directory set to `frontend`.
 ### Required Vercel environment variables
 
 - `VITE_API_BASE_URL`
-  Example: `https://intellimed-backend.modal.run/api`
+  Example: `https://intellimed-backend.modal.run/api/v1`
+  (Must include the `/api/v1` suffix; the client appends it only if missing.)
 - `VITE_GOOGLE_CLIENT_ID`
 
 ### Vercel build settings
@@ -134,12 +135,12 @@ Notes:
 ## Post-deploy wiring
 
 1. Deploy the Modal backend and copy its public URL.
-2. Set `VITE_API_BASE_URL` in Vercel to `https://<your-modal-url>/api`.
+2. Set `VITE_API_BASE_URL` in Vercel to `https://<your-modal-url>/api/v1`.
 3. Set backend CORS to allow your Vercel production domain.
 4. Redeploy the Vercel frontend.
 
 ## Notes
 
-- The frontend now reads its API base URL from `VITE_API_BASE_URL` and falls back to `http://localhost:8000/api` in local development.
+- The frontend now reads its API base URL from `VITE_API_BASE_URL` and falls back to `http://localhost:8000/api/v1` in local development. If the value does not already end in `/api/v1`, the client appends it, so set the full path including `/api/v1`.
 - The backend supports both `CORS_ORIGINS` and `CORS_ORIGIN_REGEX`, which is useful for Vercel preview deployments.
 - `backend/.env` should stay local only. Use Modal secrets and Vercel environment variables in production.

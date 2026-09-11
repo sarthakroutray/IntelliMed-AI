@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Shell(D:\\Projects\\IntelliMed-AI\\backend\\venv\\Scripts\\python.exe:*)",
+      "powershell"
+    ],
+    "deny": [],
+    "defaultMode": "default"
+  }
+}

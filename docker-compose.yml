@@ -7,10 +7,31 @@ services:
         INSTALL_SPACY_MODEL: ${INSTALL_SPACY_MODEL:-0}
     env_file:
       - backend/.env
+    environment:
+      # Hybrid OCR backend URL for scanned/image-based lab report PDFs
+      # (used when LAB_OPENDATALOADER_HYBRID=docling-fast is set in backend/.env).
+      LAB_OPENDATALOADER_HYBRID_URL: ${LAB_OPENDATALOADER_HYBRID_URL:-http://lab-hybrid:5002}
     ports:
       - "8000:8000"
     volumes:
       - ./backend:/app/backend
+    restart: unless-stopped
+    depends_on:
+      - lab-hybrid
+
+  # Hybrid OCR backend for scanned/image-based lab report PDFs (Stage 1).
+  # Same image as the backend; runs the opendataloader-pdf[hybrid] server.
+  # Enable in backend/.env: LAB_OPENDATALOADER_HYBRID=docling-fast
+  # (and leave LAB_OPENDATALOADER_HYBRID_URL empty to use this default).
+  lab-hybrid:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      args:
+        INSTALL_SPACY_MODEL: 0
+    command: ["opendataloader-pdf-hybrid", "--port", "5002"]
+    ports:
+      - "5002:5002"
     restart: unless-stopped
 
   frontend:
@@ -18,7 +39,7 @@ services:
       context: ./frontend
       dockerfile: Dockerfile.dev
     environment:
-      VITE_API_BASE_URL: http://localhost:8000/api
+      VITE_API_BASE_URL: http://localhost:8000/api/v1
       VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID:-}
     ports:
       - "5173:5173"
