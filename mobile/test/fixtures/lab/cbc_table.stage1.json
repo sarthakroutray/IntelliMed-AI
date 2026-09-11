@@ -1,0 +1,58 @@
+{
+  "stage": 1,
+  "extraction_engine": "opendataloader-json",
+  "text": "CITY DIAGNOSTICS CENTRE\nPatient: Jane Doe    Age: 34    Sex: F\nReport Date: 12-04-2024\nCOMPLETE BLOOD COUNT\nHemoglobin (Hb) 11.2 g/dL 13.0-17.0\nWBC 7500 cells/uL 4000-11000\nPlatelet Count 250 10^3/uL 150 - 450\nSerum Creatinine 1.1 mg/dL 0.7-1.3\nLDL Cholesterol 230 mg/dL <200 H",
+  "elements": [
+    {"type": "heading", "text": "CITY DIAGNOSTICS CENTRE", "bbox": [72.0, 40.0, 400.0, 60.0], "page": 1},
+    {"type": "text", "text": "Patient: Jane Doe    Age: 34    Sex: F", "bbox": [72.0, 70.0, 400.0, 86.0], "page": 1},
+    {"type": "text", "text": "Report Date: 12-04-2024", "bbox": [72.0, 90.0, 300.0, 106.0], "page": 1},
+    {"type": "heading", "text": "COMPLETE BLOOD COUNT", "bbox": [72.0, 130.0, 300.0, 148.0], "page": 1}
+  ],
+  "tables": [
+    {
+      "bbox": [72.0, 160.0, 520.0, 420.0],
+      "page": 1,
+      "n_rows": 6,
+      "n_cols": 4,
+      "rows": [
+        {"row": 1, "cells": [
+          {"text": "Test", "bbox": [72.0, 160.0, 200.0, 176.0], "page": 1, "is_header": true, "row": 1, "col": 1},
+          {"text": "Result", "bbox": [220.0, 160.0, 300.0, 176.0], "page": 1, "is_header": true, "row": 1, "col": 2},
+          {"text": "Unit", "bbox": [320.0, 160.0, 400.0, 176.0], "page": 1, "is_header": true, "row": 1, "col": 3},
+          {"text": "Reference Range", "bbox": [420.0, 160.0, 520.0, 176.0], "page": 1, "is_header": true, "row": 1, "col": 4}
+        ]},
+        {"row": 2, "cells": [
+          {"text": "Hemoglobin (Hb)", "bbox": [72.0, 180.0, 200.0, 198.0], "page": 1, "is_header": false, "row": 2, "col": 1},
+          {"text": "11.2", "bbox": [220.0, 180.0, 300.0, 198.0], "page": 1, "is_header": false, "row": 2, "col": 2},
+          {"text": "g/dL", "bbox": [320.0, 180.0, 400.0, 198.0], "page": 1, "is_header": false, "row": 2, "col": 3},
+          {"text": "13.0-17.0", "bbox": [420.0, 180.0, 520.0, 198.0], "page": 1, "is_header": false, "row": 2, "col": 4}
+        ]},
+        {"row": 3, "cells": [
+          {"text": "WBC", "bbox": [72.0, 200.0, 200.0, 218.0], "page": 1, "is_header": false, "row": 3, "col": 1},
+          {"text": "7500", "bbox": [220.0, 200.0, 300.0, 218.0], "page": 1, "is_header": false, "row": 3, "col": 2},
+          {"text": "cells/uL", "bbox": [320.0, 200.0, 400.0, 218.0], "page": 1, "is_header": false, "row": 3, "col": 3},
+          {"text": "4000-11000", "bbox": [420.0, 200.0, 520.0, 218.0], "page": 1, "is_header": false, "row": 3, "col": 4}
+        ]},
+        {"row": 4, "cells": [
+          {"text": "Platelet Count", "bbox": [72.0, 220.0, 200.0, 238.0], "page": 1, "is_header": false, "row": 4, "col": 1},
+          {"text": "250", "bbox": [220.0, 220.0, 300.0, 238.0], "page": 1, "is_header": false, "row": 4, "col": 2},
+          {"text": "10^3/uL", "bbox": [320.0, 220.0, 400.0, 238.0], "page": 1, "is_header": false, "row": 4, "col": 3},
+          {"text": "150 - 450", "bbox": [420.0, 220.0, 520.0, 238.0], "page": 1, "is_header": false, "row": 4, "col": 4}
+        ]},
+        {"row": 5, "cells": [
+          {"text": "Serum Creatinine", "bbox": [72.0, 240.0, 200.0, 258.0], "page": 1, "is_header": false, "row": 5, "col": 1},
+          {"text": "1.1", "bbox": [220.0, 240.0, 300.0, 258.0], "page": 1, "is_header": false, "row": 5, "col": 2},
+          {"text": "mg/dL", "bbox": [320.0, 240.0, 400.0, 258.0], "page": 1, "is_header": false, "row": 5, "col": 3},
+          {"text": "0.7-1.3", "bbox": [420.0, 240.0, 520.0, 258.0], "page": 1, "is_header": false, "row": 5, "col": 4}
+        ]},
+        {"row": 6, "cells": [
+          {"text": "LDL Cholesterol", "bbox": [72.0, 260.0, 200.0, 278.0], "page": 1, "is_header": false, "row": 6, "col": 1},
+          {"text": "230", "bbox": [220.0, 260.0, 300.0, 278.0], "page": 1, "is_header": false, "row": 6, "col": 2},
+          {"text": "mg/dL", "bbox": [320.0, 260.0, 400.0, 278.0], "page": 1, "is_header": false, "row": 6, "col": 3},
+          {"text": "<200 H", "bbox": [420.0, 260.0, 520.0, 278.0], "page": 1, "is_header": false, "row": 6, "col": 4}
+        ]}
+      ]
+    }
+  ],
+  "warnings": []
+}

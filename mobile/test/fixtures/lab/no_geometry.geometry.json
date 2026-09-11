@@ -1,0 +1,19 @@
+{
+  "page": 1,
+  "pixel_width": 0,
+  "pixel_height": 0,
+  "lines": [
+    {
+      "text": "Hemoglobin 11.2 g/dL 13.0-17.0",
+      "bbox": [80, 440, 800, 460],
+      "angle": 0.0,
+      "confidence": 0.8,
+      "words": [
+        {"text": "Hemoglobin", "bbox": [80, 440, 220, 460]},
+        {"text": "11.2", "bbox": [380, 440, 430, 460]},
+        {"text": "g/dL", "bbox": [520, 440, 570, 460]},
+        {"text": "13.0-17.0", "bbox": [680, 440, 780, 460]}
+      ]
+    }
+  ]
+}

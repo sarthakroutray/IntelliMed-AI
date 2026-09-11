@@ -13,7 +13,7 @@ import 'package:flutter/services.dart';
 ///
 /// What is NOT ported (deliberate, documented): byte_fallback surface forms
 /// are approximated with `<unk>` (id 2) — the medical-vocab inputs this
-/// standardizer sees are ASCII/Latin in practice, and parity tests pin the
+/// summariser sees are ASCII/Latin in practice, and parity tests pin the
 /// behavior on representative samples. Unknown codepoints never crash.
 class T5Tokenizer {
   T5Tokenizer._({

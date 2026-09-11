@@ -4,4 +4,17 @@
          to allow setting breakpoints, to provide hot reload, etc.
     -->
     <uses-permission android:name="android.permission.INTERNET"/>
+
+    <!-- DEBUG BUILDS ONLY.
+         Android 9+ blocks cleartext (plain HTTP) traffic by default. Device
+         testing may point API_BASE_URL at a local backend over the LAN
+         (http://192.168.x.x:8000) or at the emulator host (http://10.0.2.2:8000),
+         which would otherwise fail with "CLEARTEXT communication not permitted".
+
+         This overlay merges into debug builds only — the release manifest does
+         NOT set this, so shipped builds stay HTTPS-only, which is what a
+         medical app should do. The production Modal backend is HTTPS and needs
+         no exception.
+    -->
+    <application android:usesCleartextTraffic="true" />
 </manifest>

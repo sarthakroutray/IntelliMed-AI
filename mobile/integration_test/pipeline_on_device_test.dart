@@ -16,8 +16,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:intellimed_app/cnn_ocr.dart';
+import 'package:intellimed_app/lab/rule_engine.dart';
+import 'package:intellimed_app/lab/structure.dart';
 import 'package:intellimed_app/model_manager.dart';
-import 'package:intellimed_app/normalize.dart';
 import 'package:intellimed_app/schemas.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -112,7 +113,7 @@ void main() {
   );
 
   testWidgets(
-    'OCR output flows through the deterministic normalizer and validates',
+    'OCR geometry flows through structure synthesis and the rule engine',
     (tester) async {
       final file = await _renderTextImage([
         'Hemoglobin 11.2 g/dL 13.0-17.0',
@@ -121,11 +122,17 @@ void main() {
       ], name: 'lab_norm');
 
       final ocr = OcrService();
-      final text = await ocr.recognizeFile(file);
+      final pages = await ocr.recognizePages([file]);
       ocr.close();
-      debugPrint('OCR RAW >>>\n$text\n<<<');
+      debugPrint(
+        'OCR PAGES >>> ${pages.length} page(s), '
+        '${pages.first.lines.length} lines, '
+        '${pages.first.pixelWidth}x${pages.first.pixelHeight}',
+      );
 
-      final normalized = await normalizeInBackground(('lab_report', text));
+      final stage1 = buildStage1(pages);
+      final normalized = buildLabDocument(stage1).toJson();
+      debugPrint('STAGE1 ENGINE >>> ${stage1.extractionEngine}');
       debugPrint('NORMALIZED >>> ${prettyJson(normalized)}');
 
       final problems = validateLabReport(normalized);
@@ -136,12 +143,13 @@ void main() {
       );
 
       final panels = normalized['panels'] as List;
-      final tests =
-          (panels.first as Map)['tests'] as List; // ignore: avoid_dynamic_calls
+      final tests = panels.isEmpty
+          ? const []
+          : (panels.first as Map)['tests'] as List; // ignore: avoid_dynamic_calls
       expect(
         tests,
         isNotEmpty,
-        reason: 'normalizer extracted no tests from real OCR text',
+        reason: 'rule engine extracted no tests from real OCR text',
       );
     },
     timeout: const Timeout(Duration(minutes: 5)),
@@ -198,7 +206,7 @@ void main() {
         ], name: 'lab_full');
 
         final envelope = await models.processDocument(
-          image: file,
+          source: file,
           kind: 'lab_report',
         );
         debugPrint('ENVELOPE >>> ${prettyJson(envelope)}');
@@ -207,13 +215,25 @@ void main() {
         expect(envelope['source'], 'app');
         expect(envelope['normalized'], isA<Map<String, dynamic>>());
         expect(envelope['latency_ms'], isA<int>());
-        // The T5 standardizer should have been exercised, not skipped.
+        // The rule engine must have produced at least one test.
+        final normalized = envelope['normalized'] as Map<String, dynamic>;
+        final panels = normalized['panels'] as List;
+        expect(panels, isNotEmpty, reason: 'no panels in the lab envelope');
+        // The T5 summariser should have been exercised, not skipped.
         expect(
           envelope['engine'],
-          contains('t5-q8'),
-          reason: 'T5 standardizer did not run in the default pipeline',
+          contains('t5-summary'),
+          reason: 'T5 summariser did not run in the default pipeline',
         );
         expect(envelope['summary_context'], isA<Map<String, dynamic>>());
+
+        // Provenance tells a reviewer how the structure was reconstructed.
+        final structure = envelope['structure'] as Map<String, dynamic>;
+        expect(structure['engine'], isA<String>());
+        expect(structure['tables'], isA<int>());
+        expect(structure['tests'], greaterThan(0));
+        expect(structure['confidence'], isIn(['high', 'medium', 'low']));
+        expect(structure['pages_without_tables'], isA<List>());
       } finally {
         await models.dispose();
       }
@@ -231,7 +251,7 @@ void main() {
       await models.init();
       try {
         final file = await _renderXrayLike(name: 'xray_full');
-        final envelope = await models.processXray(image: file);
+        final envelope = await models.processXray(source: file);
         debugPrint('XRAY ENVELOPE >>> ${prettyJson(envelope)}');
 
         expect(envelope['kind'], 'xray');

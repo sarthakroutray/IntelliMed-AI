@@ -2,9 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:intellimed_app/theme.dart';
+import 'package:intellimed_app/widgets/app_bottom_nav.dart';
 import 'package:intellimed_app/widgets/app_card.dart';
-import 'package:intellimed_app/widgets/app_drawer.dart';
-import 'package:intellimed_app/widgets/brand_mark.dart';
 import 'package:intellimed_app/widgets/status_chip.dart';
 
 /// Renders [child] under the real app themes so widget specs cover both modes.
@@ -47,57 +46,72 @@ void main() {
     });
   }
 
-  testWidgets('drawer lists every destination and marks the active one', (
+  testWidgets('bottom nav lists every destination and marks the active one', (
     tester,
   ) async {
     await tester.pumpWidget(
-      _host(const AppDrawer(selectedIndex: 0, onSelect: _noop)),
-    );
-
-    expect(find.byType(BrandMark), findsOneWidget);
-    for (final label in ['Capture', 'Results', 'Bench', 'Spike']) {
-      expect(find.text(label), findsOneWidget);
-    }
-    expect(find.text('DEVELOPER'), findsOneWidget);
-  });
-
-  testWidgets('tapping a drawer destination reports it and closes the drawer', (
-    tester,
-  ) async {
-    int? picked;
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: AppTheme.light,
-        home: Scaffold(
-          body: Builder(
-            builder: (context) => TextButton(
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => Scaffold(
-                    body: AppDrawer(
-                      selectedIndex: 0,
-                      onSelect: (i) => picked = i,
-                    ),
-                  ),
-                ),
-              ),
-              child: const Text('open'),
-            ),
-          ),
+      _host(
+        AppBottomNav(
+          destinations: _destinations,
+          selectedIndex: 0,
+          onSelected: _noop,
         ),
       ),
     );
 
-    await tester.tap(find.text('open'));
-    await tester.pumpAndSettle();
-    expect(find.byType(AppDrawer), findsOneWidget);
+    for (final label in ['Home', 'Capture', 'Reports', 'Docs', 'Me']) {
+      expect(find.text(label), findsOneWidget);
+    }
+    expect(find.byType(NavigationDestination), findsNWidgets(5));
+  });
 
-    await tester.tap(find.text('Results'));
+  testWidgets('tapping a bottom-nav destination reports its index', (
+    tester,
+  ) async {
+    int? picked;
+    await tester.pumpWidget(
+      _host(
+        AppBottomNav(
+          destinations: _destinations,
+          selectedIndex: 0,
+          onSelected: (i) => picked = i,
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Reports'));
     await tester.pumpAndSettle();
 
-    expect(picked, 1);
-    expect(find.byType(AppDrawer), findsNothing);
+    expect(picked, 2);
   });
 }
+
+const _destinations = <NavDestination>[
+  NavDestination(
+    label: 'Home',
+    icon: Icons.home_outlined,
+    selectedIcon: Icons.home,
+  ),
+  NavDestination(
+    label: 'Capture',
+    icon: Icons.document_scanner_outlined,
+    selectedIcon: Icons.document_scanner,
+  ),
+  NavDestination(
+    label: 'Reports',
+    icon: Icons.description_outlined,
+    selectedIcon: Icons.description,
+  ),
+  NavDestination(
+    label: 'Docs',
+    icon: Icons.folder_outlined,
+    selectedIcon: Icons.folder,
+  ),
+  NavDestination(
+    label: 'Me',
+    icon: Icons.person_outline,
+    selectedIcon: Icons.person,
+  ),
+];
 
 void _noop(int _) {}

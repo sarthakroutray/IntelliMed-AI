@@ -44,13 +44,22 @@ dependencies:
   path: ^1.9.1
   flutter_onnxruntime: ^1.8.5
   llama_cpp_dart: ^0.2.2
-  path_provider: ^2.1.5
+  path_provider: ^2.1.6
   # Google Sign-In (v7 singleton API). The Android client registered in GCP is
   # matched by package name + SHA-1; the web client ID is passed as
   # serverClientId so the obtained idToken is audienced to the backend.
   google_sign_in: ^7.2.0
   # JWT stored in Keystore-backed encrypted storage (never plaintext).
-  flutter_secure_storage: ^9.2.2
+  flutter_secure_storage: ^11.1.0
+  # Raw document upload (PDF selection) — user-initiated only.
+  # 12.x is the current federated line; 8.x pins compileSdk 34, which conflicts
+  # with flutter_plugin_android_lifecycle (needs 36).
+  file_picker: ^12.3.0
+  # Date formatting for document/report timestamps.
+  intl: ^0.19.0
+  # Open a downloaded document / signed file URL externally.
+  url_launcher: ^6.3.1
+  pdfx: ^2.11.0
 
 dev_dependencies:
   flutter_test:
@@ -67,6 +76,9 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
+
+  # Lets the sqflite-backed ResultStore run under `flutter test` on the host.
+  sqflite_common_ffi: ^2.3.3
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

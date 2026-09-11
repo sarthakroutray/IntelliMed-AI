@@ -7,6 +7,8 @@ import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart
 import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 
+import 'lab/ocr_model.dart';
+
 /// Class labels + preprocessing mirror backend/services.py exactly:
 /// ResNet50 head over [Normal, Bacterial Pneumonia, Viral Pneumonia],
 /// 224x224 RGB, ImageNet mean/std normalization.
@@ -258,14 +260,94 @@ class OcrService {
 
   final TextRecognizer _recognizer;
 
+  /// Recognise every page in order, preserving word boxes and confidence.
+  ///
+  /// Sequential on purpose: ML Kit's recogniser is not safe to drive
+  /// concurrently, and the surrounding [InferenceQueue] is serial anyway.
+  /// Boxes are in bitmap pixels of the processed image; the page's pixel
+  /// dimensions are recorded so geometry can be normalised later.
+  Future<List<OcrPage>> recognizePages(List<File> pages) async {
+    final out = <OcrPage>[];
+    var pageNumber = 1;
+    for (final page in pages) {
+      final input = InputImage.fromFile(page);
+      final result = await _recognizer.processImage(input);
+      final size = await _probeImageSize(page);
+      out.add(_toPage(result, pageNumber, size));
+      pageNumber++;
+    }
+    return out;
+  }
+
+  /// Flat text for a single page. Kept for the prescription and X-ray paths,
+  /// which need no geometry; it walks the same result tree as
+  /// [recognizePages] so there is one extraction path.
   Future<String> recognizeFile(File file) async {
-    final input = InputImage.fromFile(file);
-    final result = await _recognizer.processImage(input);
-    return result.text;
+    final pages = await recognizePages([file]);
+    if (pages.isEmpty) return '';
+    return pages.first.lines.map((l) => l.text).join('\n');
   }
 
   Future<String> recognizePicked(XFile picked) =>
       recognizeFile(File(picked.path));
 
   void close() => _recognizer.close();
+
+  OcrPage _toPage(RecognizedText recognized, int pageNumber, List<int>? size) {
+    final lines = <OcrLine>[];
+    for (final block in recognized.blocks) {
+      for (final line in block.lines) {
+        lines.add(
+          OcrLine(
+            text: line.text,
+            bbox: line.boundingBox,
+            confidence: line.confidence,
+            angle: line.angle ?? 0,
+            words: [
+              for (final element in line.elements)
+                OcrWord(
+                  text: element.text,
+                  bbox: element.boundingBox,
+                  confidence: element.confidence,
+                ),
+            ],
+          ),
+        );
+      }
+    }
+    return OcrPage(
+      pageNumber: pageNumber,
+      pixelWidth: size?[0] ?? 0,
+      pixelHeight: size?[1] ?? 0,
+      lines: lines,
+    );
+  }
+
+  /// Pixel dimensions of [file], probed from the image header (cheap) with a
+  /// full decode as a fallback for formats the header probe cannot read.
+  Future<List<int>?> _probeImageSize(File file) async {
+    try {
+      final bytes = await file.readAsBytes();
+      return await compute(_probeImageHeader, bytes);
+    } catch (e) {
+      debugPrint('OcrService: could not read image size for ${file.path} — $e');
+      return null;
+    }
+  }
+}
+
+/// Header-only image size probe (runs off the main isolate).
+List<int>? _probeImageHeader(Uint8List bytes) {
+  try {
+    final decoder = img.findDecoderForData(bytes);
+    final probe = decoder?.startDecode(bytes);
+    if (probe != null) return [probe.width, probe.height];
+  } catch (_) {
+    // Fall through to a full decode below.
+  }
+  try {
+    final decoded = img.decodeImage(bytes);
+    if (decoded != null) return [decoded.width, decoded.height];
+  } catch (_) {}
+  return null;
 }

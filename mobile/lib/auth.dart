@@ -113,20 +113,15 @@ abstract class TokenStore {
 }
 
 /// [TokenStore] backed by Android Keystore via flutter_secure_storage.
+///
+/// Uses the plugin's default Android options (flutter_secure_storage 11+):
+/// AES-GCM-NoPadding data encryption with RSA-OAEP-SHA256 KeyStore key
+/// wrapping, and `resetOnError: true`. The older
+/// `encryptedSharedPreferences` flag was removed in v10 and is no longer
+/// needed — the defaults are already Keystore-backed.
 class SecureTokenStore implements TokenStore {
   SecureTokenStore({FlutterSecureStorage? storage})
-    : _storage =
-          storage ??
-          const FlutterSecureStorage(
-            // EncryptedSharedPreferences (AES-256, Jetpack Security) rather
-            // than the plugin's legacy default. resetOnError clears an entry
-            // invalidated by a keystore change instead of throwing forever,
-            // which would otherwise strand the user with no way to sign in.
-            aOptions: AndroidOptions(
-              encryptedSharedPreferences: true,
-              resetOnError: true,
-            ),
-          );
+    : _storage = storage ?? const FlutterSecureStorage();
 
   final FlutterSecureStorage _storage;
 
@@ -390,12 +385,14 @@ class AuthService {
     } on http.ClientException catch (_) {
       throw AuthException(
         AuthErrorKind.offline,
-        'Cannot reach the server. Sign-in needs a connection.',
+        'Cannot reach the backend at $baseUrl. Check the device has network '
+        'access and that API_BASE_URL points at the right server.',
       );
     } on SocketException catch (_) {
       throw AuthException(
         AuthErrorKind.offline,
-        'Cannot reach the server. Sign-in needs a connection.',
+        'Cannot reach the backend at $baseUrl. Check the device has network '
+        'access and that API_BASE_URL points at the right server.',
       );
     }
 

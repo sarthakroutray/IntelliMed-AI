@@ -86,12 +86,63 @@ class ResultStore {
       'results',
       where: 'sync_status IN (?, ?)',
       whereArgs: ['pending', 'failed'],
-      orderBy: 'created_at ASC',
+      // `created_at` is only second-resolution, so tie-break on id to keep the
+      // retry order stable.
+      orderBy: 'created_at ASC, id ASC',
     );
   }
 
   Future<List<Map<String, Object?>>> all({int limit = 100}) {
-    return _db.query('results', orderBy: 'created_at DESC', limit: limit);
+    return _db.query(
+      'results',
+      orderBy: 'created_at DESC, id DESC',
+      limit: limit,
+    );
+  }
+
+  /// A single stored row, for the capture detail viewer.
+  Future<Map<String, Object?>?> byId(int id) async {
+    final rows = await _db.query(
+      'results',
+      where: 'id = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
+    return rows.isEmpty ? null : rows.first;
+  }
+
+  /// Newest first for one source image. Used when re-running inference on a
+  /// capture with a corrected document type, to find the row just created.
+  Future<List<Map<String, Object?>>> byPath(String localPath) {
+    return _db.query(
+      'results',
+      where: 'local_path = ?',
+      whereArgs: [localPath],
+      orderBy: 'id DESC',
+    );
+  }
+
+  /// Counts per sync status, for the Home dashboard. Computed in SQL so the
+  /// dashboard doesn't load every row.
+  Future<Map<String, int>> counts() async {
+    final rows = await _db.rawQuery(
+      'SELECT sync_status, COUNT(*) AS n FROM results GROUP BY sync_status',
+    );
+    final result = <String, int>{'pending': 0, 'synced': 0, 'failed': 0};
+    var total = 0;
+    for (final row in rows) {
+      final status = '${row['sync_status']}';
+      final n = (row['n'] as num?)?.toInt() ?? 0;
+      result[status] = (result[status] ?? 0) + n;
+      total += n;
+    }
+    result['total'] = total;
+    return result;
+  }
+
+  /// Remove a locally stored capture (local only; never touches the server).
+  Future<int> delete(int id) {
+    return _db.delete('results', where: 'id = ?', whereArgs: [id]);
   }
 
   Future<int> markSynced(int id, {int? serverId}) async {
