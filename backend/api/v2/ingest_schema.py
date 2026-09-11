@@ -16,6 +16,7 @@ class StructuredIngestRequest(BaseModel):
     engine: Optional[str] = Field(default=None, description='on-device engine id')
     latency_ms: Optional[int] = None
     normalized: dict[str, Any] = Field(description='schema-correct normalized output')
+    summary_context: Optional[dict[str, Any]] = Field(default=None, description='on-device T5 summary context')
     ocr_excerpt: Optional[str] = None
     source: str = Field(default='app', description='originating client tag')
 

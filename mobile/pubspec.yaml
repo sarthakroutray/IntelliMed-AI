@@ -44,9 +44,21 @@ dependencies:
   path: ^1.9.1
   flutter_onnxruntime: ^1.8.5
   llama_cpp_dart: ^0.2.2
+  path_provider: ^2.1.5
+  # Google Sign-In (v7 singleton API). The Android client registered in GCP is
+  # matched by package name + SHA-1; the web client ID is passed as
+  # serverClientId so the obtained idToken is audienced to the backend.
+  google_sign_in: ^7.2.0
+  # JWT stored in Keystore-backed encrypted storage (never plaintext).
+  flutter_secure_storage: ^9.2.2
 
 dev_dependencies:
   flutter_test:
+    sdk: flutter
+
+  # Drives the real on-device inference path (flutter_onnxruntime) against a
+  # connected device/emulator — see integration_test/slm_on_device_test.dart.
+  integration_test:
     sdk: flutter
 
   # The "flutter_lints" package below contains a set of recommended lints to
@@ -71,6 +83,14 @@ flutter:
   assets:
     - assets/models/
     - assets/sample/
+    - assets/fonts/
+
+  # Manrope — the same display typeface used by the web app. Bundled rather
+  # than fetched at runtime so the app stays fully offline-capable.
+  fonts:
+    - family: Manrope
+      fonts:
+        - asset: assets/fonts/Manrope-Variable.ttf
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

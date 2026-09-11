@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
+
 import 'cnn_ocr.dart';
 import 'inference_queue.dart';
 import 'normalize.dart';
@@ -32,8 +34,19 @@ class ModelManager {
   DateTime? cnnLoadedAt;
   DateTime? slmLoadedAt;
 
+  /// Latched after a failed T5 load so each capture doesn't re-attempt a
+  /// ~94 MB model load that already failed. Cleared by [resetSlmFailure].
+  bool _slmUnavailable = false;
+
   int cnnLoadMs = -1;
   int slmLoadMs = -1;
+
+  /// Whether the T5 standardizer is currently written off after a failure.
+  bool get slmUnavailable => _slmUnavailable;
+
+  /// Allow a later retry of the T5 standardizer (e.g. after the user frees
+  /// memory or connectivity/model changes).
+  void resetSlmFailure() => _slmUnavailable = false;
 
   Future<void> init() async {
     ocr = OcrService();
@@ -60,13 +73,24 @@ class ModelManager {
 
   Future<SlmRuntime> loadSlm(SlmBackend backend) async {
     final started = DateTime.now();
-    slm ??= backend == SlmBackend.llamaCpp
-        ? LlamaCppRuntime(modelPath: slmGgufAsset)
-        : OnnxSlmRuntime();
-    await slm!.load();
+    var runtime = slm;
+    if (runtime == null) {
+      runtime = backend == SlmBackend.llamaCpp
+          ? LlamaCppRuntime(modelPath: slmGgufAsset)
+          : OnnxSlmRuntime();
+      slm = runtime;
+    }
+    try {
+      await runtime.load();
+    } catch (e) {
+      // Never keep a half-initialised runtime resident: a failed load would
+      // otherwise be reused forever behind a non-null `slm`.
+      if (identical(slm, runtime)) slm = null;
+      rethrow;
+    }
     slmLoadedAt ??= DateTime.now();
     slmLoadMs = DateTime.now().difference(started).inMilliseconds;
-    return slm!;
+    return runtime;
   }
 
   /// Full on-device pass for a captured document image:
@@ -87,19 +111,28 @@ class ModelManager {
       ));
       var engine = 'deterministic-v1';
       Map<String, dynamic>? summaryContext;
-      final slmSnapshot = slm;
-      if (slmSnapshot is OnnxSlmRuntime &&
-          (slmSnapshot.isReady || kind != 'prescription')) {
-        // T5 standardizer (same checkpoint as backend
-        // `medical_summarize_service`): summary context for review on
-        // non-prescription documents. Prescriptions keep the deterministic
-        // structured path, mirroring the backend short-circuit.
+      // Prescriptions deliberately stay on the deterministic path, mirroring
+      // the backend short-circuit (structured NLP data, never generative
+      // output). Every other document kind uses the T5 standardizer.
+      //
+      // The standardizer is loaded on first use when the app started lazily
+      // (the default): previously nothing ever called loadSlm() outside the
+      // opt-in eager path, so `slm` stayed null and this block never ran —
+      // the 94 MB of T5 weights shipped but were never exercised.
+      if (kind != 'prescription' && !_slmUnavailable) {
         try {
-          if (!slmSnapshot.isReady) await slmSnapshot.load();
-          summaryContext = await slmSnapshot.standardizeText(ocrText);
-          engine = 'deterministic-v1+t5-q8';
-        } catch (_) {
+          final runtime = slm ?? await loadSlm(SlmBackend.onnx);
+          if (runtime is OnnxSlmRuntime) {
+            summaryContext = await runtime.standardizeText(ocrText);
+            engine = 'deterministic-v1+t5-q8';
+          }
+        } catch (e) {
+          // Degrade to the deterministic engine rather than failing the
+          // capture. Latch the failure so we don't retry a doomed ~94 MB
+          // load on every subsequent document.
+          _slmUnavailable = true;
           summaryContext = null;
+          debugPrint('ModelManager: T5 standardizer unavailable — $e');
         }
       }
       final problems = kind == 'prescription'
@@ -130,6 +163,20 @@ class ModelManager {
             token: token,
           );
           await store.markSynced(rowId, serverId: serverId);
+        } on RouteMissingException catch (e) {
+          // Route isn't deployed at this base URL — keep the row pending so
+          // it syncs once the backend is reachable.
+          debugPrint('ModelManager: $e — row $rowId stays pending');
+        } on OfflineException catch (e) {
+          // Offline capture: keep the structured result queued locally and
+          // sync when connectivity returns (V2Sync.watchConnectivity).
+          await store.markPending(rowId);
+          debugPrint('ModelManager: $e — row $rowId stays pending');
+        } on UnauthorizedException catch (e) {
+          // Session lapsed: the on-device result is valid, so keep it queued
+          // for after the next sign-in rather than marking it failed.
+          await store.markPending(rowId);
+          debugPrint('ModelManager: $e — row $rowId stays pending');
         } catch (e) {
           await store.markFailed(rowId, '$e');
         }
@@ -168,6 +215,20 @@ class ModelManager {
             token: token,
           );
           await store.markSynced(rowId, serverId: serverId);
+        } on RouteMissingException catch (e) {
+          // Route isn't deployed at this base URL — keep the row pending so
+          // it syncs once the backend is reachable.
+          debugPrint('ModelManager: $e — row $rowId stays pending');
+        } on OfflineException catch (e) {
+          // Offline capture: keep the structured result queued locally and
+          // sync when connectivity returns (V2Sync.watchConnectivity).
+          await store.markPending(rowId);
+          debugPrint('ModelManager: $e — row $rowId stays pending');
+        } on UnauthorizedException catch (e) {
+          // Session lapsed: the on-device result is valid, so keep it queued
+          // for after the next sign-in rather than marking it failed.
+          await store.markPending(rowId);
+          debugPrint('ModelManager: $e — row $rowId stays pending');
         } catch (e) {
           await store.markFailed(rowId, '$e');
         }
@@ -178,7 +239,7 @@ class ModelManager {
 
   Future<void> dispose() async {
     await cnn?.close();
-    slm?.close();
+    await slm?.close();
     ocr?.close();
   }
 }

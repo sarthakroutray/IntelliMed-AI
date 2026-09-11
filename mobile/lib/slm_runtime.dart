@@ -23,7 +23,7 @@ abstract class SlmRuntime {
   bool get isReady;
   Future<void> load();
   Future<Map<String, dynamic>> normalizeJson(String stage1Json);
-  void close();
+  Future<void> close();
 }
 
 /// llama.cpp path (future): GGUF SLM via llama_cpp_dart isolate API. Kept as
@@ -55,7 +55,7 @@ class LlamaCppRuntime implements SlmRuntime {
   }
 
   @override
-  void close() {}
+  Future<void> close() async {}
 }
 
 /// ONNX Runtime path (WIRED): the Falconsai T5 standardizer as quantized
@@ -78,12 +78,17 @@ class OnnxSlmRuntime implements SlmRuntime {
     this.decoderAsset = 'assets/models/t5_decoder_q8.onnx',
     this.maxInputTokens = 128,
     this.maxNewTokens = 60,
+    this.noRepeatNgramSize = 3,
   });
 
   final String encoderAsset;
   final String decoderAsset;
   final int maxInputTokens;
   final int maxNewTokens;
+
+  /// Block a token if it would complete a repeated [noRepeatNgramSize]-gram,
+  /// matching the backend's `no_repeat_ngram_size=3`.
+  final int noRepeatNgramSize;
 
   OrtSession? _encoder;
   OrtSession? _decoder;
@@ -100,9 +105,20 @@ class OnnxSlmRuntime implements SlmRuntime {
   Future<void> load() async {
     if (isReady) return;
     final ort = OnnxRuntime();
-    _tokenizer = await T5Tokenizer.load();
-    _encoder = await ort.createSessionFromAsset(encoderAsset);
-    _decoder = await ort.createSessionFromAsset(decoderAsset);
+    final tokenizer = await T5Tokenizer.load();
+    OrtSession? encoder;
+    try {
+      encoder = await ort.createSessionFromAsset(encoderAsset);
+      final decoder = await ort.createSessionFromAsset(decoderAsset);
+      _tokenizer = tokenizer;
+      _encoder = encoder;
+      _decoder = decoder;
+    } catch (e) {
+      // A failure between the two loads would otherwise strand a fully
+      // allocated native encoder session (~35 MB) that nothing can reach.
+      await encoder?.close();
+      rethrow;
+    }
   }
 
   /// Standardize raw OCR text into summary context for doctor review.
@@ -151,6 +167,12 @@ class OnnxSlmRuntime implements SlmRuntime {
         'key_findings': <String>[],
         'original_length': ocrText.length,
         'summary_length': summary.length,
+        // Decode steps drive on-device latency: each step re-runs the decoder
+        // over the whole prefix (no KV cache) and transfers the full
+        // [1, seq, vocab] logits tensor across the platform channel, so cost
+        // grows with the square of this number.
+        'decode_steps': outIds.isEmpty ? 0 : outIds.length - 1,
+        'input_tokens': inputIds.length,
         'latency_ms': DateTime.now().difference(started).inMilliseconds,
       };
     } finally {
@@ -208,12 +230,22 @@ class OnnxSlmRuntime implements SlmRuntime {
             'encoder_attention_mask': mask,
           });
           final logitsValue = outputs['logits'] ?? outputs.values.first;
+          // Read the row width from the tensor itself. This is the MODEL's
+          // vocab (T5 pads it to 32128), which is NOT the tokenizer's piece
+          // count (32100). Striding by the tokenizer size misaligned every
+          // step's logits and produced incoherent output.
+          final modelVocab = logitsValue.shape.last;
           final flat = await logitsValue.asFlattenedList();
-          final vocab = _tokenizer!.vocabSize;
-          final lastOff = (decIds.length - 1) * vocab;
+          final lastOff = flat.length - modelVocab;
+          // Mirror the backend's no_repeat_ngram_size=3. Full beam search
+          // (num_beams=4, as the backend uses) is too expensive on device,
+          // but banning repeated trigrams removes the degenerate looping this
+          // greedy decode otherwise produces.
+          final banned = bannedByRepeatNgram(decIds, noRepeatNgramSize);
           var best = 0;
           var bestScore = double.negativeInfinity;
-          for (var i = 0; i < vocab; i++) {
+          for (var i = 0; i < modelVocab; i++) {
+            if (banned.contains(i)) continue;
             final s = (flat[lastOff + i] as num).toDouble();
             if (s > bestScore) {
               bestScore = s;
@@ -232,13 +264,41 @@ class OnnxSlmRuntime implements SlmRuntime {
     }
   }
 
+  /// Token ids that would complete a repeated [n]-gram if appended to [ids].
+  ///
+  /// Matches HF's NoRepeatNGramLogitsProcessor: take the trailing (n-1) tokens
+  /// as the prefix, then ban whatever followed every earlier occurrence of that
+  /// same prefix.
+  @visibleForTesting
+  static Set<int> bannedByRepeatNgram(List<int> ids, int n) {
+    final banned = <int>{};
+    if (n < 2 || ids.length < n) return banned;
+    final prefixLen = n - 1;
+    for (var i = 0; i + n <= ids.length; i++) {
+      var match = true;
+      for (var k = 0; k < prefixLen; k++) {
+        // Compare ids[i..i+prefixLen) against the trailing prefix.
+        if (ids[i + k] != ids[ids.length - prefixLen + k]) {
+          match = false;
+          break;
+        }
+      }
+      if (match) banned.add(ids[i + n - 1]);
+    }
+    return banned;
+  }
+
   @override
-  void close() {
-    _encoder?.close();
-    _decoder?.close();
+  Future<void> close() async {
+    final encoder = _encoder;
+    final decoder = _decoder;
     _encoder = null;
     _decoder = null;
     _tokenizer = null;
+    await Future.wait([
+      if (encoder != null) encoder.close(),
+      if (decoder != null) decoder.close(),
+    ]);
   }
 }
 

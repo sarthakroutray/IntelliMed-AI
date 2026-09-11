@@ -94,3 +94,17 @@ def test_prescription_requires_medication_name():
     )
     problems = validate_ingest_payload(payload)
     assert any('medication name' in p for p in problems)
+
+
+def test_payload_with_summary_context_accepted():
+    payload = _lab_payload(
+        summary_context={
+            'document_type': 'summary_context',
+            'medical_summary': 'CBC within normal limits.',
+            'key_findings': [],
+        }
+    )
+    assert validate_ingest_payload(payload) == []
+    assert payload.summary_context is not None
+    assert payload.summary_context['medical_summary'] == 'CBC within normal limits.'
+

@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_onnxruntime/flutter_onnxruntime.dart';
@@ -33,6 +34,7 @@ class XrayPatternResult {
     required this.probabilities,
     required this.latencyMs,
     required this.modelAsset,
+    this.note,
   });
 
   final String topPattern;
@@ -41,6 +43,9 @@ class XrayPatternResult {
   final int latencyMs;
   final String modelAsset;
 
+  /// Extra context when the classifier could not run (e.g. load failure).
+  final String? note;
+
   Map<String, dynamic> toStructuredContext() => {
     'document_type': 'xray',
     'top_pattern': topPattern,
@@ -48,16 +53,17 @@ class XrayPatternResult {
     'probabilities': probabilities,
     'model': modelAsset,
     'latency_ms': latencyMs,
-    'note': 'Structured context for doctor review.',
+    'note': note ?? 'Structured context for doctor review.',
   };
 }
 
 class CnnClassifier {
   CnnClassifier._onnx(this._session, this._modelAsset)
     : _mode = CnnReadiness.ready,
-      _lazyOnnxAsset = null;
+      _lazyOnnxAsset = null,
+      _loadError = null;
 
-  CnnClassifier._missing(this._modelAsset)
+  CnnClassifier._missing(this._modelAsset, [this._loadError])
     : _mode = CnnReadiness.modelMissing,
       _session = null,
       _lazyOnnxAsset = null;
@@ -66,12 +72,19 @@ class CnnClassifier {
     : _modelAsset = asset,
       _mode = CnnReadiness.modelMissing,
       _session = null,
-      _lazyOnnxAsset = asset;
+      _lazyOnnxAsset = asset,
+      _loadError = null;
 
   OrtSession? _session;
   final String _modelAsset;
   final CnnReadiness _mode;
   final String? _lazyOnnxAsset;
+  String? _loadError;
+
+  /// Why the model is not ready, when a load attempt failed. Distinguishes a
+  /// genuinely absent model from a real ORT failure so on-device faults are
+  /// diagnosable instead of silently reported as "unavailable".
+  String? get loadError => _loadError;
 
   /// Startup mode: 'eager' loads now, 'lazy' defers to first classify() call.
   /// The benchmark screen times both; see docs/APP_SPIKE.md.
@@ -83,7 +96,7 @@ class CnnClassifier {
     if (backend == CnnBackend.tflite) {
       // Quantized .tflite not converted yet (needs TF toolchain); report the
       // gap instead of failing silently.
-      return CnnClassifier._missing(modelAsset);
+      return CnnClassifier._missing(modelAsset, 'tflite backend not built');
     }
     if (lazy) return CnnClassifier._deferredOnnx(modelAsset);
     return _loadOnnxEager(modelAsset);
@@ -93,8 +106,9 @@ class CnnClassifier {
     try {
       final session = await OnnxRuntime().createSessionFromAsset(modelAsset);
       return CnnClassifier._onnx(session, modelAsset);
-    } catch (_) {
-      return CnnClassifier._missing(modelAsset);
+    } catch (e) {
+      debugPrint('CnnClassifier: failed to load $modelAsset — $e');
+      return CnnClassifier._missing(modelAsset, '$e');
     }
   }
 
@@ -105,34 +119,44 @@ class CnnClassifier {
     final asset = _lazyOnnxAsset ?? _modelAsset;
     try {
       _session = await OnnxRuntime().createSessionFromAsset(asset);
-    } catch (_) {
+      _loadError = null;
+    } catch (e) {
       // Stay in modelMissing mode; classify() reports the gap.
+      _loadError = '$e';
+      debugPrint('CnnClassifier: lazy load of $asset failed — $e');
     }
   }
 
   /// Preprocess X-ray bytes to the model's expected [1,3,224,224] float input,
   /// flattened to a Float32List for the ORT NCHW tensor.
+  ///
+  /// Mirrors the backend `_preprocess_xray` transform exactly: PIL
+  /// `.convert('RGB')` followed by `transforms.Resize((224, 224))` — a direct
+  /// 224x224 squash (aspect ratio intentionally not preserved) with
+  /// antialiased bilinear resampling.
+  ///
+  /// `Interpolation.average` is an area filter, which is the correct choice
+  /// when downscaling a large radiograph to 224 and the closest match to
+  /// torchvision's antialiased resize. The previous default
+  /// (`Interpolation.nearest`) aliased badly and was a train/inference
+  /// mismatch.
   static Float32List preprocessXray(img.Image src) {
+    final rgb = src.numChannels == 3 ? src : src.convert(numChannels: 3);
     final resized = img.copyResize(
-      src,
+      rgb,
       width: xrayInputSize,
       height: xrayInputSize,
+      interpolation: img.Interpolation.average,
     );
-    final out = Float32List(1 * 3 * xrayInputSize * xrayInputSize);
-    var i = 0;
-    for (var c = 0; c < 3; c++) {
-      for (var y = 0; y < xrayInputSize; y++) {
-        for (var x = 0; x < xrayInputSize; x++) {
-          final pixel = resized.getPixel(x, y);
-          final v =
-              (c == 0
-                  ? pixel.r
-                  : c == 1
-                  ? pixel.g
-                  : pixel.b) /
-              255.0;
-          out[i++] = (v - xrayMean[c]) / xrayStd[c];
-        }
+    const plane = xrayInputSize * xrayInputSize;
+    final out = Float32List(3 * plane);
+    for (var y = 0; y < xrayInputSize; y++) {
+      for (var x = 0; x < xrayInputSize; x++) {
+        final pixel = resized.getPixel(x, y);
+        final idx = y * xrayInputSize + x;
+        out[idx] = (pixel.r / 255.0 - xrayMean[0]) / xrayStd[0];
+        out[plane + idx] = (pixel.g / 255.0 - xrayMean[1]) / xrayStd[1];
+        out[2 * plane + idx] = (pixel.b / 255.0 - xrayMean[2]) / xrayStd[2];
       }
     }
     return out;
@@ -149,6 +173,8 @@ class CnnClassifier {
         probabilities: {for (final l in xrayLabels) l: 0},
         latencyMs: DateTime.now().difference(started).inMilliseconds,
         modelAsset: _modelAsset,
+        note: 'On-device classifier unavailable'
+            '${_loadError == null ? '' : ' ($_loadError)'}',
       );
     }
     final bytes = await file.readAsBytes();
@@ -168,7 +194,7 @@ class CnnClassifier {
       final logitsValue = outputs['logits'] ?? outputs.values.first;
       final flat = await logitsValue.asFlattenedList();
       final logits = flat.map((e) => (e as num).toDouble()).toList();
-      final scores = _softmax(logits);
+      final scores = softmax(logits);
       var best = 0;
       for (var i = 1; i < scores.length; i++) {
         if (scores[i] > scores[best]) best = i;
@@ -188,27 +214,26 @@ class CnnClassifier {
     }
   }
 
-  static List<double> _softmax(List<double> logits) {
+  /// Numerically stable softmax over raw logits.
+  ///
+  /// Exposed for regression testing: an earlier hand-rolled Taylor-series
+  /// `exp` returned negative values for the negative arguments this shift
+  /// always produces, which flipped the argmax and mislabelled confident
+  /// predictions.
+  @visibleForTesting
+  static List<double> softmax(List<double> logits) {
+    if (logits.isEmpty) return const [];
     var maxLogit = logits.first;
     for (final l in logits) {
       if (l > maxLogit) maxLogit = l;
     }
-    final exps = logits.map((l) => _exp(l - maxLogit)).toList();
+    final exps = logits.map((l) => math.exp(l - maxLogit)).toList();
     var sum = 0.0;
     for (final e in exps) {
       sum += e;
     }
+    if (sum <= 0) return List<double>.filled(logits.length, 0);
     return exps.map((e) => e / sum).toList();
-  }
-
-  static double _exp(double x) {
-    var result = 1.0;
-    var term = 1.0;
-    for (var n = 1; n < 24; n++) {
-      term *= x / n;
-      result += term;
-    }
-    return result;
   }
 
   Future<void> close() async {

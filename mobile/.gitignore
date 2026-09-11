@@ -4,7 +4,10 @@
 *.pyc
 *.swp
 .DS_Store
-# Local backend pointer for on-device runs (see .env.example).
+# Local runtime config for on-device runs (see .env.example). Contains real
+# client IDs / tokens — never commit. `.env` is also caught by the root
+# .gitignore; listed here so it holds regardless of the root file.
+.env
 .env.local
 # Bundled model binaries: the pneumonia ResNet50 ONNX and the quantized T5
 # summarizer are tracked build artifacts (see backend/scripts/). All other

@@ -73,6 +73,11 @@ class _BenchTabState extends State<BenchTab> {
       'slm t5-q8 onnx ready=${onnx.isReady}; '
       'llama_cpp_dart ready=${llama.isReady} (future path)',
     );
+    // Release the ~94 MB of native T5 sessions this run created. Without
+    // this, every tap of "Run measurements" leaked another pair of sessions
+    // and would eventually OOM the device.
+    await onnx.close();
+    await llama.close();
     lines.add(
       'inference queue max depth observed: ${widget.models.queue.maxDepthObserved}',
     );
@@ -117,26 +122,38 @@ class SpikeTab extends StatefulWidget {
 
 class _SpikeTabState extends State<SpikeTab> {
   String _status = 'Spike not run on this device yet.';
+  bool _busy = false;
 
   Future<void> _runSpike() async {
-    final t5 = OnnxSlmRuntime();
+    setState(() {
+      _busy = true;
+      _status = 'Running on-device spike…';
+    });
     final sw = Stopwatch()..start();
-    await t5.load();
-    final t5Ms = sw.elapsedMilliseconds;
     String probe = 'not run';
-    if (t5.isReady) {
-      try {
+    var ready = false;
+    var loadMs = 0;
+    try {
+      // Reuse the shared standardizer rather than constructing a second one:
+      // this reflects exactly what the capture pipeline runs and avoids
+      // holding two ~94 MB copies of the T5 sessions at once.
+      final t5 = await widget.models.loadSlm(SlmBackend.onnx);
+      loadMs = sw.elapsedMilliseconds;
+      ready = t5.isReady;
+      if (ready && t5 is OnnxSlmRuntime) {
         final out = await t5.standardizeText(
           'The patient was prescribed Amoxicillin 500 mg twice daily for 7 days.',
         );
         probe = '${out['medical_summary']} (${out['latency_ms']} ms)';
-      } catch (e) {
-        probe = 'failed: $e';
       }
+    } catch (e) {
+      probe = 'failed: $e';
     }
+    if (!mounted) return;
     setState(() {
+      _busy = false;
       _status =
-          't5-q8 onnx: ready=${t5.isReady} (load $t5Ms ms)\n'
+          't5-q8 onnx: ready=$ready (load $loadMs ms)\n'
           'live probe: $probe\n'
           'Decision: T5 standardizer wired (same checkpoint as backend). '
           'See docs/APP_SPIKE.md.';
@@ -155,7 +172,7 @@ class _SpikeTabState extends State<SpikeTab> {
         ),
         const SizedBox(height: 8),
         FilledButton(
-          onPressed: _runSpike,
+          onPressed: _busy ? null : _runSpike,
           child: const Text('Run spike probe'),
         ),
         const SizedBox(height: 8),

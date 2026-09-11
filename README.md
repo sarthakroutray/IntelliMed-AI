@@ -11,9 +11,10 @@ The system supports:
 - On-device Flutter app (Android-first) that syncs structured results to `/api/v2`
 
 API versioning: the website uses `/api/v1/*` (frozen contract); the mobile
-app uses `/api/v2/*` (structured ingest tagged `source: "app"`). Doctor-side
-verification happens on the backend/dashboard; the app only produces and
-syncs structured context for review, never raw documents.
+app uses `/api/v2/*` for all result traffic (structured ingest tagged
+`source: "app"`) and calls `/api/v1/auth/google-login` once to sign in.
+Doctor-side verification happens on the backend/dashboard; the app only
+produces and syncs structured context for review, never raw documents.
 
 ## 1. Project Overview
 
@@ -211,10 +212,11 @@ Required values to set in backend/.env:
 - SUPABASE_SERVICE_KEY
 - SUPABASE_STORAGE_BUCKET
 
-Generate Prisma client:
+Generate Prisma client and sync database schema:
 
 ```bash
 prisma generate
+prisma db push
 ```
 
 Run backend:
@@ -253,13 +255,24 @@ App URL:
 ```bash
 cd mobile
 flutter pub get
+copy .env.example .env      # then fill in GOOGLE_WEB_CLIENT_ID
 ```
 
-Run (point at the backend; Android emulator uses `10.0.2.2` for host localhost):
+Run (Android emulator uses `10.0.2.2` for host localhost):
 
 ```bash
-flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8000
+flutter run --dart-define-from-file=.env
 ```
+
+Flutter does not auto-load `.env`; it must be applied with
+`--dart-define-from-file=.env`. The real `.env` is gitignored.
+
+The app signs in with Google (patient-only) and exchanges the ID token for a
+backend JWT at `/api/v1/auth/google-login`, then stores it in Keystore-backed
+encrypted storage. That is the app's only v1 call; inference and upload stay on
+v2. `GOOGLE_WEB_CLIENT_ID` (the **web** client ID, used as `serverClientId`)
+has no built-in default; `AUTH_TOKEN` remains an emulator-only OAuth bypass.
+See `mobile/README.md` for the required Google Cloud setup.
 
 Model assets are already tracked under `mobile/assets/models/` (LFS):
 pneumonia ResNet50 ONNX + quantized T5 encoder/decoder + tokenizer.
@@ -303,18 +316,37 @@ Compose file:
 - DOCTOR_ACCESS_CODE
 - ADMIN_EMAIL
 - ADMIN_PASSWORD
+- MAX_CONCURRENT_HEAVY
+- AUTH_USER_CACHE_TTL_SECONDS / DOCTOR_PATIENT_CACHE_TTL_SECONDS / REQUEST_CACHE_MAX_ENTRIES
+- USE_OPENDATALOADER_FOR_PDFS / OPENDATALOADER_USE_STRUCT_TREE / OPENDATALOADER_HYBRID (+ URL/TIMEOUT)
 - LAB_OPENDATALOADER_HYBRID (+ MODE/URL/TIMEOUT)
 - LAB_MIN_EXTRACT_TEXT_CHARS
 - LAB_SLM_PROVIDER (+ URL/MODEL/API_KEY; empty = deterministic normalizer)
+- MEDICAL_SUMMARIZER_MODEL / SUMMARY_MAX_LENGTH / SUMMARY_MIN_LENGTH / SUMMARIZER_MAX_INPUT_CHARS
 
 ### frontend/.env
-- VITE_API_BASE_URL
+- VITE_API_BASE_URL (must end in `/api/v1`; the client appends it if missing)
 - VITE_GOOGLE_CLIENT_ID
+
+### mobile (dart-defines; copy `.env.example` to `.env`)
+Applied with `flutter run --dart-define-from-file=.env` (Flutter does not
+auto-load `.env`). The real `.env` is gitignored.
+- API_BASE_URL (backend origin only, no `/api` suffix; emulator `10.0.2.2`)
+- GOOGLE_WEB_CLIENT_ID (web OAuth client ID, used as `serverClientId`; no default)
+- AUTH_TOKEN (optional emulator-only OAuth bypass)
+- CNN_MODEL_ASSET / SLM_GGUF_ASSET / EAGER_MODEL_LOAD / CNN_BACKEND
+
+### root .env (docker compose interpolation)
+- VITE_GOOGLE_CLIENT_ID
+- INSTALL_SPACY_MODEL
+- LAB_OPENDATALOADER_HYBRID_URL
+- See `.env.example` at the repo root.
 
 ## 10. API Surface (High-Level)
 
 All website routes live under `/api/v1/*` (frozen contract). The mobile app
-uses `/api/v2/*` only.
+uses `/api/v2/*` for all result traffic; its single v1 call is
+`POST /api/v1/auth/google-login` to exchange a Google ID token for a JWT.
 
 ### Auth (`/api/v1`)
 - POST /api/v1/auth/token

@@ -30,6 +30,10 @@ class T5Tokenizer {
   final int eosId;
   final int vocabSize;
 
+  /// id -> piece, built once. Decode previously did a linear scan of the
+  /// whole 32k vocab per emitted token.
+  List<String>? _idToPieceCache;
+
   static T5Tokenizer? _cache;
 
   static Future<T5Tokenizer> load([
@@ -94,11 +98,18 @@ class T5Tokenizer {
   }
 
   String? _idToPiece(int id) {
-    // Reverse lookup is O(n); vocab is small and decode runs once per result.
+    if (id < 0 || id >= vocabSize) return null;
+    final cache = _idToPieceCache ??= _buildIdToPiece();
+    final piece = cache[id];
+    return piece.isEmpty ? null : piece;
+  }
+
+  List<String> _buildIdToPiece() {
+    final table = List<String>.filled(vocabSize, '');
     for (final e in pieceToId.entries) {
-      if (e.value == id) return e.key;
+      if (e.value >= 0 && e.value < vocabSize) table[e.value] = e.key;
     }
-    return null;
+    return table;
   }
 
   static String _normalize(String text) {

@@ -82,6 +82,8 @@ async def upload_structured_result(
             'ocr_excerpt': payload.ocr_excerpt,
             'latency_ms': payload.latency_ms,
         }
+        if payload.summary_context:
+            result['summary_context'] = payload.summary_context
     else:
         result = {
             'pipeline': f'{payload.kind}/app-on-device/v1',
@@ -91,6 +93,8 @@ async def upload_structured_result(
             'ocr_excerpt': payload.ocr_excerpt,
             'latency_ms': payload.latency_ms,
         }
+        if payload.summary_context:
+            result['summary_context'] = payload.summary_context
 
     if payload.kind == 'lab_report':
         db_report = await db.labreport.create(
