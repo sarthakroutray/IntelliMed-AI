@@ -14,6 +14,7 @@
 // passed as `serverClientId` so the returned idToken is audienced to the
 // backend's `GOOGLE_CLIENT_ID`.
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -294,6 +295,11 @@ class AuthService {
   String get _authUrl =>
       '${baseUrl.replaceAll(RegExp(r'/+$'), '')}/api/v1/auth/google-login';
 
+  /// Deadline for the token exchange. Without it, a backend that accepts the
+  /// connection but never answers leaves the sign-in button spinning forever —
+  /// the transport-error handlers only catch a connection that fails outright.
+  static const _exchangeTimeout = Duration(seconds: 20);
+
   /// Configure the Google plugin. Does not sign anyone in.
   Future<void> initialize() => _provider.initialize();
 
@@ -377,10 +383,18 @@ class AuthService {
   Future<String> _exchange(String idToken) async {
     final http.Response resp;
     try {
-      resp = await _client.post(
-        Uri.parse(_authUrl),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'token': idToken, 'role': appAuthRole}),
+      resp = await _client
+          .post(
+            Uri.parse(_authUrl),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({'token': idToken, 'role': appAuthRole}),
+          )
+          .timeout(_exchangeTimeout);
+    } on TimeoutException {
+      throw AuthException(
+        AuthErrorKind.offline,
+        'The server took too long to respond. Check the device has network '
+        'access and that API_BASE_URL points at the right server.',
       );
     } on http.ClientException catch (_) {
       throw AuthException(

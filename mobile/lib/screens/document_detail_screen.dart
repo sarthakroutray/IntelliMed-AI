@@ -1,9 +1,12 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../api/api_client.dart';
 import '../api/models.dart';
 import '../api/patient_repository.dart';
+import '../store.dart';
 import '../widgets/app_card.dart';
 import '../widgets/feedback.dart';
 import '../widgets/result_viewers.dart';
@@ -33,6 +36,10 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
   String? _error;
   DocumentDetail? _document;
 
+  /// The on-device structured result for this document, when it came from a
+  /// capture on this device. Rendered even with no network at all.
+  ResultEnvelope? _local;
+
   @override
   void initState() {
     super.initState();
@@ -46,6 +53,17 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
         _error = null;
       });
     }
+
+    // On-device first: a synced capture keeps its full structured result in the
+    // local store, so the analysis reads with no network.
+    final local = await _loadLocalEnvelope();
+    if (!mounted) return;
+    setState(() {
+      _local = local;
+      // Nothing left to wait for once there is something local to show.
+      if (local != null) _loading = false;
+    });
+
     try {
       final doc = await widget.repository.getDocument(widget.documentId);
       if (!mounted) return;
@@ -56,10 +74,31 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
     } on ApiException catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = e.message;
+        // Only surface the failure when there is nothing local to fall back on.
+        _error = _local == null ? e.message : null;
         _loading = false;
       });
     }
+  }
+
+  /// The stored structured result for this server document, when the document
+  /// originated from a capture on this device. Null for server-only uploads.
+  Future<ResultEnvelope?> _loadLocalEnvelope() async {
+    final store = await ResultStore.instance();
+    final rows = await store.byServerId(widget.documentId);
+    for (final row in rows) {
+      // Lab reports live in their own server table and can share an id with a
+      // medical document; this screen renders a document, so skip them.
+      if ('${row['kind']}' == 'lab_report') continue;
+      try {
+        return ResultEnvelope.fromJson(
+          jsonDecode('${row['result_json']}') as Map<String, dynamic>,
+        );
+      } catch (_) {
+        return null;
+      }
+    }
+    return null;
   }
 
   Future<void> _analyze() async {
@@ -208,6 +247,27 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
+                ] else if (_local != null) ...[
+                  const InlineBanner(
+                    tone: BannerTone.warning,
+                    icon: Icons.cloud_off_outlined,
+                    title: 'Offline',
+                    message: 'Showing the result stored on this device.',
+                  ),
+                  const SizedBox(height: 16),
+                ],
+                // The on-device result is the real analysis for a synced
+                // capture; the server only holds a summary of it.
+                if (_local != null) ...[
+                  const InlineBanner(
+                    tone: BannerTone.info,
+                    icon: Icons.smartphone_outlined,
+                    title: 'On-device result',
+                    message: 'Produced on this phone — no network needed.',
+                  ),
+                  const SizedBox(height: 12),
+                  ResultEnvelopeView(envelope: _local!),
+                ] else if (doc != null) ...[
                   if (doc.isPending)
                     const Padding(
                       padding: EdgeInsets.only(bottom: 12),

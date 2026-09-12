@@ -712,8 +712,15 @@ class LabTest {
     this.rangeHigh,
     this.rangeRaw,
     this.flagInSource,
-    required this.ocrConfidence,
+    this.ocrConfidence = 'low',
     this.sourceBbox,
+    this.abnormal,
+    this.direction,
+    this.severity,
+    this.isPanicValue = false,
+    this.calculationMethod,
+    this.formula,
+    this.rangeSource,
   });
 
   final String testName;
@@ -731,6 +738,14 @@ class LabTest {
   /// {page, bbox} — the value cell's geometry, for reviewer traceability.
   final Map<String, dynamic>? sourceBbox;
 
+  final bool? abnormal;
+  final String? direction;
+  final String? severity;
+  final bool isPanicValue;
+  final String? calculationMethod;
+  final String? formula;
+  final String? rangeSource;
+
   LabTest withTestName(String name) => LabTest(
     testName: name,
     rawTestName: rawTestName,
@@ -742,6 +757,13 @@ class LabTest {
     flagInSource: flagInSource,
     ocrConfidence: ocrConfidence,
     sourceBbox: sourceBbox,
+    abnormal: abnormal,
+    direction: direction,
+    severity: severity,
+    isPanicValue: isPanicValue,
+    calculationMethod: calculationMethod,
+    formula: formula,
+    rangeSource: rangeSource,
   );
 
   LabTest withSourceBbox(Map<String, dynamic>? box) => LabTest(
@@ -755,9 +777,36 @@ class LabTest {
     flagInSource: flagInSource,
     ocrConfidence: ocrConfidence,
     sourceBbox: box,
+    abnormal: abnormal,
+    direction: direction,
+    severity: severity,
+    isPanicValue: isPanicValue,
+    calculationMethod: calculationMethod,
+    formula: formula,
+    rangeSource: rangeSource,
   );
 
-  /// Exactly the 10 schema keys, in the backend's insertion order.
+  factory LabTest.fromJson(Map<String, dynamic> json) => LabTest(
+    testName: json['test_name'] as String? ?? json['raw_test_name'] as String? ?? 'Unknown',
+    rawTestName: json['raw_test_name'] as String? ?? json['test_name'] as String? ?? 'Unknown',
+    value: (json['value'] as num?)?.toDouble(),
+    unit: json['unit'] as String?,
+    rangeLow: (json['range_low'] as num?)?.toDouble(),
+    rangeHigh: (json['range_high'] as num?)?.toDouble(),
+    rangeRaw: json['range_raw'] as String?,
+    flagInSource: json['flag_in_source'] as String?,
+    ocrConfidence: json['ocr_confidence'] as String? ?? 'low',
+    sourceBbox: json['source_bbox'] is Map ? (json['source_bbox'] as Map).cast<String, dynamic>() : null,
+    abnormal: json['abnormal'] as bool?,
+    direction: json['direction'] as String?,
+    severity: json['severity'] as String?,
+    isPanicValue: json['is_panic_value'] as bool? ?? false,
+    calculationMethod: json['calculation_method'] as String?,
+    formula: json['formula'] as String?,
+    rangeSource: json['range_source'] as String?,
+  );
+
+  /// Exactly the 10 schema keys for Stage 2, plus Stage 3 annotations when present.
   Map<String, dynamic> toJson() => {
     'test_name': testName,
     'raw_test_name': rawTestName,
@@ -769,6 +818,13 @@ class LabTest {
     'flag_in_source': flagInSource,
     'ocr_confidence': ocrConfidence,
     'source_bbox': sourceBbox,
+    if (abnormal != null) 'abnormal': abnormal,
+    if (direction != null) 'direction': direction,
+    if (severity != null) 'severity': severity,
+    if (isPanicValue) 'is_panic_value': isPanicValue,
+    if (calculationMethod != null) 'calculation_method': calculationMethod,
+    if (formula != null) 'formula': formula,
+    if (rangeSource != null) 'range_source': rangeSource,
   };
 }
 
@@ -779,6 +835,13 @@ class PatientContext {
   final int? age;
   final String? sex;
   final String? reportDate;
+
+  factory PatientContext.fromJson(Map<String, dynamic> json) => PatientContext(
+    name: json['name'] as String?,
+    age: (json['age'] as num?)?.toInt(),
+    sex: json['sex'] as String?,
+    reportDate: json['report_date'] as String?,
+  );
 
   Map<String, dynamic> toJson() => {
     'name': name,
@@ -793,6 +856,14 @@ class LabPanel {
 
   final String panelName;
   final List<LabTest> tests;
+
+  factory LabPanel.fromJson(Map<String, dynamic> json) => LabPanel(
+    panelName: json['panel_name'] as String? ?? 'Ungrouped',
+    tests: [
+      for (final t in (json['tests'] as List? ?? const []))
+        LabTest.fromJson((t as Map).cast<String, dynamic>()),
+    ],
+  );
 
   Map<String, dynamic> toJson() => {
     'panel_name': panelName,
@@ -812,6 +883,20 @@ class LabDocument {
   final PatientContext patientContext;
   final String? labName;
   final List<LabPanel> panels;
+
+  factory LabDocument.fromJson(Map<String, dynamic> json) => LabDocument(
+    documentType: json['document_type'] as String? ?? 'lab_report',
+    patientContext: json['patient_context'] != null
+        ? PatientContext.fromJson(
+            (json['patient_context'] as Map).cast<String, dynamic>(),
+          )
+        : const PatientContext(),
+    labName: json['lab_name'] as String?,
+    panels: [
+      for (final p in (json['panels'] as List? ?? const []))
+        LabPanel.fromJson((p as Map).cast<String, dynamic>()),
+    ],
+  );
 
   Map<String, dynamic> toJson() => {
     'document_type': documentType,

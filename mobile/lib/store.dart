@@ -100,6 +100,22 @@ class ResultStore {
     );
   }
 
+  /// Lab-report rows for the trends view, oldest first.
+  ///
+  /// Trends read the stored envelope (the source of truth) rather than a
+  /// denormalised table: at this data volume a query is cheaper than a
+  /// migration plus the delete/re-run invalidation that a second table would
+  /// need to stay correct.
+  Future<List<Map<String, Object?>>> labReportRows({int limit = 500}) {
+    return _db.query(
+      'results',
+      where: 'kind = ?',
+      whereArgs: ['lab_report'],
+      orderBy: 'created_at ASC, id ASC',
+      limit: limit,
+    );
+  }
+
   /// A single stored row, for the capture detail viewer.
   Future<Map<String, Object?>?> byId(int id) async {
     final rows = await _db.query(
@@ -118,6 +134,20 @@ class ResultStore {
       'results',
       where: 'local_path = ?',
       whereArgs: [localPath],
+      orderBy: 'id DESC',
+    );
+  }
+
+  /// Local rows already synced to the server record [serverId].
+  ///
+  /// The server keeps lab reports and medical documents in separate tables with
+  /// independent ids, so a single [serverId] can match two rows of different
+  /// `kind`. Callers pick the row they mean by `kind`.
+  Future<List<Map<String, Object?>>> byServerId(int serverId) {
+    return _db.query(
+      'results',
+      where: 'server_id = ?',
+      whereArgs: [serverId],
       orderBy: 'id DESC',
     );
   }

@@ -18,8 +18,10 @@ Create a Vercel project with the root directory set to `frontend`.
 ### Required Vercel environment variables
 
 - `VITE_API_BASE_URL`
-  Example: `https://intellimed-backend.modal.run/api/v1`
-  (Must include the `/api/v1` suffix; the client appends it only if missing.)
+  Example: `https://<workspace>--intellimed-backend.modal.run/api/v1`
+  (e.g. `https://sarthak-routray2006--intellimed-backend.modal.run/api/v1`).
+  Must include the `/api/v1` suffix; the client appends it only if missing.
+  Note the `modal.run` host is `<workspace>--<app-name>`, not the app name alone.)
 - `VITE_GOOGLE_CLIENT_ID`
 
 ### Vercel build settings

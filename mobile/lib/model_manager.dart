@@ -6,23 +6,19 @@ import 'package:flutter/foundation.dart';
 import 'cnn_ocr.dart';
 import 'document_type.dart';
 import 'inference_queue.dart';
+import 'lab/clinical_engine.dart';
+import 'lab/extract.dart';
 import 'lab/ocr_model.dart';
+import 'lab/pdf_text.dart';
 import 'lab/render.dart';
 import 'lab/rule_engine.dart';
 import 'lab/stage1_model.dart';
-import 'lab/structure.dart';
 import 'normalize.dart';
 import 'page_source.dart';
 import 'schemas.dart';
 import 'slm_runtime.dart';
 import 'store.dart';
 import 'sync.dart';
-
-/// On-device bounding boxes are page-relative (0..1), so the ported rule
-/// engine's text-inside-table tolerance must be expressed the same way. The
-/// backend's 5.0 is in PDF points; applied to normalised units it would treat
-/// an entire page as "inside" a table and skip row recovery.
-const _pageRelativeBboxTolerance = 0.01;
 
 /// Owns both model slots and the serial inference queue.
 ///
@@ -67,8 +63,12 @@ class ModelManager {
   void resetSlmFailure() => _slmUnavailable = false;
 
   Future<void> init() async {
-    ocr = OcrService();
+    // The ML Kit recognizer is built on first use (see `_recognizePages`):
+    // constructing it here put a native platform-channel init on the path
+    // before the first frame, for a handle nothing touches until the user
+    // captures something.
     if (eagerLoad) {
+      ocr = OcrService();
       await loadCnn();
       await loadSlm(SlmBackend.onnx);
     }
@@ -133,16 +133,19 @@ class ModelManager {
   }) {
     return queue.add(() async {
       final started = DateTime.now();
-      final pages = await PageSource.pagesFor(source.path);
+      final read = await _readPages(source);
+      final ocrPages = read.ocrPages;
+      final pages = read.pages;
       try {
-        final ocrPages = await _recognizePages(pages.pages);
         final ocrText = _flatText(ocrPages);
         final signals = analyseText(ocrText);
 
+        // A digital PDF read from its text layer has no page images to classify.
+        final canClassify = pages.pages.isNotEmpty;
         XrayPatternResult? classification;
         TypeDetection detection;
 
-        if (needsClassifier(signals)) {
+        if (canClassify && needsClassifier(signals)) {
           // Sparse text with no document markers: only now is the X-ray head
           // meaningful. A load/run failure must not fail the capture.
           try {
@@ -158,7 +161,7 @@ class ModelManager {
           detection = decideType(signals: signals);
         }
 
-        if (detection.type == DocumentType.xray) {
+        if (detection.type == DocumentType.xray && canClassify) {
           final result = classification ?? await _classify(pages.pages.first);
           return _storeAndSync(
             kind: 'xray',
@@ -178,6 +181,7 @@ class ModelManager {
             started: started,
             detection: detection,
             pages: pages,
+            usedTextLayer: read.usedTextLayer,
           ),
           sync: sync,
           token: token,
@@ -200,9 +204,10 @@ class ModelManager {
   }) {
     return queue.add(() async {
       final started = DateTime.now();
-      final pages = await PageSource.pagesFor(source.path);
+      final read = await _readPages(source);
+      final ocrPages = read.ocrPages;
+      final pages = read.pages;
       try {
-        final ocrPages = await _recognizePages(pages.pages);
         final detection = TypeDetection(
           type: DocumentTypeWire.fromWire(kind) ?? DocumentType.labReport,
           confidence: 1,
@@ -218,6 +223,7 @@ class ModelManager {
             started: started,
             detection: detection,
             pages: pages,
+            usedTextLayer: read.usedTextLayer,
           ),
           sync: sync,
           token: token,
@@ -265,20 +271,22 @@ class ModelManager {
   /// screen to compare the on-device engine against the server pipeline.
   Future<Map<String, dynamic>> localLabPreview({required File source}) {
     return queue.add(() async {
-      final pages = await PageSource.pagesFor(source.path);
+      final read = await _readPages(source);
+      final ocrPages = read.ocrPages;
       try {
-        final ocrPages = await _recognizePages(pages.pages);
-        final stage1 = buildStage1(ocrPages);
-        final document = buildLabDocument(
-          stage1,
-          bboxTolerance: _pageRelativeBboxTolerance,
-        );
+        final extraction = extractLabDocument(ocrPages);
         return {
-          'normalized': document.toJson(),
-          'structure': _structureJson(stage1, document, ocrPages),
+          'normalized': extraction.document.toJson(),
+          'structure': _structureJson(
+            extraction.stage1,
+            extraction.document,
+            ocrPages,
+            recoveredTests: extraction.recoveredTests,
+            textLayer: read.usedTextLayer,
+          ),
         };
       } finally {
-        await pages.dispose();
+        await read.pages.dispose();
       }
     });
   }
@@ -286,6 +294,38 @@ class ModelManager {
   // -------------------------------------------------------------------
   // Internals (never enqueue)
   // -------------------------------------------------------------------
+
+  /// Read a document into OCR pages.
+  ///
+  /// A digital PDF is read from its exact text layer (pdfrx/pdfium) first;
+  /// rasterize + OCR is only used when there is no usable text layer (scanned
+  /// or image-only PDF, or extraction failed).
+  Future<({List<OcrPage> ocrPages, PageSet pages, bool usedTextLayer})>
+  _readPages(File source) async {
+    if (isPdf(source.path)) {
+      final layer = await readPdfTextLayer(source.path, maxPages: maxPdfPages);
+      if (layer != null) {
+        return (
+          ocrPages: layer.pages,
+          pages: PageSet(
+            pages: const [],
+            totalPages: layer.totalPages,
+            processedCount: layer.pages.length,
+          ),
+          usedTextLayer: true,
+        );
+      }
+    }
+    final pages = await PageSource.pagesFor(source.path);
+    try {
+      final ocrPages = await _recognizePages(pages.pages);
+      return (ocrPages: ocrPages, pages: pages, usedTextLayer: false);
+    } catch (_) {
+      // Never leak rasterized scratch files when OCR fails mid-way.
+      await pages.dispose();
+      rethrow;
+    }
+  }
 
   /// OCR every page in order, preserving word geometry.
   ///
@@ -318,29 +358,69 @@ class ModelManager {
     required DateTime started,
     required TypeDetection detection,
     required PageSet pages,
+    bool usedTextLayer = false,
   }) async {
     final ocrText = _flatText(ocrPages);
     final isPrescription = kind == 'prescription';
 
     final Map<String, dynamic> normalized;
+    Map<String, dynamic>? stage3;
     final Map<String, dynamic>? structure;
+    List<String>? warnings;
     final String baseEngine;
     var summaryInput = ocrText;
 
     if (isPrescription) {
       normalized = await normalizePrescriptionInBackground(ocrText);
+      stage3 = null;
       structure = null;
       baseEngine = 'deterministic-v1';
     } else {
-      final stage1 = buildStage1(ocrPages);
-      final document = buildLabDocument(
-        stage1,
-        bboxTolerance: _pageRelativeBboxTolerance,
-      );
+      // Structural extraction plus a flat-text recovery pass, so a mis-guessed
+      // table can never extract fewer values than the plain-text parser.
+      final extraction = extractLabDocument(ocrPages);
+      final document = extraction.document;
       normalized = document.toJson();
-      structure = _structureJson(stage1, document, ocrPages);
+
+      // Run Stage 3 arithmetic & clinical rule engine on-device
+      final stage3Result = annotateLabDocument(document);
+      final stage3Doc = stage3Result.document;
+      stage3 = {
+        ...stage3Doc.toJson(),
+        'flagged_patterns': stage3Result.patterns.map((p) => {
+          'pattern_name': p.patternName,
+          'surfaced_text': p.surfacedText,
+          'match_type': p.matchType,
+          'panel_name': p.panelName,
+          'severity': p.severity,
+          'category': p.category,
+          'clinical_implication': p.clinicalImplication,
+          'differential_diagnosis': p.differentialDiagnosis,
+          'triggering_tests': p.triggeringTests.map((t) => {
+            'test_name': t.testName,
+            'raw_test_name': t.rawTestName,
+            'value': t.value,
+            'unit': t.unit,
+            'direction': t.direction,
+            'severity': t.severity,
+          }).toList(),
+        }).toList(),
+      };
+
+      structure = _structureJson(
+        extraction.stage1,
+        document,
+        ocrPages,
+        recoveredTests: extraction.recoveredTests,
+        textLayer: usedTextLayer,
+      );
+      // Surface extraction degradation and arithmetic warnings on device
+      warnings = [
+        ...extraction.stage1.warnings,
+        ...stage3Result.warnings,
+      ];
       baseEngine = 'rule-engine-v2';
-      summaryInput = renderLabText(document, fallback: ocrText);
+      summaryInput = renderLabText(stage3Doc, fallback: ocrText);
     }
 
     var engine = baseEngine;
@@ -379,12 +459,14 @@ class ModelManager {
     return buildResultEnvelope(
       kind: kind,
       normalized: normalized,
+      stage3: stage3,
       ocrText: ocrText,
       engine: engine,
       latencyMs: DateTime.now().difference(started).inMilliseconds,
       summaryContext: summaryContext,
       detection: _detectionJson(detection),
       structure: structure,
+      warnings: warnings,
       pageCount: pages.totalPages,
       pagesTruncated: pages.truncated,
     );
@@ -395,8 +477,10 @@ class ModelManager {
   Map<String, dynamic> _structureJson(
     LabStage1 stage1,
     LabDocument document,
-    List<OcrPage> ocrPages,
-  ) {
+    List<OcrPage> ocrPages, {
+    int recoveredTests = 0,
+    bool textLayer = false,
+  }) {
     final confidences = [
       for (final panel in document.panels)
         for (final test in panel.tests) test.ocrConfidence,
@@ -411,8 +495,13 @@ class ModelManager {
     }
     return {
       'engine': stage1.extractionEngine,
+      // Whether values came from a digital PDF's exact text layer or from OCR.
+      'source': textLayer ? 'pdf-text' : 'ocr',
       'tables': stage1.tables.length,
       'tests': confidences.length,
+      // How many rows only the flat-text recovery pass found. A reviewer can
+      // see how much the geometry heuristic missed.
+      'recovered': recoveredTests,
       'confidence': confidence,
       'pages_without_tables': [
         for (final page in ocrPages)

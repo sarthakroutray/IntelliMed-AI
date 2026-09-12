@@ -1,0 +1,77 @@
+{
+  "document_type": "lab_report",
+  "patient_context": {
+    "name": null,
+    "age": null,
+    "sex": null,
+    "report_date": null
+  },
+  "lab_name": null,
+  "panels": [
+    {
+      "panel_name": "SINGLE-CELL FUSED ROWS",
+      "tests": [
+        {
+          "test_name": "Hemoglobin",
+          "raw_test_name": "Hemoglobin (Hb)",
+          "value": 11.2,
+          "unit": "g/dL",
+          "range_low": 13.0,
+          "range_high": 17.0,
+          "range_raw": "13.0-17.0",
+          "flag_in_source": null,
+          "ocr_confidence": "low",
+          "source_bbox": {
+            "page": 1,
+            "bbox": [
+              72.0,
+              80.0,
+              520.0,
+              98.0
+            ]
+          }
+        },
+        {
+          "test_name": "White Blood Cell Count",
+          "raw_test_name": "WBC",
+          "value": 7.5,
+          "unit": null,
+          "range_low": 4.0,
+          "range_high": 11.0,
+          "range_raw": "4.0-11.0",
+          "flag_in_source": null,
+          "ocr_confidence": "low",
+          "source_bbox": {
+            "page": 1,
+            "bbox": [
+              72.0,
+              100.0,
+              520.0,
+              118.0
+            ]
+          }
+        },
+        {
+          "test_name": "Platelet Count",
+          "raw_test_name": "Platelet Count",
+          "value": 250.0,
+          "unit": "10^3/uL",
+          "range_low": 150.0,
+          "range_high": 450.0,
+          "range_raw": "150-450",
+          "flag_in_source": null,
+          "ocr_confidence": "low",
+          "source_bbox": {
+            "page": 1,
+            "bbox": [
+              72.0,
+              120.0,
+              520.0,
+              138.0
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -29,6 +29,7 @@ class ProfileScreen extends StatefulWidget {
     required this.sync,
     required this.themeController,
     required this.refreshToken,
+    required this.isActive,
   });
 
   final AuthService auth;
@@ -37,6 +38,9 @@ class ProfileScreen extends StatefulWidget {
   final V2Sync sync;
   final ThemeController themeController;
   final int refreshToken;
+
+  /// Whether this is the tab currently shown; inactive tabs defer their reload.
+  final bool isActive;
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -74,13 +78,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void initState() {
     super.initState();
-    _load();
+    if (widget.isActive) _load();
   }
 
   @override
   void didUpdateWidget(covariant ProfileScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.refreshToken != _seenToken) _load();
+    if (widget.isActive && widget.refreshToken != _seenToken) _load();
   }
 
   @override

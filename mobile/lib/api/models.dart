@@ -80,6 +80,11 @@ class LabTest {
     this.sourceBbox,
     this.abnormal,
     this.direction,
+    this.severity,
+    this.isPanicValue = false,
+    this.calculationMethod,
+    this.formula,
+    this.rangeSource,
   });
 
   final String testName;
@@ -105,6 +110,21 @@ class LabTest {
   /// Stage 3 only: high | low.
   final String? direction;
 
+  /// Stage 3 only: critical | severe | moderate | mild | normal.
+  final String? severity;
+
+  /// Whether the value exceeds critical emergency panic limits.
+  final bool isPanicValue;
+
+  /// "derived" when calculated arithmetically, null when parsed from source.
+  final String? calculationMethod;
+
+  /// The medical formula used to calculate this derived test.
+  final String? formula;
+
+  /// "printed" or "standard_fallback".
+  final String? rangeSource;
+
   factory LabTest.fromJson(Map<String, dynamic> json) => LabTest(
     testName: _str(json['test_name']) ?? _str(json['raw_test_name']) ?? 'Unknown',
     rawTestName: _str(json['raw_test_name']) ?? _str(json['test_name']) ?? 'Unknown',
@@ -118,6 +138,11 @@ class LabTest {
     sourceBbox: _map(json['source_bbox']),
     abnormal: _bool(json['abnormal']),
     direction: _str(json['direction']),
+    severity: _str(json['severity']),
+    isPanicValue: _bool(json['is_panic_value']) ?? false,
+    calculationMethod: _str(json['calculation_method']),
+    formula: _str(json['formula']),
+    rangeSource: _str(json['range_source']),
   );
 
   /// "13 - 17" / "> 4" style range, preferring the explicit bounds.
@@ -159,7 +184,7 @@ class LabPanel {
   );
 }
 
-/// A Stage 3 pattern: an interpretation rule matched across tests in one panel.
+/// A Stage 3 pattern: an interpretation rule matched across tests in one panel or across the document.
 /// Every entry carries the exact values that triggered it, for traceability.
 class FlaggedPattern {
   FlaggedPattern({
@@ -167,6 +192,10 @@ class FlaggedPattern {
     required this.surfacedText,
     this.matchType,
     this.panelName,
+    this.severity,
+    this.category,
+    this.clinicalImplication,
+    this.differentialDiagnosis = const [],
     required this.triggeringTests,
   });
 
@@ -174,6 +203,10 @@ class FlaggedPattern {
   final String surfacedText;
   final String? matchType;
   final String? panelName;
+  final String? severity;
+  final String? category;
+  final String? clinicalImplication;
+  final List<String> differentialDiagnosis;
   final List<TriggeringTest> triggeringTests;
 
   factory FlaggedPattern.fromJson(Map<String, dynamic> json) => FlaggedPattern(
@@ -181,6 +214,10 @@ class FlaggedPattern {
     surfacedText: _str(json['surfaced_text']) ?? '',
     matchType: _str(json['match_type']),
     panelName: _str(json['panel_name']),
+    severity: _str(json['severity']),
+    category: _str(json['category']),
+    clinicalImplication: _str(json['clinical_implication']),
+    differentialDiagnosis: _list(json['differential_diagnosis']).map(_str).whereType<String>().toList(),
     triggeringTests: _list(json['triggering_tests'])
         .map(_map)
         .whereType<Map<String, dynamic>>()
@@ -196,6 +233,7 @@ class TriggeringTest {
     this.value,
     this.unit,
     this.direction,
+    this.severity,
   });
 
   final String testName;
@@ -203,6 +241,7 @@ class TriggeringTest {
   final num? value;
   final String? unit;
   final String? direction;
+  final String? severity;
 
   factory TriggeringTest.fromJson(Map<String, dynamic> json) => TriggeringTest(
     testName: _str(json['test_name']) ?? _str(json['raw_test_name']) ?? 'Unknown',
@@ -210,6 +249,7 @@ class TriggeringTest {
     value: _num(json['value']),
     unit: _str(json['unit']),
     direction: _str(json['direction']),
+    severity: _str(json['severity']),
   );
 
   /// "11.2 g/dL (low)" — the value plus why it matched.
@@ -500,6 +540,14 @@ class ResultEnvelope {
   /// Tests Stage 3 could not evaluate (no value, or no range printed).
   List<LabTest> get incomparableTests =>
       panels.expand((p) => p.tests).where((t) => !t.comparable).toList();
+
+  /// Whether any test has a critical/panic value.
+  bool get hasPanicValues =>
+      panels.any((p) => p.tests.any((t) => t.isPanicValue));
+
+  /// All tests flagged with emergency panic values.
+  List<LabTest> get panicTests =>
+      panels.expand((p) => p.tests.where((t) => t.isPanicValue)).toList();
 
   /// Whether the rule engine's table still needs clinical review.
   bool get rulesUnreviewed {

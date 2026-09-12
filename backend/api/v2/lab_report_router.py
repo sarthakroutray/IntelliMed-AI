@@ -17,6 +17,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 
 from api.v2.ingest_schema import StructuredIngestRequest, validate_ingest_payload
+from api.v2.lab_refs import file_ref_name, has_stored_file
 
 from auth import get_current_user
 from prisma_db import get_db
@@ -34,11 +35,21 @@ MAX_UPLOAD_SIZE_MB = int(os.getenv('MAX_UPLOAD_SIZE_MB', '10'))
 VALID_SOURCES = ('web', 'app')
 
 
-def _file_name_of(file_path: str) -> str:
+def _safe_file_url(file_path: str | None) -> str:
+    """Best-effort signed URL; '' when there is no file or storage is unhappy.
+
+    A storage hiccup must never turn a read into a 500 — the structured result
+    is the payload, and the original file is an optional convenience.
+    """
+    if not has_stored_file(file_path):
+        return ''
     try:
-        return Path(supabase_storage.to_storage_path(file_path)).name
-    except Exception:
-        return 'unknown'
+        return supabase_storage.create_signed_url(
+            supabase_storage.to_storage_path(file_path)
+        )
+    except Exception as e:
+        print(f'  ⚠ Lab report signed URL unavailable for {file_path}: {e}')
+        return ''
 
 
 @router.post('/lab-reports/upload-structured', status_code=status.HTTP_201_CREATED)
@@ -242,11 +253,8 @@ async def get_patient_lab_reports_for_doctor(
             'id': report.id,
             'patient_id': report.patient_id,
             'source': report.source,
-            'filename': _file_name_of(report.file_path) if report.file_path else 'N/A',
-            'file_url': (
-                supabase_storage.create_signed_url(supabase_storage.to_storage_path(report.file_path))
-                if report.file_path else ''
-            ),
+            'filename': file_ref_name(report.file_path),
+            'file_url': _safe_file_url(report.file_path),
             'upload_timestamp': report.upload_timestamp,
             'result': report.result_json,
         }
@@ -271,7 +279,7 @@ async def get_own_lab_reports(
         {
             'id': report.id,
             'source': report.source,
-            'filename': _file_name_of(report.file_path) if report.file_path else 'N/A',
+            'filename': file_ref_name(report.file_path),
             'upload_timestamp': report.upload_timestamp,
             'result': report.result_json,
         }
@@ -307,16 +315,63 @@ async def get_lab_report(
                 detail="You don't have access to this lab report",
             )
 
-    file_url = ''
-    if report.file_path:
-        file_url = supabase_storage.create_signed_url(supabase_storage.to_storage_path(report.file_path))
+    file_url = _safe_file_url(report.file_path)
 
     return {
         'id': report.id,
         'patient_id': report.patient_id,
         'source': report.source,
-        'filename': _file_name_of(report.file_path) if report.file_path else 'N/A',
+        'filename': file_ref_name(report.file_path),
         'file_url': file_url,
         'upload_timestamp': report.upload_timestamp,
         'result': report.result_json,
     }
+
+
+@router.delete('/lab-reports/{lab_report_id}', status_code=status.HTTP_204_NO_CONTENT)
+async def delete_lab_report(
+    lab_report_id: int,
+    db: Prisma = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Delete one of the patient's own lab reports (row + stored file).
+
+    Ownership is enforced in the query itself, so a guessed id matches nothing
+    and returns 404 rather than touching another patient's data.
+    """
+    if current_user.role != 'patient':
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail='Only patients can delete their lab reports',
+        )
+
+    report = await db.labreport.find_first(
+        where={'id': lab_report_id, 'patient_id': current_user.id}
+    )
+    if not report:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail='Lab report not found',
+        )
+
+    try:
+        # Structured app results have no stored object; web uploads do.
+        if has_stored_file(report.file_path):
+            try:
+                supabase_storage.delete_file(
+                    supabase_storage.to_storage_path(report.file_path)
+                )
+            except Exception as e:
+                # An orphaned blob is better than failing the record delete.
+                print(f'Warning: could not delete lab report file from storage: {e}')
+
+        await db.labreport.delete(where={'id': lab_report_id})
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f'✗ Failed to delete lab report: {e}')
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f'Failed to delete lab report: {str(e)}',
+        )
+    return None

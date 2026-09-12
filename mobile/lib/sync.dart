@@ -79,6 +79,12 @@ class V2Sync {
 
   String get _v2 => baseUrl.replaceAll(RegExp(r'/+$'), '');
 
+  /// Deadline for one sync POST. A reachable-but-unresponsive backend must not
+  /// stall a retry sweep forever.
+  static const _requestTimeout = Duration(seconds: 30);
+
+  static final Connectivity _connectivity = Connectivity();
+
   Future<ResultStore> _results() async =>
       _store ?? await ResultStore.instance();
 
@@ -95,11 +101,11 @@ class V2Sync {
     Map<String, dynamic> payload,
   ) async {
     try {
-      return await _client.post(
-        uri,
-        headers: _authHeaders(token),
-        body: jsonEncode(payload),
-      );
+      return await _client
+          .post(uri, headers: _authHeaders(token), body: jsonEncode(payload))
+          .timeout(_requestTimeout);
+    } on TimeoutException {
+      throw OfflineException(uri);
     } on http.ClientException catch (_) {
       throw OfflineException(uri);
     } on SocketException catch (_) {
@@ -225,7 +231,7 @@ class V2Sync {
 
   static Future<bool> isOnline() async {
     try {
-      final status = await Connectivity().checkConnectivity();
+      final status = await _connectivity.checkConnectivity();
       return !status.contains(ConnectivityResult.none);
     } catch (_) {
       return true;
@@ -236,9 +242,21 @@ class V2Sync {
   static StreamSubscription<List<ConnectivityResult>> watchConnectivity(
     Future<void> Function() onReconnect,
   ) {
-    return Connectivity().onConnectivityChanged.listen((status) async {
-      if (!status.contains(ConnectivityResult.none)) {
+    // Fire only on an offline -> online transition, and never overlap sweeps:
+    // connectivity flaps (Wi-Fi/cellular hand-off) would otherwise trigger
+    // several retry runs at once and re-POST the same queued rows.
+    var wasOnline = true;
+    var running = false;
+    return _connectivity.onConnectivityChanged.listen((status) async {
+      final online = !status.contains(ConnectivityResult.none);
+      final reconnected = online && !wasOnline;
+      wasOnline = online;
+      if (!reconnected || running) return;
+      running = true;
+      try {
         await onReconnect();
+      } finally {
+        running = false;
       }
     });
   }

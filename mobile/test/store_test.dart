@@ -81,6 +81,23 @@ void main() {
     expect(row['error'], isNull);
   });
 
+  test('byServerId finds every row synced to that id, whatever its kind', () async {
+    // Lab reports and medical documents have separate id sequences server-side,
+    // so the same id can legitimately match one row of each kind.
+    final report = await insert('lab_report', status: 'synced');
+    final xray = await insert('xray');
+    await store.markSynced(xray, serverId: 99);
+
+    final rows = await store.byServerId(99);
+    expect(rows.map((r) => r['kind']).toSet(), {'lab_report', 'xray'});
+    expect(rows.map((r) => r['id']).toSet(), {report, xray});
+  });
+
+  test('byServerId returns nothing for an unsynced or unknown id', () async {
+    await insert('lab_report');
+    expect(await store.byServerId(12345), isEmpty);
+  });
+
   test('markPending keeps a row retryable after a transient failure', () async {
     final id = await insert('xray', status: 'failed');
     await store.markPending(id);

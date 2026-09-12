@@ -1,0 +1,122 @@
+{
+  "document_type": "lab_report",
+  "patient_context": {
+    "name": null,
+    "age": null,
+    "sex": null,
+    "report_date": null
+  },
+  "lab_name": null,
+  "panels": [
+    {
+      "panel_name": "BIOCHEMISTRY",
+      "tests": [
+        {
+          "test_name": "Total Cholesterol",
+          "raw_test_name": "Total Cholesterol",
+          "value": 210.0,
+          "unit": "mg/dL",
+          "range_low": 0.0,
+          "range_high": 200.0,
+          "range_raw": "0-200",
+          "flag_in_source": null,
+          "ocr_confidence": "high",
+          "source_bbox": {
+            "page": 1,
+            "bbox": [
+              220.0,
+              320.0,
+              300.0,
+              338.0
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "panel_name": "Ungrouped",
+      "tests": [
+        {
+          "test_name": "Blood Urea",
+          "raw_test_name": "Urea",
+          "value": 30.0,
+          "unit": "mg/dL",
+          "range_low": null,
+          "range_high": null,
+          "range_raw": null,
+          "flag_in_source": null,
+          "ocr_confidence": "low",
+          "source_bbox": {
+            "page": 1,
+            "bbox": [
+              72.0,
+              70.0,
+              500.0,
+              88.0
+            ]
+          }
+        },
+        {
+          "test_name": "Serum Creatinine",
+          "raw_test_name": "Creatinine",
+          "value": 1.2,
+          "unit": "mg/dL",
+          "range_low": null,
+          "range_high": null,
+          "range_raw": null,
+          "flag_in_source": null,
+          "ocr_confidence": "low",
+          "source_bbox": {
+            "page": 1,
+            "bbox": [
+              72.0,
+              70.0,
+              500.0,
+              88.0
+            ]
+          }
+        },
+        {
+          "test_name": "Fasting Blood Glucose",
+          "raw_test_name": "Fasting Blood Glucose",
+          "value": 98.0,
+          "unit": "mg/dL",
+          "range_low": 70.0,
+          "range_high": 100.0,
+          "range_raw": "70-100",
+          "flag_in_source": null,
+          "ocr_confidence": "low",
+          "source_bbox": {
+            "page": 1,
+            "bbox": [
+              72.0,
+              100.0,
+              500.0,
+              140.0
+            ]
+          }
+        },
+        {
+          "test_name": "Potassium",
+          "raw_test_name": "Potassium",
+          "value": 4.2,
+          "unit": "mmol/L",
+          "range_low": 3.5,
+          "range_high": 5.1,
+          "range_raw": "3.5-5.1",
+          "flag_in_source": null,
+          "ocr_confidence": "low",
+          "source_bbox": {
+            "page": 1,
+            "bbox": [
+              72.0,
+              100.0,
+              500.0,
+              140.0
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

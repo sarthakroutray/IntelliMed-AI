@@ -1,9 +1,12 @@
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:google_mlkit_document_scanner/google_mlkit_document_scanner.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../capture_quality.dart';
 import '../copy.dart';
 import '../document_type.dart';
 import '../formatting.dart';
@@ -29,12 +32,16 @@ class CaptureScreen extends StatefulWidget {
     required this.models,
     required this.sync,
     required this.refreshToken,
+    required this.isActive,
     required this.onChanged,
   });
 
   final ModelManager models;
   final V2Sync sync;
   final int refreshToken;
+
+  /// Whether this is the tab currently shown; inactive tabs defer their reload.
+  final bool isActive;
   final VoidCallback onChanged;
 
   @override
@@ -53,16 +60,31 @@ class _CaptureScreenState extends State<CaptureScreen> {
   List<Map<String, Object?>> _rows = const [];
   int _seenToken = -1;
 
+  /// Set when this screen caused the change itself, so the token bump it
+  /// triggers does not immediately re-read the list it just updated.
+  bool _changedLocally = false;
+
   @override
   void initState() {
     super.initState();
-    _loadRows();
+    if (widget.isActive) _loadRows();
   }
 
   @override
   void didUpdateWidget(covariant CaptureScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (!widget.isActive) return;
+    if (_changedLocally) {
+      _changedLocally = false;
+      _seenToken = widget.refreshToken;
+      return;
+    }
     if (widget.refreshToken != _seenToken) _loadRows();
+  }
+
+  void _notifyChanged() {
+    _changedLocally = true;
+    widget.onChanged();
   }
 
   Future<void> _loadRows() async {
@@ -75,7 +97,89 @@ class _CaptureScreenState extends State<CaptureScreen> {
   Future<void> _pickCamera(ImageSource source) async {
     final picked = await _picker.pickImage(source: source, imageQuality: 92);
     if (picked == null) return;
-    await _ingest(File(picked.path), picked.name);
+    await _gateThenIngest(File(picked.path), picked.name);
+  }
+
+  /// The ML Kit document scanner is Android-only; elsewhere fall back to the
+  /// plain camera picker (no perspective correction).
+  bool get _canScan => defaultTargetPlatform == TargetPlatform.android;
+
+  Future<void> _captureDocument() =>
+      _canScan ? _scanDocument() : _pickCamera(ImageSource.camera);
+
+  /// Full-screen ML Kit document scanner: automatic capture, edge detection,
+  /// perspective correction and dewarp. The corrected image is what removes
+  /// the skewed-page column-overlap bug at the source. Android only.
+  ///
+  /// Retake is offered inline: a rejected frame re-opens the scanner rather
+  /// than making the user find the button again.
+  Future<void> _scanDocument() async {
+    setState(() {
+      _busy = true;
+      _status = 'Opening the document scanner…';
+    });
+    try {
+      for (var attempt = 0; attempt < 3; attempt++) {
+        final scanner = DocumentScanner(
+          options: DocumentScannerOptions(
+            documentFormats: const {DocumentFormat.jpeg},
+            mode: ScannerMode.full,
+            pageLimit: 1,
+            isGalleryImport: true,
+          ),
+        );
+        DocumentScanningResult result;
+        try {
+          result = await scanner.scanDocument();
+        } finally {
+          // Always release the native scanner handle, even on failure.
+          try {
+            await scanner.close();
+          } catch (_) {
+            // Best-effort; a leaked handle is worse than a swallowed error.
+          }
+        }
+
+        final images = result.images ?? const <String>[];
+        if (images.isEmpty) {
+          if (mounted) {
+            setState(() {
+              _busy = false;
+              _status = 'Scan cancelled.';
+            });
+          }
+          return;
+        }
+
+        final scanned = File(images.first);
+        final name = 'scan_${DateTime.now().microsecondsSinceEpoch}.jpg';
+        final assessment = await _assessImage(scanned);
+        if (assessment == null || assessment.ok) {
+          await _ingest(scanned, name);
+          return;
+        }
+        if (!mounted) return;
+        if (await _showQualityDialog(assessment)) {
+          await _ingest(scanned, name);
+          return;
+        }
+        // Retake: loop and re-open the scanner.
+        setState(() => _status = 'Retake requested — reopen the scanner…');
+      }
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _status = 'Retake requested.';
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _status = 'Document scanner unavailable: $e';
+        });
+      }
+    }
   }
 
   /// Pick any supported file: PDF or image.
@@ -97,7 +201,68 @@ class _CaptureScreenState extends State<CaptureScreen> {
       await _ingest(staged, picked.name);
       return;
     }
-    await _ingest(File(path), picked.name);
+    await _gateThenIngest(File(path), picked.name);
+  }
+
+  /// Run the quality gate on an image before inference, then ingest. PDFs are
+  /// skipped: they are digital renders, not camera frames.
+  Future<void> _gateThenIngest(File source, String filename) async {
+    if (isSupportedImage(filename)) {
+      final assessment = await _assessImage(source);
+      if (assessment != null && !assessment.ok) {
+        if (!mounted) return;
+        if (!await _showQualityDialog(assessment)) {
+          setState(() {
+            _busy = false;
+            _status = 'Retake requested — choose a clearer image.';
+          });
+          return;
+        }
+      }
+    }
+    await _ingest(source, filename);
+  }
+
+  /// Decode + assess off the main isolate. Returns null when the image cannot
+  /// be read here (the pipeline reports that properly later).
+  Future<CaptureAssessment?> _assessImage(File file) async {
+    try {
+      return await compute(assessCaptureBytes, await file.readAsBytes());
+    } catch (e) {
+      debugPrint('CaptureScreen: quality gate skipped — $e');
+      return null;
+    }
+  }
+
+  /// Returns true when the user chooses to proceed despite the issues.
+  Future<bool> _showQualityDialog(CaptureAssessment assessment) async {
+    final reasons = assessment.issues.map((i) => '• ${i.message}').join('\n');
+    final proceed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Retake this photo?'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('This image may not read well:'),
+            const SizedBox(height: 8),
+            Text(reasons, style: Theme.of(ctx).textTheme.bodySmall),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Retake'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Use anyway'),
+          ),
+        ],
+      ),
+    );
+    return proceed ?? false;
   }
 
   /// Persist the picked file, then run the queued on-device pass.
@@ -162,22 +327,25 @@ class _CaptureScreenState extends State<CaptureScreen> {
       }
 
       // Report the status actually written to the store (pending when offline,
-      // synced when it reached the backend) rather than assuming.
+      // synced when it reached the backend) rather than assuming. A genuine
+      // server rejection is surfaced with its message, not swallowed.
       final store = await ResultStore.instance();
       final latest = await store.all(limit: 1);
-      final syncStatus =
-          latest.isNotEmpty ? '${latest.first['sync_status']}' : 'pending';
+      final row = latest.isNotEmpty ? latest.first : null;
+      final syncStatus = row == null ? 'pending' : '${row['sync_status']}';
+      final syncError = row?['error'];
 
       setState(() {
         _status = [
           _describe(envelope, requested: _mode),
           _provenance(envelope),
           reviewStatusLine(syncStatus),
+          if (syncStatus == 'failed' && syncError != null) 'Sync error: $syncError',
         ].join('\n');
         _busy = false;
       });
       await _loadRows();
-      widget.onChanged();
+      _notifyChanged();
     } catch (e) {
       setState(() {
         _status = 'Could not process document: $e';
@@ -273,11 +441,12 @@ class _CaptureScreenState extends State<CaptureScreen> {
                   children: [
                     Expanded(
                       child: FilledButton.icon(
-                        onPressed: _busy
-                            ? null
-                            : () => _pickCamera(ImageSource.camera),
-                        icon: const Icon(Icons.photo_camera, size: 18),
-                        label: const Text('Camera'),
+                        onPressed: _busy ? null : _captureDocument,
+                        icon: const Icon(
+                          Icons.document_scanner_outlined,
+                          size: 18,
+                        ),
+                        label: Text(_canScan ? 'Scan document' : 'Camera'),
                       ),
                     ),
                     const SizedBox(width: 10),
@@ -292,6 +461,14 @@ class _CaptureScreenState extends State<CaptureScreen> {
                     ),
                   ],
                 ),
+                if (_canScan) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    'Scan detects the page edges and corrects perspective '
+                    'before OCR.',
+                    style: theme.textTheme.bodySmall,
+                  ),
+                ],
                 const SizedBox(height: 10),
                 // PDFs and saved images: a lab report usually arrives as a PDF
                 // rather than a photo, and those pages carry the reference
@@ -330,7 +507,7 @@ class _CaptureScreenState extends State<CaptureScreen> {
                       : () async {
                           await widget.sync.retryQueued();
                           await _loadRows();
-                          widget.onChanged();
+                          _notifyChanged();
                         },
                   icon: const Icon(Icons.sync, size: 18),
                   label: const Text('Sync now'),
@@ -357,7 +534,7 @@ class _CaptureScreenState extends State<CaptureScreen> {
                           rowId: row['id'] as int,
                           models: widget.models,
                           sync: widget.sync,
-                          onChanged: widget.onChanged,
+                          onChanged: _notifyChanged,
                         ),
                       ),
                     );

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 
 import 'api/api_client.dart';
 import 'api/patient_repository.dart';
@@ -48,25 +49,35 @@ const googleWebClientId = String.fromEnvironment(
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // One HTTP client for the whole app, so auth, sync and the repository share a
+  // single connection pool instead of each holding its own.
+  final httpClient = http.Client();
+
   final models = ModelManager(
     cnnAsset: cnnModelAsset,
     slmGgufAsset: slmGgufAsset,
     eagerLoad: eagerModelLoad,
   );
-  await models.init();
 
   final themeController = ThemeController();
-  await themeController.load();
 
   final auth = AuthService(
     baseUrl: apiBaseUrl,
     webClientId: googleWebClientId,
     devToken: devAuthToken,
+    client: httpClient,
   );
-  // Configure Google Sign-In and restore any stored session before the first
-  // frame, so a returning user starts signed in and can capture offline.
-  await auth.initialize().catchError((_) {});
-  await auth.restore();
+
+  // Independent work, run together so the first frame is not gated on the sum
+  // of model init, two Keystore reads and the Google plugin init. `restore`
+  // sets the session, so a returning user starts signed in and can capture
+  // offline.
+  await Future.wait([
+    models.init(),
+    themeController.load(),
+    auth.initialize().catchError((_) {}),
+    auth.restore(),
+  ]);
 
   // One HTTP layer for all authenticated reads/writes. The token and the
   // refresh hook are read live, so they always reflect the current session.
@@ -74,6 +85,7 @@ Future<void> main() async {
     baseUrl: apiBaseUrl,
     tokenProvider: () => auth.token,
     onUnauthorized: auth.refresh,
+    client: httpClient,
   );
   final repository = PatientRepository(apiClient);
 
@@ -82,6 +94,7 @@ Future<void> main() async {
     token: auth.token,
     // One silent re-auth when the JWT lapses; V2Sync adopts the new token.
     onUnauthorized: auth.refresh,
+    client: httpClient,
   );
   V2Sync.watchConnectivity(() => sync.retryQueued());
 

@@ -19,6 +19,7 @@
 
 import 'dart:math' as math;
 
+import '../capture_quality.dart';
 import 'ocr_model.dart';
 import 'stage1_model.dart';
 
@@ -42,6 +43,11 @@ const _columnToleranceFrac = 0.015;
 
 /// A column must be supported by at least this fraction of the region's lines.
 const _columnSupportFrac = 0.5;
+
+/// Minimum columns for a region to count as a table. A real lab table has at
+/// least name | value | unit-or-range; a 2-column "table" is usually a
+/// mis-clustered line layout.
+const _minColumns = 3;
 
 /// Y-spread (as a multiple of median word height) above which a single ML Kit
 /// line is re-split into two visual rows.
@@ -93,6 +99,15 @@ LabStage1 buildStage1(List<OcrPage> pages) {
       continue;
     }
 
+    // Text height is only knowable after OCR, so this is the one quality
+    // signal that cannot run in the pre-inference pixel gate.
+    final smallText = smallTextIssue(
+      medianLineHeightPx: medianHeight * page.pixelWidth,
+    );
+    if (smallText != null) {
+      warnings.add('page ${page.pageNumber}: ${smallText.message}');
+    }
+
     final isGrid = [
       for (final l in split) _wordGroups(l, medianHeight * _gridGapFactor).length >= _minGridGroups,
     ];
@@ -102,7 +117,10 @@ LabStage1 buildStage1(List<OcrPage> pages) {
     for (final region in regions) {
       final regionLines = split.sublist(region.first, region.last + 1);
       final columns = _detectColumns(regionLines);
-      if (columns.length < 2) continue;
+      // Fewer than three columns is almost always a mis-read line layout, not
+      // a table; leaving those lines as elements lets the flat-text parser
+      // handle them (and the recovery pass catch anything else).
+      if (columns.length < _minColumns) continue;
       final rows = _buildRows(regionLines, columns, page.pageNumber);
       if (rows.isEmpty) continue;
       consumed.addAll([for (var i = region.first; i <= region.last; i++) i]);

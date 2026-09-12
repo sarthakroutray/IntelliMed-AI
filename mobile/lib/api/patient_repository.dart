@@ -40,6 +40,12 @@ class PatientRepository {
     return LabReport.fromJson(_asMap(decoded));
   }
 
+  /// Delete one of this patient's own lab reports (row + stored file) on the
+  /// server. Ownership is enforced server-side, so a stale id returns 404.
+  Future<void> deleteLabReport(int id) async {
+    await client.deleteJson('/api/v2/lab-reports/$id');
+  }
+
   /// Upload a raw file to the full server-side lab pipeline
   /// (POST /api/v2/lab-reports/upload, Stages 1-3). This is the verification
   /// path used by the developer diff screen to compare the on-device engine

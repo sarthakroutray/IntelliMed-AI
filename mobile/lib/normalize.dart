@@ -67,9 +67,11 @@ Map<String, dynamic> buildResultEnvelope({
   required String ocrText,
   required String engine,
   required int latencyMs,
+  Map<String, dynamic>? stage3,
   Map<String, dynamic>? summaryContext,
   Map<String, dynamic>? detection,
   Map<String, dynamic>? structure,
+  List<String>? warnings,
   int pageCount = 1,
   bool pagesTruncated = false,
 }) {
@@ -79,11 +81,15 @@ Map<String, dynamic> buildResultEnvelope({
     'latency_ms': latencyMs,
     'normalized': normalized,
     // ignore: use_null_aware_elements (? form is invalid: key is non-nullable)
+    if (stage3 != null) 'stage3': stage3,
+    // ignore: use_null_aware_elements (? form is invalid: key is non-nullable)
     if (summaryContext != null) 'summary_context': summaryContext,
     // ignore: use_null_aware_elements (? form is invalid: key is non-nullable)
     if (detection != null) 'detection': detection,
     // ignore: use_null_aware_elements (? form is invalid: key is non-nullable)
     if (structure != null) 'structure': structure,
+    // ignore: use_null_aware_elements (? form is invalid: key is non-nullable)
+    if (warnings != null && warnings.isNotEmpty) 'warnings': warnings,
     'page_count': pageCount,
     // ignore: use_null_aware_elements (? form is invalid: key is non-nullable)
     if (pagesTruncated) 'pages_truncated': true,

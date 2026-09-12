@@ -18,10 +18,30 @@ from prisma_client import Prisma, Json
 from request_cache import doctor_has_patient_access
 import services
 import supabase_storage
+from api.v2.lab_refs import file_ref_name, has_stored_file
 
 router = APIRouter()
 
 CACHE_TTL = int(os.getenv("CACHE_TTL_SECONDS", "300"))
+
+
+def _safe_file_url(file_path: str | None) -> str:
+    """Best-effort signed URL; '' when there is no file or storage is unhappy.
+
+    Documents produced on-device carry a synthetic "app-structured/<kind>" path
+    with no object behind it, so signing it would fail. A storage hiccup must
+    never turn a read into a 500 — the analysis is the payload, the original
+    file is an optional convenience.
+    """
+    if not has_stored_file(file_path):
+        return ''
+    try:
+        return supabase_storage.create_signed_url(
+            supabase_storage.to_storage_path(file_path)
+        )
+    except Exception as e:
+        print(f"  ⚠ Document signed URL unavailable for {file_path}: {e}")
+        return ''
 
 
 class VerifyDocumentRequest(BaseModel):
@@ -97,27 +117,44 @@ async def get_document(
                 detail="You don't have access to this document"
             )
     
-    # Use real AI analysis from DB if available, otherwise provide placeholder
+    # Use real AI analysis from DB if available, otherwise provide placeholder.
+    # App-produced results share this table but store a structured envelope with
+    # none of the v1 cv/nlp/ocr blocks; running the v1 builder over them would
+    # invent a classifier title (and a broken "Analyze" call-to-action), so they
+    # are described as on-device results instead.
     stored_analysis = document.ai_analysis_json
-    if stored_analysis and isinstance(stored_analysis, dict):
-        cv_result = stored_analysis.get('cv_result', {})
-        nlp_result = stored_analysis.get('nlp_result', {})
-        ocr_result = stored_analysis.get('ocr_result', '')
-        summary_result = stored_analysis.get('summary_result', {})
+    v1_analysis = isinstance(stored_analysis, dict) and any(
+        k in stored_analysis
+        for k in ('cv_result', 'nlp_result', 'ocr_result', 'summary_result')
+    )
+    on_device_result = (
+        isinstance(stored_analysis, dict)
+        and not v1_analysis
+        and any(k in stored_analysis for k in ('normalized', 'stage2'))
+    )
+
+    if v1_analysis:
+        # `or {}` (not just a default) because a stored key can be an explicit
+        # JSON null; app-produced results omit these keys entirely.
+        cv_result = stored_analysis.get('cv_result') or {}
+        nlp_result = stored_analysis.get('nlp_result') or {}
+        ocr_result = stored_analysis.get('ocr_result') or ''
+        summary_result = stored_analysis.get('summary_result') or {}
 
         classification = cv_result.get('classification', 'Unknown')
         confidence = cv_result.get('confidence', 0)
-        probabilities = cv_result.get('probabilities', {})
+        probabilities = cv_result.get('probabilities') or {}
         recommendation = cv_result.get('recommendation', '')
 
         # Build findings from probabilities
         findings = []
-        for label, prob in probabilities.items():
-            findings.append({
-                "label": label,
-                "confidence": round(prob * 100, 1),
-                "description": f"{label} probability from pneumonia classifier."
-            })
+        if isinstance(probabilities, dict):
+            for label, prob in probabilities.items():
+                findings.append({
+                    "label": label,
+                    "confidence": round(prob * 100, 1),
+                    "description": f"{label} probability from pneumonia classifier."
+                })
 
         # Build summary
         if classification == 'Normal':
@@ -166,6 +203,20 @@ async def get_document(
                 "model_version": "pneumonia-resnet50-v1"
             }
         }
+    elif on_device_result:
+        analysis = {
+            "summary": {
+                "status": "success",
+                "title": "On-device result",
+                "description": (
+                    "This result was produced on this device and has no "
+                    "server-side analysis. Open the capture from the Capture "
+                    "tab for the full structured view."
+                ),
+            },
+            "findings": [],
+            "rawResponse": None,
+        }
     else:
         analysis = {
             "summary": {
@@ -177,13 +228,10 @@ async def get_document(
             "rawResponse": None
         }
     
-    # Build short-lived signed URL and file metadata from storage path
-    file_url = ""
-    file_name = "unknown"
-    if document.file_path:
-        storage_path = supabase_storage.to_storage_path(document.file_path)
-        file_name = Path(storage_path).name
-        file_url = supabase_storage.create_signed_url(storage_path)
+    # Build short-lived signed URL and file metadata. On-device results have no
+    # object to sign, so this degrades to "no file" instead of failing the read.
+    file_name = file_ref_name(document.file_path)
+    file_url = _safe_file_url(document.file_path)
 
     # Detect real file type from extension
     ext = os.path.splitext(file_name)[1].lower()

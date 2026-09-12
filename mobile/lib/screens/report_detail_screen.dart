@@ -125,12 +125,24 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
               ),
             ),
             const SizedBox(height: 16),
-            if (_loading)
+            if (_loading && _report == null)
               const LoadingView(message: 'Loading structured result…')
-            else if (_error != null)
-              ErrorView(message: _error!, onRetry: _load)
-            else
-              ResultEnvelopeView(envelope: envelope),
+            else ...[
+              if (_error != null) ...[
+                InlineBanner(
+                  tone: BannerTone.warning,
+                  icon: Icons.cloud_off_outlined,
+                  title: 'Could not refresh from the server',
+                  message:
+                      '$_error Showing the details already loaded on this device.',
+                ),
+                const SizedBox(height: 12),
+              ],
+              if (envelope.isEmpty && _error != null)
+                ErrorView(message: _error!, onRetry: _load)
+              else
+                ResultEnvelopeView(envelope: envelope),
+            ],
             const SizedBox(height: 16),
             const InlineBanner(
               tone: BannerTone.info,

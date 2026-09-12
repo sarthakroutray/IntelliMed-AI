@@ -1,0 +1,579 @@
+{
+  "ranges": {
+    "Hemoglobin": {
+      "unit": "g/dL",
+      "male": {
+        "low": 13.5,
+        "high": 17.5
+      },
+      "female": {
+        "low": 12.0,
+        "high": 15.5
+      },
+      "default": {
+        "low": 12.0,
+        "high": 17.5
+      },
+      "panic_low": 7.0,
+      "panic_high": 20.0
+    },
+    "Hematocrit": {
+      "unit": "%",
+      "male": {
+        "low": 38.8,
+        "high": 50.0
+      },
+      "female": {
+        "low": 34.9,
+        "high": 44.5
+      },
+      "default": {
+        "low": 35.0,
+        "high": 50.0
+      },
+      "panic_low": 20.0,
+      "panic_high": 60.0
+    },
+    "Red Blood Cell Count": {
+      "unit": "10^6/uL",
+      "male": {
+        "low": 4.35,
+        "high": 5.65
+      },
+      "female": {
+        "low": 3.92,
+        "high": 5.13
+      },
+      "default": {
+        "low": 4.0,
+        "high": 5.5
+      }
+    },
+    "White Blood Cell Count": {
+      "unit": "10^3/uL",
+      "default": {
+        "low": 4.0,
+        "high": 11.0
+      },
+      "panic_low": 2.0,
+      "panic_high": 30.0
+    },
+    "Platelet Count": {
+      "unit": "10^3/uL",
+      "default": {
+        "low": 150.0,
+        "high": 450.0
+      },
+      "panic_low": 20.0,
+      "panic_high": 1000.0
+    },
+    "Mean Corpuscular Volume": {
+      "unit": "fL",
+      "default": {
+        "low": 80.0,
+        "high": 100.0
+      }
+    },
+    "Mean Corpuscular Hemoglobin": {
+      "unit": "pg",
+      "default": {
+        "low": 27.0,
+        "high": 33.0
+      }
+    },
+    "Mean Corpuscular Hemoglobin Concentration": {
+      "unit": "g/dL",
+      "default": {
+        "low": 32.0,
+        "high": 36.0
+      }
+    },
+    "Red Cell Distribution Width": {
+      "unit": "%",
+      "default": {
+        "low": 11.5,
+        "high": 14.5
+      }
+    },
+    "Neutrophils": {
+      "unit": "%",
+      "default": {
+        "low": 40.0,
+        "high": 75.0
+      }
+    },
+    "Lymphocytes": {
+      "unit": "%",
+      "default": {
+        "low": 20.0,
+        "high": 45.0
+      }
+    },
+    "Eosinophils": {
+      "unit": "%",
+      "default": {
+        "low": 1.0,
+        "high": 6.0
+      }
+    },
+    "Monocytes": {
+      "unit": "%",
+      "default": {
+        "low": 2.0,
+        "high": 10.0
+      }
+    },
+    "Basophils": {
+      "unit": "%",
+      "default": {
+        "low": 0.0,
+        "high": 2.0
+      }
+    },
+    "Absolute Neutrophil Count": {
+      "unit": "cells/uL",
+      "default": {
+        "low": 1500.0,
+        "high": 7500.0
+      },
+      "panic_low": 500.0
+    },
+    "Erythrocyte Sedimentation Rate": {
+      "unit": "mm/hr",
+      "male": {
+        "low": 0.0,
+        "high": 15.0
+      },
+      "female": {
+        "low": 0.0,
+        "high": 20.0
+      },
+      "default": {
+        "low": 0.0,
+        "high": 20.0
+      }
+    },
+    "International Normalized Ratio": {
+      "unit": "ratio",
+      "default": {
+        "low": 0.8,
+        "high": 1.2
+      },
+      "panic_high": 4.5
+    },
+    "Serum Creatinine": {
+      "unit": "mg/dL",
+      "male": {
+        "low": 0.7,
+        "high": 1.3
+      },
+      "female": {
+        "low": 0.5,
+        "high": 1.1
+      },
+      "default": {
+        "low": 0.6,
+        "high": 1.2
+      },
+      "panic_high": 5.0
+    },
+    "Blood Urea Nitrogen": {
+      "unit": "mg/dL",
+      "default": {
+        "low": 7.0,
+        "high": 20.0
+      },
+      "panic_high": 100.0
+    },
+    "Blood Urea": {
+      "unit": "mg/dL",
+      "default": {
+        "low": 15.0,
+        "high": 45.0
+      }
+    },
+    "Estimated Glomerular Filtration Rate": {
+      "unit": "mL/min/1.73m2",
+      "default": {
+        "low": 90.0,
+        "high": 140.0
+      },
+      "panic_low": 15.0
+    },
+    "Uric Acid": {
+      "unit": "mg/dL",
+      "male": {
+        "low": 3.5,
+        "high": 7.2
+      },
+      "female": {
+        "low": 2.6,
+        "high": 6.0
+      },
+      "default": {
+        "low": 3.0,
+        "high": 7.0
+      }
+    },
+    "Sodium": {
+      "unit": "mEq/L",
+      "default": {
+        "low": 135.0,
+        "high": 145.0
+      },
+      "panic_low": 120.0,
+      "panic_high": 160.0
+    },
+    "Potassium": {
+      "unit": "mEq/L",
+      "default": {
+        "low": 3.5,
+        "high": 5.0
+      },
+      "panic_low": 2.8,
+      "panic_high": 6.2
+    },
+    "Chloride": {
+      "unit": "mEq/L",
+      "default": {
+        "low": 96.0,
+        "high": 106.0
+      },
+      "panic_low": 80.0,
+      "panic_high": 125.0
+    },
+    "Bicarbonate": {
+      "unit": "mEq/L",
+      "default": {
+        "low": 22.0,
+        "high": 29.0
+      },
+      "panic_low": 10.0,
+      "panic_high": 40.0
+    },
+    "Serum Anion Gap": {
+      "unit": "mEq/L",
+      "default": {
+        "low": 4.0,
+        "high": 12.0
+      }
+    },
+    "Total Bilirubin": {
+      "unit": "mg/dL",
+      "default": {
+        "low": 0.2,
+        "high": 1.2
+      },
+      "panic_high": 15.0
+    },
+    "Direct Bilirubin": {
+      "unit": "mg/dL",
+      "default": {
+        "low": 0.0,
+        "high": 0.3
+      }
+    },
+    "Indirect Bilirubin": {
+      "unit": "mg/dL",
+      "default": {
+        "low": 0.2,
+        "high": 0.8
+      }
+    },
+    "Aspartate Aminotransferase (AST)": {
+      "unit": "U/L",
+      "male": {
+        "low": 10.0,
+        "high": 40.0
+      },
+      "female": {
+        "low": 9.0,
+        "high": 32.0
+      },
+      "default": {
+        "low": 10.0,
+        "high": 40.0
+      },
+      "panic_high": 1000.0
+    },
+    "Alanine Aminotransferase (ALT)": {
+      "unit": "U/L",
+      "male": {
+        "low": 10.0,
+        "high": 45.0
+      },
+      "female": {
+        "low": 7.0,
+        "high": 35.0
+      },
+      "default": {
+        "low": 10.0,
+        "high": 45.0
+      },
+      "panic_high": 1000.0
+    },
+    "Alkaline Phosphatase": {
+      "unit": "U/L",
+      "default": {
+        "low": 44.0,
+        "high": 147.0
+      }
+    },
+    "Gamma-Glutamyl Transferase": {
+      "unit": "U/L",
+      "male": {
+        "low": 8.0,
+        "high": 61.0
+      },
+      "female": {
+        "low": 5.0,
+        "high": 36.0
+      },
+      "default": {
+        "low": 8.0,
+        "high": 50.0
+      }
+    },
+    "Total Protein": {
+      "unit": "g/dL",
+      "default": {
+        "low": 6.0,
+        "high": 8.3
+      }
+    },
+    "Serum Albumin": {
+      "unit": "g/dL",
+      "default": {
+        "low": 3.5,
+        "high": 5.0
+      },
+      "panic_low": 2.0
+    },
+    "Serum Globulin": {
+      "unit": "g/dL",
+      "default": {
+        "low": 2.0,
+        "high": 3.5
+      }
+    },
+    "Albumin-Globulin Ratio": {
+      "unit": "ratio",
+      "default": {
+        "low": 1.0,
+        "high": 2.2
+      }
+    },
+    "Fasting Blood Glucose": {
+      "unit": "mg/dL",
+      "default": {
+        "low": 70.0,
+        "high": 99.0
+      },
+      "panic_low": 50.0,
+      "panic_high": 400.0
+    },
+    "Postprandial Blood Glucose": {
+      "unit": "mg/dL",
+      "default": {
+        "low": 70.0,
+        "high": 140.0
+      },
+      "panic_high": 400.0
+    },
+    "Random Blood Glucose": {
+      "unit": "mg/dL",
+      "default": {
+        "low": 70.0,
+        "high": 140.0
+      },
+      "panic_low": 50.0,
+      "panic_high": 400.0
+    },
+    "Glycated Hemoglobin (HbA1c)": {
+      "unit": "%",
+      "default": {
+        "low": 4.0,
+        "high": 5.6
+      }
+    },
+    "Total Cholesterol": {
+      "unit": "mg/dL",
+      "default": {
+        "low": 100.0,
+        "high": 200.0
+      }
+    },
+    "HDL Cholesterol": {
+      "unit": "mg/dL",
+      "male": {
+        "low": 40.0,
+        "high": 90.0
+      },
+      "female": {
+        "low": 50.0,
+        "high": 90.0
+      },
+      "default": {
+        "low": 40.0,
+        "high": 90.0
+      }
+    },
+    "LDL Cholesterol": {
+      "unit": "mg/dL",
+      "default": {
+        "low": 50.0,
+        "high": 100.0
+      }
+    },
+    "Triglycerides": {
+      "unit": "mg/dL",
+      "default": {
+        "low": 50.0,
+        "high": 150.0
+      },
+      "panic_high": 500.0
+    },
+    "Non-HDL Cholesterol": {
+      "unit": "mg/dL",
+      "default": {
+        "low": 50.0,
+        "high": 130.0
+      }
+    },
+    "Calcium": {
+      "unit": "mg/dL",
+      "default": {
+        "low": 8.5,
+        "high": 10.5
+      },
+      "panic_low": 6.5,
+      "panic_high": 13.0
+    },
+    "Corrected Calcium": {
+      "unit": "mg/dL",
+      "default": {
+        "low": 8.5,
+        "high": 10.5
+      },
+      "panic_low": 6.5,
+      "panic_high": 13.0
+    },
+    "Phosphorus": {
+      "unit": "mg/dL",
+      "default": {
+        "low": 2.5,
+        "high": 4.5
+      },
+      "panic_low": 1.0
+    },
+    "Magnesium": {
+      "unit": "mg/dL",
+      "default": {
+        "low": 1.7,
+        "high": 2.2
+      },
+      "panic_low": 1.0,
+      "panic_high": 4.0
+    },
+    "Thyroid Stimulating Hormone": {
+      "unit": "uIU/mL",
+      "default": {
+        "low": 0.4,
+        "high": 4.5
+      }
+    },
+    "Free Thyroxine (FT4)": {
+      "unit": "ng/dL",
+      "default": {
+        "low": 0.8,
+        "high": 1.8
+      }
+    },
+    "Free Triiodothyronine (FT3)": {
+      "unit": "pg/mL",
+      "default": {
+        "low": 2.3,
+        "high": 4.2
+      }
+    },
+    "Serum Ferritin": {
+      "unit": "ng/mL",
+      "male": {
+        "low": 24.0,
+        "high": 336.0
+      },
+      "female": {
+        "low": 11.0,
+        "high": 307.0
+      },
+      "default": {
+        "low": 20.0,
+        "high": 300.0
+      }
+    },
+    "Serum Iron": {
+      "unit": "ug/dL",
+      "male": {
+        "low": 65.0,
+        "high": 175.0
+      },
+      "female": {
+        "low": 50.0,
+        "high": 170.0
+      },
+      "default": {
+        "low": 50.0,
+        "high": 175.0
+      }
+    },
+    "Total Iron Binding Capacity": {
+      "unit": "ug/dL",
+      "default": {
+        "low": 250.0,
+        "high": 450.0
+      }
+    },
+    "Transferrin Saturation": {
+      "unit": "%",
+      "default": {
+        "low": 20.0,
+        "high": 50.0
+      }
+    },
+    "Vitamin B12": {
+      "unit": "pg/mL",
+      "default": {
+        "low": 200.0,
+        "high": 900.0
+      }
+    },
+    "Vitamin D (25-OH)": {
+      "unit": "ng/mL",
+      "default": {
+        "low": 30.0,
+        "high": 100.0
+      }
+    },
+    "C-Reactive Protein": {
+      "unit": "mg/L",
+      "default": {
+        "low": 0.0,
+        "high": 5.0
+      }
+    },
+    "Serum Lipase": {
+      "unit": "U/L",
+      "default": {
+        "low": 10.0,
+        "high": 140.0
+      }
+    },
+    "Serum Amylase": {
+      "unit": "U/L",
+      "default": {
+        "low": 30.0,
+        "high": 110.0
+      }
+    }
+  }
+}

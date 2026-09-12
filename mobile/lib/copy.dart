@@ -19,3 +19,19 @@ String reviewStatusLine(String syncStatus) {
 /// Short caption shown under pattern/flag lists.
 const patternListCaption =
     'Patterns below are structured context for doctor review only.';
+
+/// Caption under the trends list. Deliberately descriptive: the app never
+/// labels a change as improvement or decline.
+const trendsCaption =
+    'Your values over time, from this device and your account. '
+    'For review with your doctor.';
+
+/// Banner on one analyte's history.
+const trendReadingCaption =
+    'These are the values printed on your reports, shown in date order. '
+    'For review with your doctor.';
+
+/// Shown when an analyte appears under more than one unit.
+const trendUnitSplitNote =
+    'This measurement appears under different units. Each unit is shown '
+    'separately and never compared across units.';

@@ -13,6 +13,7 @@ import '../widgets/app_card.dart';
 import '../widgets/feedback.dart';
 import '../widgets/stat_card.dart';
 import 'capture_detail_screen.dart';
+import 'trends_screen.dart';
 
 /// Patient dashboard: real counts, quick actions, connected doctors and the
 /// most recent on-device captures.
@@ -27,6 +28,7 @@ class HomeScreen extends StatefulWidget {
     required this.models,
     required this.sync,
     required this.refreshToken,
+    required this.isActive,
     required this.onNavigate,
   });
 
@@ -34,6 +36,10 @@ class HomeScreen extends StatefulWidget {
   final ModelManager models;
   final V2Sync sync;
   final int refreshToken;
+
+  /// Whether this is the tab currently shown. Inactive tabs skip loading so a
+  /// change on one screen never refetches the others in the background.
+  final bool isActive;
 
   /// Switch bottom-nav destination (1 = Capture, 3 = Docs, 4 = Me).
   final ValueChanged<int> onNavigate;
@@ -58,23 +64,39 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    _load();
+    if (widget.isActive) _load();
   }
 
   @override
   void didUpdateWidget(covariant HomeScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.refreshToken != _seenToken) _load();
+    // A tab only reloads when the shared token moved past what it last saw.
+    // Deferred changes surface the next time the tab is shown, and simply
+    // switching tabs never triggers a refetch.
+    if (widget.isActive && widget.refreshToken != _seenToken) _load();
   }
 
   Future<void> _load() async {
     _seenToken = widget.refreshToken;
     if (mounted) setState(() => _loading = true);
 
-    // Local first: always available, even offline.
+    // Local first: publish what is on the device immediately so the dashboard
+    // is usable without waiting on the network. `_loading` deliberately stays
+    // true until the server responds, so an empty local store keeps showing the
+    // loading state rather than flashing "no captures".
     final store = await ResultStore.instance();
-    final counts = await store.counts();
-    final recent = await store.all(limit: 3);
+    final local = await Future.wait([
+      store.counts(),
+      store.all(limit: 3),
+    ]);
+    if (mounted) {
+      setState(() {
+        _counts = local[0] as Map<String, int>;
+        _recent = local[1] as List<Map<String, Object?>>;
+      });
+    } else {
+      return;
+    }
 
     Profile? profile;
     var reports = <LabReport>[];
@@ -105,8 +127,6 @@ class _HomeScreenState extends State<HomeScreen> {
       _reports = reports;
       _documents = documents;
       _doctors = doctors;
-      _recent = recent;
-      _counts = counts;
       _serverError = serverError;
       _loading = false;
     });
@@ -213,6 +233,21 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
             ],
+          ),
+          const SizedBox(height: 10),
+          // Trends spans captures and server reports, so it opens as its own
+          // screen rather than taking a sixth bottom-nav slot.
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => TrendsScreen(repository: widget.repository),
+                ),
+              ),
+              icon: const Icon(Icons.show_chart, size: 18),
+              label: const Text('Your values over time'),
+            ),
           ),
           const SizedBox(height: 20),
           _DoctorsCard(

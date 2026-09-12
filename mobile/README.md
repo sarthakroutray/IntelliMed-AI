@@ -97,9 +97,29 @@ file locally and syncs just the structured envelope.
 - `lib/lab/` — the on-device lab pipeline: `ocr_model.dart` (ML Kit geometry),
   `structure.dart` (geometry -> backend-compatible Stage 1), `rule_engine.dart`
   (ported deterministic Stage 2, parity-tested against the Python reference),
-  plus `test_names.dart` and `render.dart`.
+  `extract.dart` (structural result + a flat-text recovery pass, so a
+  mis-guessed table can never extract fewer values than the old per-line
+  parser), `pdf_text.dart` + `pdf_geometry.dart` (read a digital PDF's **exact
+  text layer** via pdfrx/pdfium instead of OCR-ing a render), plus
+  `test_names.dart` and `render.dart`. The envelope's `structure` block reports
+  `source` (`pdf-text` | `ocr`) and `recovered` (rows only recovery found).
 - `lib/normalize.dart` — deterministic prescription normalizer + the shared
   result-envelope builder. Lab reports no longer go through a flat-text regex.
+- `lib/capture_quality.dart` — pre-inference capture quality gate (blur =
+  variance of Laplacian, glare = clipped-white fraction, darkness), plus a
+  post-OCR small-text check. Deterministic pixel statistics, no model.
+- `lib/trends.dart` — longitudinal trends over stored rows: one unit-consistent
+  series per canonical test name + unit, reference bands, and a local/server
+  merge that does not double-count a synced capture.
+- `lib/widgets/trend_sparkline.dart` — dependency-free `CustomPainter` sparkline
+  with the printed reference band shaded.
+- `lib/screens/trends_screen.dart` / `trend_detail_screen.dart` — "your values
+  over time", reached from Home and Reports. Wording is descriptive only.
+- Capture uses `google_mlkit_document_scanner` (Android-only: edge detection,
+  perspective correction, dewarp) replacing the raw camera path; gallery and
+  file picks pass through the same quality gate. A page ML Kit reports as
+  skewed is rotated and re-OCR'd (`cnn_ocr.dart`) rather than losing all table
+  structure.
 - `lib/schemas.dart` — schema mirrors + validators (reject Stage 3 flags).
 - `lib/store.dart` — `sqflite` result store with
   `pending` / `synced` / `failed` sync status.
@@ -112,9 +132,12 @@ file locally and syncs just the structured envelope.
 - `lib/tabs_bench_spike.dart` — Bench/Spike measurement harnesses, reached
   from Me → Developer rather than a primary nav slot.
 - `lib/copy.dart` — non-diagnostic wording rules for every screen.
-- Backend counterpart: `POST /api/v2/lab-reports/upload-structured`
-  (`backend/api/v2/`) accepts the structured envelopes, re-runs Stage 3
-  server-side for lab reports.
+- Backend counterpart (`backend/api/v2/lab_report_router.py`):
+  `POST /api/v2/lab-reports/upload-structured` accepts the structured envelopes
+  and re-runs Stage 3 server-side; `POST /api/v2/lab-reports/upload` runs the
+  full Stage 1-3 pipeline on a raw file (used by Docs → "Lab report");
+  `GET /api/v2/lab-reports/{id}` reads one; `DELETE /api/v2/lab-reports/{id}`
+  removes the patient's own report and any stored file.
 
 ## Run
 

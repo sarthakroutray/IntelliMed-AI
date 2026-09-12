@@ -16,11 +16,12 @@
 // and producing nonsense.
 
 import 'dart:io';
-import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
+import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
-import 'package:pdfx/pdfx.dart';
+import 'package:pdfrx/pdfrx.dart';
 
 /// Extensions accepted for on-device capture.
 ///
@@ -147,6 +148,7 @@ class PageSet {
     required this.pages,
     required this.totalPages,
     this.tempDir,
+    this.processedCount,
   });
 
   /// Page images in document order.
@@ -160,14 +162,19 @@ class PageSet {
   /// destroy the user's data.
   final Directory? tempDir;
 
-  int get processed => pages.length;
+  /// Explicit processed count for sources that carry no page images (a PDF
+  /// read from its text layer). Defaults to [pages].length.
+  final int? processedCount;
+
+  int get processed => processedCount ?? pages.length;
   bool get isMultipage => totalPages > 1;
 
   /// True when the document had more pages than we processed.
   ///
-  /// Guarded on a non-empty [pages]: extracting zero pages is a failure, not a
-  /// truncation, and must not be reported to the reviewer as a deliberate cap.
-  bool get truncated => pages.isNotEmpty && totalPages > pages.length;
+  /// Guarded on a non-zero [processed]: extracting zero pages is a failure,
+  /// not a truncation, and must not be reported to the reviewer as a
+  /// deliberate cap.
+  bool get truncated => processed > 0 && totalPages > processed;
 
   /// Remove rasterized scratch files. Never touches the original source.
   Future<void> dispose() async {
@@ -249,31 +256,36 @@ class PageSource {
     var succeeded = false;
     try {
       document = await _open(path);
-      final total = document.pagesCount;
+      final total = document.pages.length;
       if (total <= 0) {
         throw IngestException('That PDF has no readable pages.');
       }
 
-      // Opened once: reading pagesCount off the same handle avoids a second
+      // Opened once: reading the page count off the same handle avoids a second
       // native open, which is slow for a large document.
       final limit = total < maxPdfPages ? total : maxPdfPages;
       for (var number = 1; number <= limit; number++) {
         // Android cannot render pages in parallel, so this loop is strictly
-        // sequential and each page is closed before the next is opened.
-        final page = await document.getPage(number);
+        // sequential.
+        final page = document.pages[number - 1];
+        final scale = _scaleFor(page.width, page.height);
+        final rendered = await page.render(
+          fullWidth: (page.width * scale).roundToDouble(),
+          fullHeight: (page.height * scale).roundToDouble(),
+        );
+        if (rendered == null) continue;
         try {
-          final scale = _scaleFor(page.width, page.height);
-          final rendered = await page.render(
-            width: page.width * scale,
-            height: page.height * scale,
-            format: PdfPageImageFormat.png,
+          final png = await compute(
+            _encodeBgraPng,
+            (rendered.pixels, rendered.width, rendered.height),
           );
-          if (rendered == null) continue;
+          if (png == null) continue;
           final target = File(p.join(tempDir.path, 'page_$number.png'));
-          await target.writeAsBytes(rendered.bytes, flush: true);
+          await target.writeAsBytes(png, flush: true);
           pages.add(target);
         } finally {
-          await page.close();
+          // PdfImage holds native memory; always release it.
+          rendered.dispose();
         }
       }
 
@@ -287,7 +299,7 @@ class PageSource {
       if (e is IngestException) rethrow;
       throw IngestException('Page rendering failed: $e');
     } finally {
-      await document?.close();
+      await document?.dispose();
       // Only clean up on failure; on success the caller owns the scratch dir
       // and releases it via PageSet.dispose().
       if (!succeeded) await _safeDelete(tempDir);
@@ -297,6 +309,8 @@ class PageSource {
   /// Open a PDF, mapping any platform failure to a clear message.
   static Future<PdfDocument> _open(String path) async {
     try {
+      // Required before using the engine APIs without a pdfrx widget.
+      await pdfrxFlutterInitialize();
       return await PdfDocument.openFile(path);
     } catch (_) {
       throw IngestException(
@@ -310,9 +324,9 @@ class PageSource {
   static Future<int> pageCount(String path) async {
     final document = await _open(path);
     try {
-      return document.pagesCount;
+      return document.pages.length;
     } finally {
-      await document.close();
+      await document.dispose();
     }
   }
 
@@ -341,5 +355,23 @@ class PageSource {
     );
     await file.writeAsBytes(bytes, flush: true);
     return file;
+  }
+}
+
+/// Encode pdfrx's BGRA8888 page buffer as PNG. Runs off the main isolate,
+/// because encoding a full-page bitmap is expensive.
+Uint8List? _encodeBgraPng((Uint8List, int, int) args) {
+  final (pixels, width, height) = args;
+  try {
+    final image = img.Image.fromBytes(
+      width: width,
+      height: height,
+      bytes: pixels.buffer,
+      numChannels: 4,
+      order: img.ChannelOrder.bgra,
+    );
+    return img.encodePng(image);
+  } catch (_) {
+    return null;
   }
 }

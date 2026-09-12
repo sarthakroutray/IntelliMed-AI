@@ -1,0 +1,132 @@
+{
+  "conversions": {
+    "Glucose": {
+      "canonical_unit": "mg/dL",
+      "factors": {
+        "mmol/L": 18.0182,
+        "mg/dL": 1.0,
+        "g/L": 100.0
+      }
+    },
+    "Fasting Blood Glucose": {
+      "canonical_unit": "mg/dL",
+      "factors": {
+        "mmol/L": 18.0182,
+        "mg/dL": 1.0,
+        "g/L": 100.0
+      }
+    },
+    "Postprandial Blood Glucose": {
+      "canonical_unit": "mg/dL",
+      "factors": {
+        "mmol/L": 18.0182,
+        "mg/dL": 1.0,
+        "g/L": 100.0
+      }
+    },
+    "Random Blood Glucose": {
+      "canonical_unit": "mg/dL",
+      "factors": {
+        "mmol/L": 18.0182,
+        "mg/dL": 1.0,
+        "g/L": 100.0
+      }
+    },
+    "Total Cholesterol": {
+      "canonical_unit": "mg/dL",
+      "factors": {
+        "mmol/L": 38.67,
+        "mg/dL": 1.0,
+        "g/L": 100.0
+      }
+    },
+    "HDL Cholesterol": {
+      "canonical_unit": "mg/dL",
+      "factors": {
+        "mmol/L": 38.67,
+        "mg/dL": 1.0,
+        "g/L": 100.0
+      }
+    },
+    "LDL Cholesterol": {
+      "canonical_unit": "mg/dL",
+      "factors": {
+        "mmol/L": 38.67,
+        "mg/dL": 1.0,
+        "g/L": 100.0
+      }
+    },
+    "VLDL Cholesterol": {
+      "canonical_unit": "mg/dL",
+      "factors": {
+        "mmol/L": 38.67,
+        "mg/dL": 1.0,
+        "g/L": 100.0
+      }
+    },
+    "Triglycerides": {
+      "canonical_unit": "mg/dL",
+      "factors": {
+        "mmol/L": 88.57,
+        "mg/dL": 1.0,
+        "g/L": 100.0
+      }
+    },
+    "Serum Creatinine": {
+      "canonical_unit": "mg/dL",
+      "factors": {
+        "µmol/L": 0.01131,
+        "umol/L": 0.01131,
+        "mg/dL": 1.0
+      }
+    },
+    "Total Bilirubin": {
+      "canonical_unit": "mg/dL",
+      "factors": {
+        "µmol/L": 0.05847,
+        "umol/L": 0.05847,
+        "mg/dL": 1.0
+      }
+    },
+    "Direct Bilirubin": {
+      "canonical_unit": "mg/dL",
+      "factors": {
+        "µmol/L": 0.05847,
+        "umol/L": 0.05847,
+        "mg/dL": 1.0
+      }
+    },
+    "Indirect Bilirubin": {
+      "canonical_unit": "mg/dL",
+      "factors": {
+        "µmol/L": 0.05847,
+        "umol/L": 0.05847,
+        "mg/dL": 1.0
+      }
+    },
+    "Hemoglobin": {
+      "canonical_unit": "g/dL",
+      "factors": {
+        "g/L": 0.1,
+        "g/dL": 1.0,
+        "mmol/L": 1.611
+      }
+    },
+    "Calcium": {
+      "canonical_unit": "mg/dL",
+      "factors": {
+        "mmol/L": 4.008,
+        "mEq/L": 2.004,
+        "mg/dL": 1.0
+      }
+    },
+    "Uric Acid": {
+      "canonical_unit": "mg/dL",
+      "factors": {
+        "µmol/L": 0.01681,
+        "umol/L": 0.01681,
+        "mg/dL": 1.0
+      }
+    }
+  }
+}

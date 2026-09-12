@@ -1,6 +1,8 @@
 # AI feature backlog — IntelliMed mobile
 
-Status: proposed, not scheduled. Nothing here is committed or started.
+Status: §2.1 (capture quality gate + document scanner) and §2.2 (longitudinal
+trends) are implemented in the mobile app. Everything else is proposed and not
+started.
 Scope: `mobile/` (Flutter, patient-facing, Android-first)
 Companion doc: [LAB_REPORT_ENGINE_PLAN.md](LAB_REPORT_ENGINE_PLAN.md) — the
 extraction work this backlog builds on.
@@ -32,13 +34,20 @@ idea in this document.
 
 ### 2.1 Capture quality gate + document scanner
 
+> **Status: implemented.** `google_mlkit_document_scanner ^0.6.1` (Android-only;
+> other platforms fall back to `image_picker`). Gate in `lib/capture_quality.dart`
+> (blur/glare/darkness on the corrected image, before inference) wired into
+> `lib/screens/capture_screen.dart`, with an inline retake prompt and a
+> "use anyway" escape. Small text is checked after OCR (its height is only
+> knowable from ML Kit boxes) and surfaced as an envelope warning.
+
 **Problem.** A skewed, blurry or glare-hit phone photo goes straight into OCR,
 and input quality is the dominant cause of bad extraction. No model upgrade
 fixes a skewed page — which is why this outranks every model idea here.
 
-**Current state.** The app depends on `google_mlkit_text_recognition: 0.17.1`
-only. `google_mlkit_document_scanner` is **not** in `pubspec.lock`, so ML Kit's
-edge-detection / perspective-correction / crop / dewarp module is unused.
+**Current state (before this change).** The app depended on
+`google_mlkit_text_recognition: 0.17.1` only; ML Kit's edge-detection /
+perspective-correction / crop / dewarp module was unused.
 
 **What to build.**
 - Add `google_mlkit_document_scanner` for capture: edge detection, corner drag,
@@ -59,6 +68,17 @@ package for pixel access. The scanner UI is a full-screen flow that returns
 images, so it replaces the camera path rather than sitting beside it.
 
 ### 2.2 Longitudinal trends
+
+> **Status: implemented.** `lib/trends.dart` (unit-consistent series keyed by
+> canonical `test_name` + unit), `lib/widgets/trend_sparkline.dart` (band shaded
+> from the latest printed range), and `lib/screens/trends_screen.dart` /
+> `trend_detail_screen.dart`, reached from Home and Reports.
+>
+> Implementation note: series are derived from the stored envelopes via
+> `ResultStore.labReportRows()` rather than a denormalised table — no migration,
+> and a delete/re-run cannot leave the series stale. Local rows and server
+> reports are merged, skipping server copies already represented locally by
+> `server_id`, so a synced capture is not counted twice.
 
 **Problem.** Each report is currently shown in isolation. A single haemoglobin
 of 11.2 is nearly meaningless; the same value falling from 14 over three reports

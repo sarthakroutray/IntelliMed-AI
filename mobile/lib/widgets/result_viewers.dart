@@ -113,9 +113,21 @@ class LabTestRow extends StatelessWidget {
             spacing: 6,
             runSpacing: 6,
             children: [
+              if (test.isPanicValue)
+                _TinyBadge(
+                  label: 'CRITICAL PANIC VALUE',
+                  color: theme.colorScheme.error,
+                ),
+              if (test.calculationMethod == 'derived')
+                _TinyBadge(
+                  label: test.formula != null ? 'CALCULATED: ${test.formula}' : 'CALCULATED',
+                  color: theme.colorScheme.primary,
+                ),
               if (test.direction != null)
                 _TinyBadge(
-                  label: test.direction == 'low' ? 'below range' : 'above range',
+                  label: test.severity != null && test.severity != 'normal'
+                      ? '${test.severity!.toUpperCase()} (${test.direction == 'low' ? 'below' : 'above'} range)'
+                      : (test.direction == 'low' ? 'below range' : 'above range'),
                   color: theme.colorScheme.error,
                 )
               else if (test.abnormal == true)
@@ -153,13 +165,15 @@ class LabTestRow extends StatelessWidget {
 
   /// A badge only when it says something the value alone doesn't.
   static bool _needsBadge(LabTest test) =>
+      test.isPanicValue ||
+      test.calculationMethod == 'derived' ||
       test.abnormal != null ||
       test.direction != null ||
       test.flagInSource != null ||
       (test.value != null && !test.comparable);
 
   static Color? _valueColor(ThemeData theme, LabTest test) {
-    if (test.abnormal == true || test.direction != null) {
+    if (test.isPanicValue || test.abnormal == true || test.direction != null) {
       return theme.colorScheme.error;
     }
     return null;
@@ -185,23 +199,59 @@ class FlaggedPatternCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Icon(
-                Icons.rule_folder_outlined,
+                pattern.severity == 'critical'
+                    ? Icons.error_outline
+                    : Icons.rule_folder_outlined,
                 size: 18,
-                color: theme.colorScheme.onSurfaceVariant,
+                color: pattern.severity == 'critical'
+                    ? theme.colorScheme.error
+                    : theme.colorScheme.onSurfaceVariant,
               ),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(pattern.patternName, style: theme.textTheme.titleSmall),
               ),
+              if (pattern.severity != null) ...[
+                const SizedBox(width: 6),
+                _TinyBadge(
+                  label: pattern.severity!.toUpperCase(),
+                  color: pattern.severity == 'critical'
+                      ? theme.colorScheme.error
+                      : (pattern.severity == 'warning'
+                          ? Colors.orange.shade800
+                          : theme.colorScheme.primary),
+                ),
+              ],
             ],
           ),
+          if (pattern.category != null && pattern.category != 'General') ...[
+            const SizedBox(height: 4),
+            Text('Specialty: ${pattern.category}', style: theme.textTheme.labelSmall),
+          ],
           if (pattern.surfacedText.isNotEmpty) ...[
             const SizedBox(height: 8),
-            Text(pattern.surfacedText, style: theme.textTheme.bodySmall),
+            Text(pattern.surfacedText, style: theme.textTheme.bodyMedium),
+          ],
+          if (pattern.clinicalImplication != null && pattern.clinicalImplication!.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(pattern.clinicalImplication!, style: theme.textTheme.bodySmall?.copyWith(fontStyle: FontStyle.italic)),
           ],
           if (pattern.panelName != null) ...[
             const SizedBox(height: 4),
-            Text('Panel: ${pattern.panelName}', style: theme.textTheme.bodySmall),
+            Text('Context: ${pattern.panelName}', style: theme.textTheme.bodySmall),
+          ],
+          if (pattern.differentialDiagnosis.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text('Potential Differentials:', style: theme.textTheme.labelSmall),
+            const SizedBox(height: 4),
+            Wrap(
+              spacing: 6,
+              runSpacing: 4,
+              children: [
+                for (final d in pattern.differentialDiagnosis)
+                  _TinyBadge(label: d, color: AppColors.statusPendingLightFg),
+              ],
+            ),
           ],
           if (pattern.triggeringTests.isNotEmpty) ...[
             const SizedBox(height: 12),
@@ -505,6 +555,19 @@ class ResultEnvelopeView extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        if (envelope.hasPanicValues)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: InlineBanner(
+              tone: BannerTone.error,
+              icon: Icons.error_outline,
+              title: 'Critical panic values detected',
+              message:
+                  'One or more measurements exceed critical emergency thresholds: '
+                  '${envelope.panicTests.map((t) => '${t.testName} (${t.value} ${t.unit ?? ""})').join(', ')}. '
+                  'Urgent clinical review recommended.',
+            ),
+          ),
         if (envelope.rulesUnreviewed)
           const Padding(
             padding: EdgeInsets.only(bottom: 12),

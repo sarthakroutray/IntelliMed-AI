@@ -28,11 +28,15 @@ class DocumentsScreen extends StatefulWidget {
     super.key,
     required this.repository,
     required this.refreshToken,
+    required this.isActive,
     required this.onChanged,
   });
 
   final PatientRepository repository;
   final int refreshToken;
+
+  /// Whether this is the tab currently shown; inactive tabs defer their reload.
+  final bool isActive;
   final VoidCallback onChanged;
 
   @override
@@ -40,6 +44,11 @@ class DocumentsScreen extends StatefulWidget {
 }
 
 enum _DocFilter { all, analysed, pending }
+
+/// What a server upload is sent to. Lab reports go through the v2 pipeline
+/// (Stages 1-3, the deterministic rule engine) and land under Lab reports;
+/// everything else uses the v1 generic analysis and lands under Documents.
+enum _UploadKind { labReport, document }
 
 class _DocumentsScreenState extends State<DocumentsScreen> {
   static const _maxUploadMb = 10;
@@ -53,19 +62,35 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
   String? _notice;
   List<DocumentSummary> _documents = const [];
   _DocFilter _filter = _DocFilter.all;
+  _UploadKind _uploadKind = _UploadKind.labReport;
   int _seenToken = -1;
+
+  /// Set when this screen caused the change itself, so the token bump it
+  /// triggers does not immediately refetch the list it just updated.
+  bool _changedLocally = false;
 
   @override
   void initState() {
     super.initState();
     _search.addListener(() => setState(() {}));
-    _load();
+    if (widget.isActive) _load();
   }
 
   @override
   void didUpdateWidget(covariant DocumentsScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (!widget.isActive) return;
+    if (_changedLocally) {
+      _changedLocally = false;
+      _seenToken = widget.refreshToken;
+      return;
+    }
     if (widget.refreshToken != _seenToken) _load();
+  }
+
+  void _notifyChanged() {
+    _changedLocally = true;
+    widget.onChanged();
   }
 
   @override
@@ -112,7 +137,7 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
     }).toList();
   }
 
-  Future<void> _uploadBytes({
+  Future<void> _upload({
     required List<int> bytes,
     required String filename,
     String? contentType,
@@ -127,22 +152,43 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
       return;
     }
 
+    final labReport = _uploadKind == _UploadKind.labReport;
     setState(() {
       _busy = true;
-      _notice =
-          'Uploading and analysing… this runs OCR and AI on the server and can '
-          'take a minute.';
+      _notice = labReport
+          ? 'Uploading to the lab pipeline… this runs structure extraction and '
+                'the review rule engine on the server.'
+          : 'Uploading and analysing… this runs OCR and AI on the server and can '
+                'take a minute.';
     });
     try {
-      await widget.repository.uploadDocument(
-        bytes: bytes,
-        filename: filename,
-        contentType: contentType,
-      );
-      await _load();
-      widget.onChanged();
-      if (mounted) {
-        setState(() => _notice = 'Uploaded. The document is now on the server.');
+      if (labReport) {
+        final response = await widget.repository.uploadLabReport(
+          bytes: bytes,
+          filename: filename,
+          contentType: contentType,
+        );
+        await _load();
+        _notifyChanged();
+        if (mounted) {
+          final summary = _summarizeLabResult(response);
+          setState(
+            () => _notice =
+                'Lab report processed.${summary.isEmpty ? '' : ' $summary'} '
+                'Find it under Lab reports.',
+          );
+        }
+      } else {
+        await widget.repository.uploadDocument(
+          bytes: bytes,
+          filename: filename,
+          contentType: contentType,
+        );
+        await _load();
+        _notifyChanged();
+        if (mounted) {
+          setState(() => _notice = 'Uploaded. The document is now on the server.');
+        }
       }
     } on ApiException catch (e) {
       if (mounted) {
@@ -157,6 +203,31 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
     }
   }
 
+  /// "18 measurements, 2 patterns for review." — read from the server's Stage 3
+  /// output, so the user can tell the rule engine actually ran.
+  String _summarizeLabResult(Map<String, dynamic> response) {
+    final result = response['result'];
+    if (result is! Map) return '';
+    final stage3 = result['stage3'];
+    final document = stage3 is Map ? stage3 : result['stage2'];
+    if (document is! Map) return '';
+
+    var tests = 0;
+    for (final panel in (document['panels'] as List? ?? const [])) {
+      if (panel is Map && panel['tests'] is List) {
+        tests += (panel['tests'] as List).length;
+      }
+    }
+    final patterns =
+        (document['flagged_patterns'] as List?)?.length ?? 0;
+    final parts = <String>[
+      '$tests measurement${tests == 1 ? '' : 's'}',
+      if (patterns > 0)
+        '$patterns pattern${patterns == 1 ? '' : 's'} for review',
+    ];
+    return '${parts.join(', ')}.';
+  }
+
   Future<void> _pickFile() async {
     // file_picker 12: static `pickFile` for a single file, and bytes are read
     // from the PlatformFile (the old `withData` flag is deprecated).
@@ -169,14 +240,14 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
     );
     if (file == null) return;
     final bytes = await file.readAsBytes();
-    await _uploadBytes(bytes: bytes, filename: file.name);
+    await _upload(bytes: bytes, filename: file.name);
   }
 
   Future<void> _pickImage(ImageSource source) async {
     final picked = await _picker.pickImage(source: source, imageQuality: 92);
     if (picked == null) return;
     final bytes = await File(picked.path).readAsBytes();
-    await _uploadBytes(
+    await _upload(
       bytes: bytes,
       filename: picked.name,
       contentType: 'image/jpeg',
@@ -191,7 +262,7 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
     try {
       await widget.repository.analyzeDocument(doc.id);
       await _load();
-      widget.onChanged();
+      _notifyChanged();
       if (mounted) setState(() => _notice = 'Analysis complete.');
     } on ApiException catch (e) {
       if (mounted) setState(() => _notice = e.message);
@@ -211,13 +282,25 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
       destructive: true,
     );
     if (!confirmed) return;
+
+    // Remove the row straight away, then talk to the server; put it back if the
+    // delete fails. Waiting on the round-trip before updating the list is what
+    // made deletion feel slow.
+    final previous = _documents;
+    setState(() {
+      _documents = _documents.where((d) => d.id != doc.id).toList();
+    });
+
     try {
       await widget.repository.deleteDocument(doc.id);
-      await _load();
-      widget.onChanged();
+      _notifyChanged();
       if (mounted) setState(() => _notice = 'Document deleted.');
     } on ApiException catch (e) {
-      if (mounted) setState(() => _notice = e.message);
+      if (!mounted) return;
+      setState(() {
+        _documents = previous;
+        _notice = e.message;
+      });
     }
   }
 
@@ -234,8 +317,9 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
           Text('Documents', style: theme.textTheme.headlineSmall),
           const SizedBox(height: 4),
           Text(
-            'Files stored on the server, with AI analysis. Uploading sends the '
-            'original file to your account.',
+            'Send a lab report through the structure + review pipeline, or any '
+            'document for AI analysis. Uploading sends the original file to '
+            'your account.',
             style: theme.textTheme.bodySmall,
           ),
           const SizedBox(height: 16),
@@ -243,6 +327,18 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                Text('Upload as', style: theme.textTheme.labelLarge),
+                const SizedBox(height: 8),
+                FilterChips<_UploadKind>(
+                  values: _UploadKind.values,
+                  selected: _uploadKind,
+                  labelOf: (k) => switch (k) {
+                    _UploadKind.labReport => 'Lab report',
+                    _UploadKind.document => 'Other document',
+                  },
+                  onSelected: (k) => setState(() => _uploadKind = k),
+                ),
+                const SizedBox(height: 12),
                 // Upload on its own full-width row, camera/gallery below as
                 // equal halves: a single row of all three is too tight at
                 // 320dp and breaks with larger text.
@@ -251,7 +347,11 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
                   child: FilledButton.icon(
                     onPressed: _busy ? null : _pickFile,
                     icon: const Icon(Icons.upload_file, size: 18),
-                    label: const Text('Upload file'),
+                    label: Text(
+                      _uploadKind == _UploadKind.labReport
+                          ? 'Upload lab report'
+                          : 'Upload document',
+                    ),
                   ),
                 ),
                 const SizedBox(height: 10),
@@ -279,6 +379,14 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
                   ],
                 ),
                 const SizedBox(height: 8),
+                Text(
+                  _uploadKind == _UploadKind.labReport
+                      ? 'Runs the server lab pipeline (structure + review rules) '
+                            'and appears under Lab reports.'
+                      : 'Runs the generic server AI analysis and appears here.',
+                  style: theme.textTheme.bodySmall,
+                ),
+                const SizedBox(height: 4),
                 Text(
                   '${uploadExtensions.map((e) => e.toUpperCase()).join(', ')} • '
                   'up to ${_maxUploadMb}MB',
@@ -329,7 +437,9 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
             onSelected: (f) => setState(() => _filter = f),
           ),
           const SizedBox(height: 12),
-          if (_loading)
+          // Only take over the screen on the first load; a background refresh
+          // keeps the existing list on screen instead of blanking it.
+          if (_loading && _documents.isEmpty)
             const LoadingView(message: 'Loading documents…')
           else if (_error != null)
             ErrorView(message: _error!, onRetry: _load)
@@ -361,7 +471,7 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
                       ),
                     );
                     await _load();
-                    widget.onChanged();
+                    _notifyChanged();
                   },
                   onAnalyze: () => _analyze(doc),
                   onDelete: () => _delete(doc),

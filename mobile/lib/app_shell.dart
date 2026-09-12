@@ -66,7 +66,9 @@ class _AppShellState extends State<AppShell> {
   int _index = 0;
 
   /// Bumped to make a tab reload after an action elsewhere (deleting a document
-  /// should refresh both Docs and Home).
+  /// should refresh both Docs and Home). Tabs that are not currently visible
+  /// defer the reload until they are shown, so an action never fans out into
+  /// network work for screens the user cannot see.
   int _refreshToken = 0;
 
   void _goTo(int index) => setState(() => _index = index);
@@ -81,21 +83,26 @@ class _AppShellState extends State<AppShell> {
         models: widget.models,
         sync: widget.sync,
         refreshToken: _refreshToken,
+        isActive: _index == 0,
         onNavigate: _goTo,
       ),
       CaptureScreen(
         models: widget.models,
         sync: widget.sync,
         refreshToken: _refreshToken,
+        isActive: _index == 1,
         onChanged: _refreshAll,
       ),
       ReportsScreen(
         repository: widget.repository,
         refreshToken: _refreshToken,
+        isActive: _index == 2,
+        onChanged: _refreshAll,
       ),
       DocumentsScreen(
         repository: widget.repository,
         refreshToken: _refreshToken,
+        isActive: _index == 3,
         onChanged: _refreshAll,
       ),
       ProfileScreen(
@@ -105,6 +112,7 @@ class _AppShellState extends State<AppShell> {
         sync: widget.sync,
         themeController: widget.themeController,
         refreshToken: _refreshToken,
+        isActive: _index == 4,
       ),
     ];
 

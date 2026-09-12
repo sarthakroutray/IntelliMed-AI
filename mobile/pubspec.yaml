@@ -59,7 +59,15 @@ dependencies:
   intl: ^0.19.0
   # Open a downloaded document / signed file URL externally.
   url_launcher: ^6.3.1
-  pdfx: ^2.11.0
+  # ML Kit document scanner: edge detection, perspective correction, dewarp.
+  # Android-only (the plugin is Android-exclusive); the capture screen falls
+  # back to image_picker on other platforms. No camera permission is required —
+  # the scanner UI runs in Google Play services.
+  google_mlkit_document_scanner: ^0.6.1
+  # PDF engine (pdfium). Rasterizes pages for the page-image pipeline AND reads
+  # a digital PDF's exact text layer (with per-character boxes) so we can skip
+  # OCR. Replaces pdfx — one engine instead of two, so one bundled pdfium.
+  pdfrx: ^2.4.8
 
 dev_dependencies:
   flutter_test:
@@ -96,6 +104,7 @@ flutter:
     - assets/models/
     - assets/sample/
     - assets/fonts/
+    - assets/rules/
 
   # Manrope — the same display typeface used by the web app. Bundled rather
   # than fetched at runtime so the app stays fully offline-capable.

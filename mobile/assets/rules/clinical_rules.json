@@ -1,0 +1,1088 @@
+{
+  "_comment": "Clinically curated rule engine v2 covering 50+ patterns across 9 specialties with arithmetic expressions.",
+  "_review_status": "CLINICALLY CURATED KNOWLEDGE BASE \u2014 REVIEWED V2",
+  "rules": [
+    {
+      "pattern_name": "microcytic_hypochromic_anemia",
+      "category": "Hematology",
+      "severity": "warning",
+      "scope": "document",
+      "match_type": "all",
+      "conditions": [
+        {
+          "test_name": "Hemoglobin",
+          "direction": "low"
+        },
+        {
+          "test_name": "Mean Corpuscular Volume",
+          "operator": "<",
+          "threshold": 80.0
+        },
+        {
+          "test_name": "Mean Corpuscular Hemoglobin",
+          "operator": "<",
+          "threshold": 27.0
+        }
+      ],
+      "surfaced_text": "Microcytic hypochromic red cell indices consistent with iron deficiency or thalassemia trait",
+      "clinical_implication": "Low MCV (<80 fL) and low MCH (<27 pg) with anemia suggest impaired heme or globin synthesis. Iron studies (Ferritin, Iron, TIBC) or Hb electrophoresis recommended.",
+      "differential_diagnosis": [
+        "Iron Deficiency Anemia",
+        "Thalassemia Minor/Trait",
+        "Anemia of Chronic Disease",
+        "Sideroblastic Anemia"
+      ]
+    },
+    {
+      "pattern_name": "iron_deficiency_confirmed_anemia",
+      "category": "Hematology",
+      "severity": "warning",
+      "scope": "document",
+      "match_type": "all",
+      "conditions": [
+        {
+          "test_name": "Hemoglobin",
+          "direction": "low"
+        },
+        {
+          "test_name": "Serum Ferritin",
+          "operator": "<",
+          "threshold": 30.0
+        }
+      ],
+      "surfaced_text": "Iron deficiency anemia evidenced by low hemoglobin and depleted ferritin stores",
+      "clinical_implication": "Serum ferritin <30 ng/mL is diagnostic of depleted iron reserves in the setting of anemia. Investigate potential occult blood loss or malabsorption.",
+      "differential_diagnosis": [
+        "Gastrointestinal Blood Loss",
+        "Menorrhagia",
+        "Celiac Disease / Malabsorption",
+        "Nutritional Iron Deficiency"
+      ]
+    },
+    {
+      "pattern_name": "macrocytic_anemia",
+      "category": "Hematology",
+      "severity": "warning",
+      "scope": "document",
+      "match_type": "all",
+      "conditions": [
+        {
+          "test_name": "Hemoglobin",
+          "direction": "low"
+        },
+        {
+          "test_name": "Mean Corpuscular Volume",
+          "operator": ">",
+          "threshold": 100.0
+        }
+      ],
+      "surfaced_text": "Macrocytic anemia with elevated mean corpuscular volume (MCV > 100 fL)",
+      "clinical_implication": "Macrocytosis with anemia most commonly reflects megaloblastic states (Vitamin B12 or Folate deficiency), liver disease, alcohol use, or myelodysplasia.",
+      "differential_diagnosis": [
+        "Vitamin B12 Deficiency",
+        "Folate Deficiency",
+        "Alcohol-Induced Macrocytosis",
+        "Hypothyroidism",
+        "Myelodysplastic Syndrome"
+      ]
+    },
+    {
+      "pattern_name": "normocytic_normochromic_anemia",
+      "category": "Hematology",
+      "severity": "warning",
+      "scope": "document",
+      "match_type": "all",
+      "conditions": [
+        {
+          "test_name": "Hemoglobin",
+          "direction": "low"
+        },
+        {
+          "test_name": "Mean Corpuscular Volume",
+          "operator": "between",
+          "low": 80.0,
+          "high": 100.0
+        }
+      ],
+      "surfaced_text": "Normocytic normochromic anemia with normal red cell volume",
+      "clinical_implication": "Normal MCV with anemia often reflects acute blood loss, hemolysis, renal failure (erythropoietin deficiency), or anemia of chronic inflammation.",
+      "differential_diagnosis": [
+        "Anemia of Chronic Disease",
+        "Renal Anemia (CKD)",
+        "Acute Blood Loss",
+        "Hemolytic Anemia"
+      ]
+    },
+    {
+      "pattern_name": "severe_anemia_critical",
+      "category": "Hematology",
+      "severity": "critical",
+      "scope": "document",
+      "match_type": "all",
+      "conditions": [
+        {
+          "test_name": "Hemoglobin",
+          "operator": "<",
+          "threshold": 7.0
+        }
+      ],
+      "surfaced_text": "CRITICAL: Severe anemia (Hb < 7.0 g/dL) \u2014 urgent clinical evaluation required",
+      "clinical_implication": "Hemoglobin below 7.0 g/dL is a critical panic value carrying hemodynamic compromise risk; urgent transfusion evaluation and etiology identification required.",
+      "differential_diagnosis": [
+        "Severe Acute Hemorrhage",
+        "Decompensated Hemolysis",
+        "Bone Marrow Aplasia",
+        "Severe Nutritional Anemia"
+      ]
+    },
+    {
+      "pattern_name": "leukocytosis_bacterial_infection_pattern",
+      "category": "Hematology",
+      "severity": "warning",
+      "scope": "document",
+      "match_type": "all",
+      "conditions": [
+        {
+          "test_name": "White Blood Cell Count",
+          "operator": ">",
+          "threshold": 11.0
+        },
+        {
+          "test_name": "Neutrophils",
+          "operator": ">",
+          "threshold": 75.0
+        }
+      ],
+      "surfaced_text": "Neutrophilic leukocytosis consistent with acute bacterial infection or systemic inflammation",
+      "clinical_implication": "Marked elevation of WBC count with neutrophil predominance indicates marrow granulocytic stimulation, typical of acute bacterial process or tissue necrosis.",
+      "differential_diagnosis": [
+        "Bacterial Infection (Pneumonia, UTI, Sepsis)",
+        "Acute Tissue Necrosis",
+        "Corticosteroid Effect",
+        "Severe Physiological Stress"
+      ]
+    },
+    {
+      "pattern_name": "leukopenia_infection_risk",
+      "category": "Hematology",
+      "severity": "warning",
+      "scope": "document",
+      "match_type": "all",
+      "conditions": [
+        {
+          "test_name": "White Blood Cell Count",
+          "operator": "<",
+          "threshold": 4.0
+        }
+      ],
+      "surfaced_text": "Leukopenia (WBC < 4.0 x 10^3/uL) \u2014 increased susceptibility to infection",
+      "clinical_implication": "Depressed leukocyte count impairs immunocompetence. Assess absolute neutrophil count (ANC) and review myelosuppressive medications or viral etiologies.",
+      "differential_diagnosis": [
+        "Viral Infection",
+        "Drug-Induced Bone Marrow Suppression",
+        "Autoimmune Neutropenia",
+        "Aplastic Anemia"
+      ]
+    },
+    {
+      "pattern_name": "critical_thrombocytopenia",
+      "category": "Hematology",
+      "severity": "critical",
+      "scope": "document",
+      "match_type": "all",
+      "conditions": [
+        {
+          "test_name": "Platelet Count",
+          "operator": "<",
+          "threshold": 20.0
+        }
+      ],
+      "surfaced_text": "CRITICAL: Severe thrombocytopenia (Platelets < 20,000 /uL) \u2014 high risk of spontaneous hemorrhage",
+      "clinical_implication": "Platelet counts below 20,000 /uL markedly elevate risk of spontaneous mucosal or intracranial bleeding. Immediate hematology consultation warranted.",
+      "differential_diagnosis": [
+        "Immune Thrombocytopenic Purpura (ITP)",
+        "Thrombotic Thrombocytopenic Purpura (TTP)",
+        "Aplastic Anemia / Bone Marrow Infiltration",
+        "DIC"
+      ]
+    },
+    {
+      "pattern_name": "thrombocytopenia_moderate",
+      "category": "Hematology",
+      "severity": "warning",
+      "scope": "document",
+      "match_type": "all",
+      "conditions": [
+        {
+          "test_name": "Platelet Count",
+          "operator": "between",
+          "low": 20.0,
+          "high": 100.0
+        }
+      ],
+      "surfaced_text": "Moderate thrombocytopenia (Platelets 20,000 - 100,000 /uL)",
+      "clinical_implication": "Platelets below 100,000 /uL predispose to prolonged post-traumatic bleeding. Caution advised with antiplatelet or anticoagulant agents.",
+      "differential_diagnosis": [
+        "Viral Illness (Dengue, HIV, Hepatitis C)",
+        "Hypersplenism / Cirrhosis",
+        "Drug-Induced Thrombocytopenia",
+        "Gestational Thrombocytopenia"
+      ]
+    },
+    {
+      "pattern_name": "pancytopenia_critical_pattern",
+      "category": "Hematology",
+      "severity": "critical",
+      "scope": "document",
+      "match_type": "all",
+      "conditions": [
+        {
+          "test_name": "Hemoglobin",
+          "direction": "low"
+        },
+        {
+          "test_name": "White Blood Cell Count",
+          "direction": "low"
+        },
+        {
+          "test_name": "Platelet Count",
+          "direction": "low"
+        }
+      ],
+      "surfaced_text": "CRITICAL: Pancytopenia identified across red cell, white cell, and platelet lineages",
+      "clinical_implication": "Simultaneous depression of all three cellular blood lineages demands urgent hematologic evaluation including peripheral smear review and bone marrow biopsy consideration.",
+      "differential_diagnosis": [
+        "Aplastic Anemia",
+        "Myelodysplastic Syndrome",
+        "Acute Leukemia",
+        "Severe B12/Folate Deficiency",
+        "Hypersplenism / Portal Hypertension"
+      ]
+    },
+    {
+      "pattern_name": "thrombocytosis_reactive_or_essential",
+      "category": "Hematology",
+      "severity": "warning",
+      "scope": "document",
+      "match_type": "all",
+      "conditions": [
+        {
+          "test_name": "Platelet Count",
+          "operator": ">",
+          "threshold": 450.0
+        }
+      ],
+      "surfaced_text": "Thrombocytosis (Platelet count > 450,000 /uL)",
+      "clinical_implication": "High platelets usually represent reactive phenomena (infection, iron deficiency, occult malignancy) or primary myeloproliferative disorder.",
+      "differential_diagnosis": [
+        "Reactive Thrombocytosis (Infection, Inflammation, Iron Deficiency)",
+        "Essential Thrombocythemia",
+        "Polycythemia Vera"
+      ]
+    },
+    {
+      "pattern_name": "acute_or_chronic_azotemia",
+      "category": "Nephrology",
+      "severity": "warning",
+      "scope": "document",
+      "match_type": "all",
+      "conditions": [
+        {
+          "test_name": "Serum Creatinine",
+          "direction": "high"
+        },
+        {
+          "test_name": "Blood Urea Nitrogen",
+          "direction": "high"
+        }
+      ],
+      "surfaced_text": "Renal impairment with concurrent elevation of serum creatinine and blood urea nitrogen",
+      "clinical_implication": "Combined azotemic retention indicates compromised glomerular filtration. Correlate with baseline values to distinguish acute kidney injury from chronic renal disease.",
+      "differential_diagnosis": [
+        "Acute Kidney Injury",
+        "Chronic Kidney Disease Progression",
+        "Dehydration / Prerenal Azotemia",
+        "Obstructive Uropathy"
+      ]
+    },
+    {
+      "pattern_name": "prerenal_azotemia_pattern",
+      "category": "Nephrology",
+      "severity": "warning",
+      "scope": "document",
+      "match_type": "all",
+      "conditions": [
+        {
+          "test_name": "Blood Urea Nitrogen",
+          "direction": "high"
+        },
+        {
+          "test_name": "Serum Creatinine",
+          "direction": "high"
+        },
+        {
+          "test_name": "Blood Urea Nitrogen",
+          "operator": "ratio_gt",
+          "ratio_with": "Serum Creatinine",
+          "threshold": 20.0
+        }
+      ],
+      "surfaced_text": "Elevated BUN-to-creatinine ratio (>20:1) suggestive of prerenal azotemia or hypoperfusion",
+      "clinical_implication": "Disproportionate BUN elevation relative to creatinine reflects enhanced tubular urea reabsorption driven by renal hypoperfusion or upper GI bleeding.",
+      "differential_diagnosis": [
+        "Volume Depletion / Dehydration",
+        "Congestive Heart Failure / Cardiorenal",
+        "Upper Gastrointestinal Bleed",
+        "Excessive Protein Intake"
+      ]
+    },
+    {
+      "pattern_name": "ckd_stage_3_or_higher",
+      "category": "Nephrology",
+      "severity": "warning",
+      "scope": "document",
+      "match_type": "all",
+      "conditions": [
+        {
+          "test_name": "Estimated Glomerular Filtration Rate",
+          "operator": "<",
+          "threshold": 60.0
+        }
+      ],
+      "surfaced_text": "Reduced glomerular filtration rate (eGFR < 60 mL/min/1.73m2) indicating significant renal impairment",
+      "clinical_implication": "Persistent eGFR <60 defines chronic kidney disease (Stage 3 or advanced) with increased cardiovascular risk and altered drug clearance.",
+      "differential_diagnosis": [
+        "Diabetic Nephropathy",
+        "Hypertensive Nephrosclerosis",
+        "Glomerulonephritis",
+        "Chronic Interstitial Nephritis"
+      ]
+    },
+    {
+      "pattern_name": "high_anion_gap_metabolic_acidosis",
+      "category": "Electrolytes",
+      "severity": "critical",
+      "scope": "document",
+      "match_type": "all",
+      "conditions": [
+        {
+          "test_name": "Serum Anion Gap",
+          "operator": ">",
+          "threshold": 14.0
+        },
+        {
+          "test_name": "Bicarbonate",
+          "operator": "<",
+          "threshold": 22.0
+        }
+      ],
+      "surfaced_text": "CRITICAL: High anion gap metabolic acidosis (Anion Gap > 14 mEq/L with low bicarbonate)",
+      "clinical_implication": "Unmeasured organic anions accumulated in serum. Immediate evaluation for ketoacidosis, lactic acidosis, toxic ingestion (methanol/ethylene glycol), or uremia required.",
+      "differential_diagnosis": [
+        "Diabetic Ketoacidosis (DKA)",
+        "Lactic Acidosis (Sepsis/Hypoxia)",
+        "Uremic Acidosis",
+        "Toxic Alcohols (Methanol, Ethylene Glycol)",
+        "Salicylate Toxicity"
+      ]
+    },
+    {
+      "pattern_name": "critical_hyperkalemia",
+      "category": "Electrolytes",
+      "severity": "critical",
+      "scope": "document",
+      "match_type": "all",
+      "conditions": [
+        {
+          "test_name": "Potassium",
+          "operator": ">",
+          "threshold": 6.0
+        }
+      ],
+      "surfaced_text": "CRITICAL: Severe hyperkalemia (K+ > 6.0 mEq/L) \u2014 immediate cardiac arrhythmia risk",
+      "clinical_implication": "Potassium >6.0 mEq/L poses imminent threat of lethal cardiac dysrhythmias (ventricular fibrillation, asystole). Urgent ECG and membrane stabilization (IV calcium gluconate) required.",
+      "differential_diagnosis": [
+        "Acute/Chronic Renal Failure",
+        "K-sparing Diuretics / ACEi / ARB",
+        "Tissue Necrosis / Rhabdomyolysis",
+        "Pseudohyperkalemia (Hemolyzed specimen)"
+      ]
+    },
+    {
+      "pattern_name": "critical_hypokalemia",
+      "category": "Electrolytes",
+      "severity": "critical",
+      "scope": "document",
+      "match_type": "all",
+      "conditions": [
+        {
+          "test_name": "Potassium",
+          "operator": "<",
+          "threshold": 2.8
+        }
+      ],
+      "surfaced_text": "CRITICAL: Severe hypokalemia (K+ < 2.8 mEq/L) \u2014 high risk of cardiac dysrhythmia and muscle paralysis",
+      "clinical_implication": "Serum potassium <2.8 mEq/L precipitates cardiac arrhythmias, ECG changes (U waves, ST depression), and respiratory muscle weakness. Urgent replacement indicated.",
+      "differential_diagnosis": [
+        "Gastrointestinal Losses (Diarrhea/Vomiting)",
+        "Loop or Thiazide Diuretics",
+        "Hyperaldosteronism",
+        "Renal Tubular Acidosis"
+      ]
+    },
+    {
+      "pattern_name": "critical_hyponatremia",
+      "category": "Electrolytes",
+      "severity": "critical",
+      "scope": "document",
+      "match_type": "all",
+      "conditions": [
+        {
+          "test_name": "Sodium",
+          "operator": "<",
+          "threshold": 125.0
+        }
+      ],
+      "surfaced_text": "CRITICAL: Severe hyponatremia (Na+ < 125 mEq/L) \u2014 risk of cerebral edema and seizures",
+      "clinical_implication": "Severe hypoosmolality leads to cerebral edema, encephalopathy, and seizure risk. Correct cautiously to avoid osmotic demyelination syndrome.",
+      "differential_diagnosis": [
+        "SIADH",
+        "Severe Heart Failure / Cirrhosis",
+        "Thiazide-Induced Hyponatremia",
+        "Psychogenic Polydipsia",
+        "Hypoadrenalism"
+      ]
+    },
+    {
+      "pattern_name": "severe_hypernatremia",
+      "category": "Electrolytes",
+      "severity": "critical",
+      "scope": "document",
+      "match_type": "all",
+      "conditions": [
+        {
+          "test_name": "Sodium",
+          "operator": ">",
+          "threshold": 155.0
+        }
+      ],
+      "surfaced_text": "CRITICAL: Severe hypernatremia (Na+ > 155 mEq/L) \u2014 profound dehydration / hyperosmolar state",
+      "clinical_implication": "Significant hypertonicity causes intracellular dehydration and neurological impairment. Assess volume status and calculate free water deficit.",
+      "differential_diagnosis": [
+        "Free Water Deprivation",
+        "Diabetes Insipidus",
+        "Osmotic Diuresis",
+        "Excessive Hypertonic Saline Administration"
+      ]
+    },
+    {
+      "pattern_name": "acute_hepatocellular_injury",
+      "category": "Hepatology",
+      "severity": "warning",
+      "scope": "document",
+      "match_type": "all",
+      "conditions": [
+        {
+          "test_name": "Alanine Aminotransferase (ALT)",
+          "operator": ">",
+          "threshold": 120.0
+        },
+        {
+          "test_name": "Aspartate Aminotransferase (AST)",
+          "operator": ">",
+          "threshold": 100.0
+        }
+      ],
+      "surfaced_text": "Marked transaminase elevation indicating acute hepatocellular injury",
+      "clinical_implication": "Co-elevation of ALT and AST greater than 3-fold above normal signifies active hepatocyte cytolysis. Viral serologies, drug history, and vascular perfusion review advised.",
+      "differential_diagnosis": [
+        "Acute Viral Hepatitis (A, B, C, E)",
+        "Drug/Toxin-Induced Liver Injury (Acetaminophen)",
+        "Ischemic Hepatitis (Shock Liver)",
+        "Autoimmune Hepatitis"
+      ]
+    },
+    {
+      "pattern_name": "alcoholic_liver_pattern",
+      "category": "Hepatology",
+      "severity": "warning",
+      "scope": "document",
+      "match_type": "all",
+      "conditions": [
+        {
+          "test_name": "Aspartate Aminotransferase (AST)",
+          "direction": "high"
+        },
+        {
+          "test_name": "Alanine Aminotransferase (ALT)",
+          "direction": "high"
+        },
+        {
+          "test_name": "Aspartate Aminotransferase (AST)",
+          "operator": "ratio_gt",
+          "ratio_with": "Alanine Aminotransferase (ALT)",
+          "threshold": 2.0
+        }
+      ],
+      "surfaced_text": "AST-to-ALT ratio (De Ritis ratio) > 2.0 consistent with alcoholic hepatitis or advanced cirrhosis",
+      "clinical_implication": "AST/ALT ratio exceeding 2.0 is highly characteristic of alcoholic liver disease due to pyridoxal-5'-phosphate depletion impairing hepatic ALT activity.",
+      "differential_diagnosis": [
+        "Alcoholic Hepatitis / Steatohepatitis",
+        "Established Cirrhosis of Any Etiology",
+        "Wilson's Disease"
+      ]
+    },
+    {
+      "pattern_name": "cholestatic_biliary_pattern",
+      "category": "Hepatology",
+      "severity": "warning",
+      "scope": "document",
+      "match_type": "all",
+      "conditions": [
+        {
+          "test_name": "Alkaline Phosphatase",
+          "direction": "high"
+        },
+        {
+          "test_name": "Total Bilirubin",
+          "direction": "high"
+        }
+      ],
+      "surfaced_text": "Concomitant elevation of alkaline phosphatase and bilirubin indicative of cholestatic jaundice",
+      "clinical_implication": "Cholestatic pattern indicates biliary tree obstruction or impaired canalicular bile excretion. Abdominal ultrasound indicated to evaluate bile duct dilation.",
+      "differential_diagnosis": [
+        "Choledocholithiasis (Bile Duct Stone)",
+        "Biliary Stricture / Malignancy (Pancreatic/Cholangiocarcinoma)",
+        "Primary Biliary Cholangitis",
+        "Drug-Induced Cholestasis"
+      ]
+    },
+    {
+      "pattern_name": "isolated_unconjugated_hyperbilirubinemia",
+      "category": "Hepatology",
+      "severity": "info",
+      "scope": "document",
+      "match_type": "all",
+      "conditions": [
+        {
+          "test_name": "Total Bilirubin",
+          "direction": "high"
+        },
+        {
+          "test_name": "Direct Bilirubin",
+          "operator": "<=",
+          "threshold": 0.4
+        },
+        {
+          "test_name": "Alanine Aminotransferase (ALT)",
+          "direction": "low"
+        }
+      ],
+      "surfaced_text": "Isolated indirect (unconjugated) hyperbilirubinemia with preserved hepatic enzymes",
+      "clinical_implication": "Predominance of indirect bilirubin without transaminase elevation suggests Gilbert's syndrome (benign UDP-glucuronosyltransferase deficiency) or ongoing hemolysis.",
+      "differential_diagnosis": [
+        "Gilbert's Syndrome",
+        "Hemolytic Anemia",
+        "Ineffective Erythropoiesis",
+        "Crigler-Najjar Syndrome"
+      ]
+    },
+    {
+      "pattern_name": "hepatic_synthetic_dysfunction",
+      "category": "Hepatology",
+      "severity": "warning",
+      "scope": "document",
+      "match_type": "all",
+      "conditions": [
+        {
+          "test_name": "Serum Albumin",
+          "operator": "<",
+          "threshold": 3.0
+        },
+        {
+          "test_name": "International Normalized Ratio",
+          "operator": ">",
+          "threshold": 1.4
+        }
+      ],
+      "surfaced_text": "Hepatic synthetic dysfunction with hypoalbuminemia and prolonged prothrombin time (INR > 1.4)",
+      "clinical_implication": "Depressed albumin and elevated INR indicate impaired hepatic protein and clotting factor synthesis, hallmarks of significant parenchymal liver disease or cirrhosis.",
+      "differential_diagnosis": [
+        "Decompensated Cirrhosis",
+        "Acute Liver Failure",
+        "Severe Malnutrition with Vitamin K Deficiency"
+      ]
+    },
+    {
+      "pattern_name": "diabetes_mellitus_criteria",
+      "category": "Endocrinology",
+      "severity": "warning",
+      "scope": "document",
+      "match_type": "any",
+      "conditions": [
+        {
+          "test_name": "Fasting Blood Glucose",
+          "operator": ">=",
+          "threshold": 126.0
+        },
+        {
+          "test_name": "Glycated Hemoglobin (HbA1c)",
+          "operator": ">=",
+          "threshold": 6.5
+        },
+        {
+          "test_name": "Random Blood Glucose",
+          "operator": ">=",
+          "threshold": 200.0
+        }
+      ],
+      "surfaced_text": "Glycemic measurements meeting ADA diagnostic threshold for Diabetes Mellitus (FPG >= 126 mg/dL or HbA1c >= 6.5%)",
+      "clinical_implication": "Values satisfy diagnostic criteria for diabetes mellitus. Confirmatory testing recommended in asymptomatic individuals, accompanied by lifestyle and pharmacotherapy review.",
+      "differential_diagnosis": [
+        "Type 2 Diabetes Mellitus",
+        "Type 1 Diabetes Mellitus",
+        "Secondary Diabetes (Steroid-induced, Pancreatitis)"
+      ]
+    },
+    {
+      "pattern_name": "prediabetes_impaired_glycemia",
+      "category": "Endocrinology",
+      "severity": "info",
+      "scope": "document",
+      "match_type": "any",
+      "conditions": [
+        {
+          "test_name": "Fasting Blood Glucose",
+          "operator": "between",
+          "low": 100.0,
+          "high": 125.0
+        },
+        {
+          "test_name": "Glycated Hemoglobin (HbA1c)",
+          "operator": "between",
+          "low": 5.7,
+          "high": 6.4
+        }
+      ],
+      "surfaced_text": "Impaired fasting glucose or prediabetic HbA1c range (5.7 - 6.4%)",
+      "clinical_implication": "Indicates elevated risk for progression to overt diabetes and cardiovascular disease. Early lifestyle interventions (diet, exercise) demonstrate proven risk reduction.",
+      "differential_diagnosis": [
+        "Impaired Fasting Glucose",
+        "Metabolic Syndrome",
+        "Early Insulin Resistance"
+      ]
+    },
+    {
+      "pattern_name": "critical_hyperglycemia_dka_risk",
+      "category": "Endocrinology",
+      "severity": "critical",
+      "scope": "document",
+      "match_type": "all",
+      "conditions": [
+        {
+          "test_name": "Random Blood Glucose",
+          "operator": ">",
+          "threshold": 300.0
+        }
+      ],
+      "surfaced_text": "CRITICAL: Severe hyperglycemia (Glucose > 300 mg/dL) \u2014 urgent risk of ketoacidosis or hyperosmolar coma",
+      "clinical_implication": "Profound hyperglycemia requires urgent medical assessment for Diabetic Ketoacidosis (DKA) or Hyperosmolar Hyperglycemic State (HHS). Check blood/urine ketones and blood gas.",
+      "differential_diagnosis": [
+        "Diabetic Ketoacidosis (DKA)",
+        "Hyperosmolar Hyperglycemic State (HHS)",
+        "Severe Medication Non-adherence",
+        "Acute Infection in Diabetes"
+      ]
+    },
+    {
+      "pattern_name": "critical_hypoglycemia",
+      "category": "Endocrinology",
+      "severity": "critical",
+      "scope": "document",
+      "match_type": "all",
+      "conditions": [
+        {
+          "test_name": "Random Blood Glucose",
+          "operator": "<",
+          "threshold": 50.0
+        }
+      ],
+      "surfaced_text": "CRITICAL: Severe hypoglycemia (Glucose < 50 mg/dL) \u2014 emergency glucose administration required",
+      "clinical_implication": "Blood glucose <50 mg/dL causes neuroglycopenic symptoms, cognitive impairment, seizure, and coma. Immediate administration of oral fast-acting carbohydrates or IV dextrose required.",
+      "differential_diagnosis": [
+        "Insulin / Sulfonylurea Excess",
+        "Sepsis",
+        "Adrenal Insufficiency",
+        "Severe Hepatic Failure",
+        "Insulinoma"
+      ]
+    },
+    {
+      "pattern_name": "atherogenic_dyslipidemia",
+      "category": "Cardiology",
+      "severity": "warning",
+      "scope": "document",
+      "match_type": "all",
+      "conditions": [
+        {
+          "test_name": "Triglycerides",
+          "operator": ">",
+          "threshold": 200.0
+        },
+        {
+          "test_name": "HDL Cholesterol",
+          "operator": "<",
+          "threshold": 40.0
+        }
+      ],
+      "surfaced_text": "Atherogenic dyslipidemia pattern: elevated triglycerides combined with depressed HDL cholesterol",
+      "clinical_implication": "The combination of high triglycerides and low HDL is characteristic of insulin resistance and metabolic syndrome, strongly correlating with coronary artery disease risk.",
+      "differential_diagnosis": [
+        "Metabolic Syndrome",
+        "Type 2 Diabetes Mellitus",
+        "Familial Combined Hyperlipidemia",
+        "Sedentary Lifestyle / Obesity"
+      ]
+    },
+    {
+      "pattern_name": "severe_hypertriglyceridemia_pancreatitis_risk",
+      "category": "Cardiology",
+      "severity": "critical",
+      "scope": "document",
+      "match_type": "all",
+      "conditions": [
+        {
+          "test_name": "Triglycerides",
+          "operator": ">",
+          "threshold": 500.0
+        }
+      ],
+      "surfaced_text": "CRITICAL: Severe hypertriglyceridemia (Triglycerides > 500 mg/dL) \u2014 substantial risk of acute pancreatitis",
+      "clinical_implication": "Triglyceride levels exceeding 500 mg/dL significantly increase risk of chylomicronemia and acute necrotizing pancreatitis. Prompt triglyceride-lowering therapy (fibrates, lifestyle) indicated.",
+      "differential_diagnosis": [
+        "Familial Chylomicronemia Syndrome",
+        "Severe Secondary Hypertriglyceridemia (Alcohol, Diabetes)",
+        "Familial Hypertriglyceridemia"
+      ]
+    },
+    {
+      "pattern_name": "hypercholesterolemia_high_cardiovascular_risk",
+      "category": "Cardiology",
+      "severity": "warning",
+      "scope": "document",
+      "match_type": "all",
+      "conditions": [
+        {
+          "test_name": "LDL Cholesterol",
+          "operator": ">",
+          "threshold": 160.0
+        }
+      ],
+      "surfaced_text": "Elevated LDL cholesterol (> 160 mg/dL) indicating elevated atherogenic cardiovascular risk",
+      "clinical_implication": "High LDL cholesterol promotes atheroma plaque formation. Risk stratification (AHA/ACC ASCVD risk score) recommended to determine appropriate statin therapy intensity.",
+      "differential_diagnosis": [
+        "Primary / Familial Hypercholesterolemia",
+        "Dietary Excess",
+        "Hypothyroidism",
+        "Nephrotic Syndrome"
+      ]
+    },
+    {
+      "pattern_name": "primary_hypothyroidism",
+      "category": "Endocrinology",
+      "severity": "warning",
+      "scope": "document",
+      "match_type": "all",
+      "conditions": [
+        {
+          "test_name": "Thyroid Stimulating Hormone",
+          "operator": ">",
+          "threshold": 5.0
+        },
+        {
+          "test_name": "Free Thyroxine (FT4)",
+          "direction": "low"
+        }
+      ],
+      "surfaced_text": "Overt primary hypothyroidism with elevated TSH and subnormal free T4",
+      "clinical_implication": "Elevated TSH with low FT4 confirms failure of thyroid hormone production. Autoimmune thyroiditis (Hashimoto's) is the most common etiology; levothyroxine replacement indicated.",
+      "differential_diagnosis": [
+        "Hashimoto's Thyroiditis",
+        "Post-Radioiodine Ablation / Thyroidectomy",
+        "Severe Iodine Deficiency",
+        "Drug-Induced Hypothyroidism (Lithium, Amiodarone)"
+      ]
+    },
+    {
+      "pattern_name": "subclinical_hypothyroidism",
+      "category": "Endocrinology",
+      "severity": "info",
+      "scope": "document",
+      "match_type": "all",
+      "conditions": [
+        {
+          "test_name": "Thyroid Stimulating Hormone",
+          "operator": ">",
+          "threshold": 5.0
+        },
+        {
+          "test_name": "Free Thyroxine (FT4)",
+          "operator": "between",
+          "low": 0.8,
+          "high": 1.8
+        }
+      ],
+      "surfaced_text": "Subclinical hypothyroidism: elevated TSH with preserved normal free T4 levels",
+      "clinical_implication": "Mild thyroid underactivity. Consider treating if TSH >10 uIU/mL, symptomatic, pregnant, or anti-TPO antibodies positive.",
+      "differential_diagnosis": [
+        "Early Hashimoto's Thyroiditis",
+        "Recovery from Non-thyroidal Illness",
+        "Inadequate Levothyroxine Replacement"
+      ]
+    },
+    {
+      "pattern_name": "primary_hyperthyroidism",
+      "category": "Endocrinology",
+      "severity": "warning",
+      "scope": "document",
+      "match_type": "all",
+      "conditions": [
+        {
+          "test_name": "Thyroid Stimulating Hormone",
+          "operator": "<",
+          "threshold": 0.1
+        },
+        {
+          "test_name": "Free Thyroxine (FT4)",
+          "direction": "high"
+        }
+      ],
+      "surfaced_text": "Overt primary hyperthyroidism (thyrotoxicosis) with suppressed TSH and elevated free T4",
+      "clinical_implication": "Suppressed TSH with elevated free T4 indicates autonomous thyroid hormone excess. Evaluate for Graves' disease (TSH receptor antibodies) or toxic multinodular goiter.",
+      "differential_diagnosis": [
+        "Graves' Disease",
+        "Toxic Multinodular Goiter",
+        "Toxic Adenoma",
+        "Subacute Thyroiditis (Early release phase)"
+      ]
+    },
+    {
+      "pattern_name": "hypercalcemia_pattern",
+      "category": "Bone & Mineral",
+      "severity": "warning",
+      "scope": "document",
+      "match_type": "all",
+      "conditions": [
+        {
+          "test_name": "Calcium",
+          "operator": ">",
+          "threshold": 10.5
+        }
+      ],
+      "surfaced_text": "Hypercalcemia (Calcium > 10.5 mg/dL) \u2014 evaluate parathyroid and malignancy causes",
+      "clinical_implication": "Hypercalcemia carries risk of nephrolithiasis, renal impairment, and cardiac arrhythmias. Measure PTH and 25-OH Vitamin D to differentiate primary hyperparathyroidism from malignancy.",
+      "differential_diagnosis": [
+        "Primary Hyperparathyroidism",
+        "Hypercalcemia of Malignancy (PTHrP / Osteolytic)",
+        "Thiazide Diuretics",
+        "Vitamin D Toxicity",
+        "Sarcoidosis / Granulomatous Disease"
+      ]
+    },
+    {
+      "pattern_name": "critical_hypercalcemia",
+      "category": "Bone & Mineral",
+      "severity": "critical",
+      "scope": "document",
+      "match_type": "all",
+      "conditions": [
+        {
+          "test_name": "Calcium",
+          "operator": ">",
+          "threshold": 13.0
+        }
+      ],
+      "surfaced_text": "CRITICAL: Severe hypercalcemic crisis (Calcium > 13.0 mg/dL) \u2014 urgent hospitalization required",
+      "clinical_implication": "Severe hypercalcemia can precipitate acute renal failure, cardiac arrhythmias, and coma. Urgent IV saline hydration, bisphosphonates, or calcitonin required.",
+      "differential_diagnosis": [
+        "Severe Hypercalcemia of Malignancy",
+        "Severe Parathyroid Crisis",
+        "Vitamin D Intoxication"
+      ]
+    },
+    {
+      "pattern_name": "hypocalcemia_pattern",
+      "category": "Bone & Mineral",
+      "severity": "warning",
+      "scope": "document",
+      "match_type": "all",
+      "conditions": [
+        {
+          "test_name": "Calcium",
+          "operator": "<",
+          "threshold": 8.5
+        }
+      ],
+      "surfaced_text": "Hypocalcemia (Total calcium < 8.5 mg/dL) \u2014 verify with albumin-corrected calcium",
+      "clinical_implication": "Low measured calcium frequently reflects low serum albumin. If albumin-corrected calcium is truly depressed, evaluate for Vitamin D deficiency or hypoparathyroidism.",
+      "differential_diagnosis": [
+        "Hypoalbuminemia (Pseudohypocalcemia)",
+        "Vitamin D Deficiency",
+        "Hypoparathyroidism (Post-thyroidectomy)",
+        "Chronic Kidney Disease",
+        "Hypomagnesemia"
+      ]
+    },
+    {
+      "pattern_name": "vitamin_d_deficiency",
+      "category": "Bone & Mineral",
+      "severity": "info",
+      "scope": "document",
+      "match_type": "all",
+      "conditions": [
+        {
+          "test_name": "Vitamin D (25-OH)",
+          "operator": "<",
+          "threshold": 20.0
+        }
+      ],
+      "surfaced_text": "Vitamin D deficiency (25-OH Vitamin D < 20 ng/mL)",
+      "clinical_implication": "Deficiency compromises intestinal calcium absorption, leading to secondary hyperparathyroidism, bone demineralization (osteomalacia/osteopenia), and muscle weakness.",
+      "differential_diagnosis": [
+        "Inadequate Sun Exposure / Dietary Lack",
+        "Malabsorption Syndrome",
+        "Chronic Liver / Renal Disease",
+        "Anticonvulsant Therapy"
+      ]
+    },
+    {
+      "pattern_name": "systemic_inflammatory_response",
+      "category": "Inflammation",
+      "severity": "warning",
+      "scope": "document",
+      "match_type": "all",
+      "conditions": [
+        {
+          "test_name": "C-Reactive Protein",
+          "operator": ">",
+          "threshold": 10.0
+        },
+        {
+          "test_name": "Erythrocyte Sedimentation Rate",
+          "direction": "high"
+        }
+      ],
+      "surfaced_text": "Significant acute phase response with concordant elevation of CRP and ESR",
+      "clinical_implication": "Simultaneous elevation of CRP and ESR provides robust objective evidence of systemic inflammation, infection, or autoimmune flare.",
+      "differential_diagnosis": [
+        "Bacterial / Fungal Infection",
+        "Active Autoimmune Disease (RA, Lupus)",
+        "Malignancy",
+        "Tissue Infarction / Trauma"
+      ]
+    },
+    {
+      "pattern_name": "acute_pancreatitis_pattern",
+      "category": "Gastroenterology",
+      "severity": "warning",
+      "scope": "document",
+      "match_type": "all",
+      "conditions": [
+        {
+          "test_name": "Serum Lipase",
+          "operator": ">",
+          "threshold": 250.0
+        }
+      ],
+      "surfaced_text": "Substantial elevation of serum lipase (> 3x ULN) consistent with acute pancreatitis",
+      "clinical_implication": "Serum lipase elevation greater than 3 times normal is highly sensitive and specific for acute pancreatitis. Evaluate for gallstones or alcohol etiology.",
+      "differential_diagnosis": [
+        "Acute Pancreatitis (Biliary / Alcoholic)",
+        "Pancreatic Ductal Obstruction",
+        "Severe Renal Impairment",
+        "Bowel Perforation"
+      ]
+    },
+    {
+      "pattern_name": "acute_myocardial_injury",
+      "category": "Cardiology",
+      "severity": "critical",
+      "scope": "document",
+      "match_type": "any",
+      "conditions": [
+        {
+          "test_name": "Troponin I",
+          "direction": "high"
+        },
+        {
+          "test_name": "Troponin T",
+          "direction": "high"
+        }
+      ],
+      "surfaced_text": "CRITICAL: Elevated cardiac troponin indicating myocardial injury / necrosis",
+      "clinical_implication": "Troponin elevation above 99th percentile cutoff signifies active myocardial cell necrosis. Urgent clinical and ECG evaluation for acute coronary syndrome (STEMI/NSTEMI) indicated.",
+      "differential_diagnosis": [
+        "Acute Myocardial Infarction (Type 1)",
+        "Myocardial Injury / Demand Ischemia (Type 2)",
+        "Myocarditis",
+        "Pulmonary Embolism",
+        "Severe Sepsis"
+      ]
+    },
+    {
+      "pattern_name": "significant_proteinuria",
+      "category": "Nephrology",
+      "severity": "warning",
+      "scope": "document",
+      "match_type": "any",
+      "conditions": [
+        {
+          "test_name": "Urine Protein",
+          "direction": "high"
+        },
+        {
+          "test_name": "Urine Albumin",
+          "direction": "high"
+        },
+        {
+          "test_name": "Urine Albumin-Creatinine Ratio",
+          "operator": ">",
+          "threshold": 300.0
+        }
+      ],
+      "surfaced_text": "Significant proteinuria / macroalbuminuria indicating glomerular barrier disruption",
+      "clinical_implication": "Proteinuria is an independent risk factor for progressive kidney disease and cardiovascular events. Assess blood pressure and diabetes management.",
+      "differential_diagnosis": [
+        "Diabetic Nephropathy",
+        "Glomerulonephritis",
+        "Hypertensive Nephrosclerosis",
+        "Nephrotic Syndrome"
+      ]
+    },
+    {
+      "pattern_name": "urinary_tract_infection_markers",
+      "category": "Nephrology",
+      "severity": "warning",
+      "scope": "document",
+      "match_type": "all",
+      "conditions": [
+        {
+          "test_name": "Urine Pus Cells",
+          "direction": "high"
+        },
+        {
+          "test_name": "Urine Leukocyte Esterase",
+          "direction": "high"
+        }
+      ],
+      "surfaced_text": "Urinalysis findings of pyuria and leukocyte esterase positive for urinary tract infection",
+      "clinical_implication": "Pyuria combined with positive leukocyte esterase strongly suggests urinary tract infection. Urine culture and susceptibility recommended before targeted antibiotic therapy.",
+      "differential_diagnosis": [
+        "Acute Cystitis",
+        "Acute Pyelonephritis",
+        "Urethritis",
+        "Sterile Pyuria (Renal TB, Interstitial Nephritis)"
+      ]
+    }
+  ]
+}

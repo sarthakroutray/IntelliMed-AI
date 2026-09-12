@@ -6,6 +6,7 @@ import 'package:flutter_onnxruntime/flutter_onnxruntime.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
 
 import 'lab/ocr_model.dart';
 
@@ -266,17 +267,89 @@ class OcrService {
   /// concurrently, and the surrounding [InferenceQueue] is serial anyway.
   /// Boxes are in bitmap pixels of the processed image; the page's pixel
   /// dimensions are recorded so geometry can be normalised later.
+  ///
+  /// A page ML Kit reports as skewed is rotated and re-recognised before
+  /// giving up, because a page tilted one or two degrees otherwise loses all
+  /// table structure.
   Future<List<OcrPage>> recognizePages(List<File> pages) async {
     final out = <OcrPage>[];
     var pageNumber = 1;
     for (final page in pages) {
-      final input = InputImage.fromFile(page);
-      final result = await _recognizer.processImage(input);
-      final size = await _probeImageSize(page);
-      out.add(_toPage(result, pageNumber, size));
+      var recognized = await _recognizePage(page, pageNumber);
+      if (recognized.isRotated) {
+        final straightened = await _deskew(page, pageNumber, recognized);
+        if (straightened != null) recognized = straightened;
+      }
+      out.add(recognized);
       pageNumber++;
     }
     return out;
+  }
+
+  Future<OcrPage> _recognizePage(File page, int pageNumber) async {
+    final input = InputImage.fromFile(page);
+    final result = await _recognizer.processImage(input);
+    final size = await _probeImageSize(page);
+    return _toPage(result, pageNumber, size);
+  }
+
+  /// Rotate a skewed page and re-recognise it.
+  ///
+  /// `TextLine.angle`'s sign is not documented consistently, so both
+  /// directions are attempted; the original page is kept when neither clears
+  /// the skew, so this can only help.
+  Future<OcrPage?> _deskew(File file, int pageNumber, OcrPage page) async {
+    final angle = _medianAngle(page);
+    if (angle.abs() < ocrRotatedAngleDeg) return null;
+
+    final Uint8List bytes;
+    try {
+      bytes = await file.readAsBytes();
+    } catch (e) {
+      debugPrint('OcrService: deskew skipped (cannot read ${file.path}) — $e');
+      return null;
+    }
+
+    for (final sign in const [1.0, -1.0]) {
+      final rotated = await compute(_rotatePng, (bytes, angle * sign));
+      if (rotated == null) continue;
+      File? temp;
+      try {
+        temp = await _writeTempPng(rotated);
+        final candidate = await _recognizePage(temp, pageNumber);
+        if (!candidate.isRotated && candidate.lines.isNotEmpty) {
+          debugPrint(
+            'OcrService: deskewed page $pageNumber by '
+            '${(angle * sign).toStringAsFixed(2)}°',
+          );
+          return candidate;
+        }
+      } catch (e) {
+        debugPrint('OcrService: deskew attempt failed — $e');
+      } finally {
+        try {
+          await temp?.delete();
+        } catch (_) {
+          // Scratch cleanup is best-effort.
+        }
+      }
+    }
+    return null;
+  }
+
+  static double _medianAngle(OcrPage page) {
+    if (page.lines.isEmpty) return 0;
+    final angles = [for (final line in page.lines) line.angle]..sort();
+    return angles[angles.length ~/ 2];
+  }
+
+  Future<File> _writeTempPng(Uint8List bytes) async {
+    final dir = await getTemporaryDirectory();
+    final file = File(
+      '${dir.path}/deskew_${DateTime.now().microsecondsSinceEpoch}.png',
+    );
+    await file.writeAsBytes(bytes, flush: true);
+    return file;
   }
 
   /// Flat text for a single page. Kept for the prescription and X-ray paths,
@@ -350,4 +423,31 @@ List<int>? _probeImageHeader(Uint8List bytes) {
     if (decoded != null) return [decoded.width, decoded.height];
   } catch (_) {}
   return null;
+}
+
+/// Rotate an encoded image by [angle] degrees and return PNG bytes, or null
+/// when it cannot be decoded. Runs off the main isolate.
+///
+/// The rotation leaves empty corners; those are flattened onto white so they
+/// do not read as heavy content to the recogniser.
+Uint8List? _rotatePng((Uint8List, double) args) {
+  final (bytes, angle) = args;
+  final decoded = img.decodeImage(bytes);
+  if (decoded == null) return null;
+  final rgb = decoded.numChannels == 3
+      ? decoded
+      : decoded.convert(numChannels: 3);
+  final rotated = img.copyRotate(
+    rgb,
+    angle: angle,
+    interpolation: img.Interpolation.linear,
+  );
+  final canvas = img.Image(
+    width: rotated.width,
+    height: rotated.height,
+    numChannels: 3,
+  );
+  img.fill(canvas, color: img.ColorRgb8(255, 255, 255));
+  img.compositeImage(canvas, rotated);
+  return img.encodePng(canvas);
 }
