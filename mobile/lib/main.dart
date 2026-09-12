@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 
+import 'api/api_client.dart';
+import 'api/patient_repository.dart';
+import 'app_shell.dart';
 import 'auth.dart';
 import 'login_screen.dart';
 import 'model_manager.dart';
 import 'sync.dart';
-import 'tabs_bench_spike.dart';
-import 'tabs_capture_results.dart';
 import 'theme.dart';
-import 'widgets/app_drawer.dart';
-import 'widgets/brand_mark.dart';
+import 'theme_controller.dart';
 
 const apiBaseUrl = String.fromEnvironment(
   'API_BASE_URL',
@@ -27,6 +28,7 @@ const eagerModelLoad = bool.fromEnvironment(
   'EAGER_MODEL_LOAD',
   defaultValue: false,
 );
+
 /// Dev/emulator escape hatch. Normal sign-in goes through Google; this token
 /// is only a fallback so a token can still be injected without the OAuth flow.
 const devAuthToken = String.fromEnvironment('AUTH_TOKEN', defaultValue: '');
@@ -46,29 +48,66 @@ const googleWebClientId = String.fromEnvironment(
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // One HTTP client for the whole app, so auth, sync and the repository share a
+  // single connection pool instead of each holding its own.
+  final httpClient = http.Client();
+
   final models = ModelManager(
     cnnAsset: cnnModelAsset,
     slmGgufAsset: slmGgufAsset,
     eagerLoad: eagerModelLoad,
   );
-  await models.init();
+
+  final themeController = ThemeController();
+
   final auth = AuthService(
     baseUrl: apiBaseUrl,
     webClientId: googleWebClientId,
     devToken: devAuthToken,
+    client: httpClient,
   );
-  // Configure Google Sign-In and restore any stored session before the first
-  // frame, so a returning user starts signed in and can capture offline.
-  await auth.initialize().catchError((_) {});
-  await auth.restore();
+
+  // Independent work, run together so the first frame is not gated on the sum
+  // of model init, two Keystore reads and the Google plugin init. `restore`
+  // sets the session, so a returning user starts signed in and can capture
+  // offline.
+  await Future.wait([
+    models.init(),
+    themeController.load(),
+    auth.initialize().catchError((_) {}),
+    auth.restore(),
+  ]);
+
+  // One HTTP layer for all authenticated reads/writes. The token and the
+  // refresh hook are read live, so they always reflect the current session.
+  final apiClient = ApiClient(
+    baseUrl: apiBaseUrl,
+    tokenProvider: () => auth.token,
+    onUnauthorized: auth.refresh,
+    client: httpClient,
+  );
+  final repository = PatientRepository(apiClient);
+
   final sync = V2Sync(
     baseUrl: apiBaseUrl,
     token: auth.token,
     // One silent re-auth when the JWT lapses; V2Sync adopts the new token.
     onUnauthorized: auth.refresh,
+    client: httpClient,
   );
   V2Sync.watchConnectivity(() => sync.retryQueued());
-  runApp(IntelliMedApp(models: models, sync: sync, auth: auth));
+
+  runApp(
+    IntelliMedApp(
+      models: models,
+      sync: sync,
+      auth: auth,
+      repository: repository,
+      apiClient: apiClient,
+      themeController: themeController,
+    ),
+  );
 }
 
 class IntelliMedApp extends StatefulWidget {
@@ -77,11 +116,17 @@ class IntelliMedApp extends StatefulWidget {
     required this.models,
     required this.sync,
     required this.auth,
+    required this.repository,
+    required this.apiClient,
+    required this.themeController,
   });
 
   final ModelManager models;
   final V2Sync sync;
   final AuthService auth;
+  final PatientRepository repository;
+  final ApiClient apiClient;
+  final ThemeController themeController;
 
   @override
   State<IntelliMedApp> createState() => _IntelliMedAppState();
@@ -90,92 +135,41 @@ class IntelliMedApp extends StatefulWidget {
 class _IntelliMedAppState extends State<IntelliMedApp> {
   @override
   void dispose() {
-    // Models outlive the signed-in UI: signing out must NOT dispose them, or
-    // signing back in would reuse a closed manager. The root widget owns them
-    // for the whole process lifetime.
+    // Models and the shell outlive sign-in: signing out must NOT dispose the
+    // model manager, or signing back in would reuse a closed one.
     widget.models.dispose();
     widget.auth.dispose();
+    widget.themeController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'IntelliMed On-Device',
-      theme: AppTheme.light,
-      darkTheme: AppTheme.dark,
-      themeMode: ThemeMode.system,
-      home: ValueListenableBuilder<AuthState>(
-        valueListenable: widget.auth.state,
-        builder: (context, state, _) {
-          if (state != AuthState.signedIn) {
-            return LoginScreen(auth: widget.auth);
-          }
-          // Keep the sync client's token in step with the session.
-          widget.sync.token = widget.auth.token;
-          return AppShell(
-            models: widget.models,
-            sync: widget.sync,
-            auth: widget.auth,
-          );
-        },
-      ),
-    );
-  }
-}
-
-class AppShell extends StatefulWidget {
-  const AppShell({
-    super.key,
-    required this.models,
-    required this.sync,
-    required this.auth,
-  });
-
-  final ModelManager models;
-  final V2Sync sync;
-  final AuthService auth;
-
-  @override
-  State<AppShell> createState() => _AppShellState();
-}
-
-class _AppShellState extends State<AppShell> {
-  int _index = 0;
-  int _resultsToken = 0;
-
-  @override
-  Widget build(BuildContext context) {
-    final pages = [
-      CaptureTab(
-        models: widget.models,
-        sync: widget.sync,
-        onResultsChanged: () => setState(() => _resultsToken++),
-      ),
-      ResultsTab(
-        refreshToken: _resultsToken,
-        sync: widget.sync,
-        auth: widget.auth,
-      ),
-      BenchTab(models: widget.models, sync: widget.sync),
-      SpikeTab(models: widget.models),
-    ];
-    return Scaffold(
-      appBar: AppBar(
-        title: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: const [
-            BrandMark(size: 26),
-            SizedBox(width: 10),
-            Text('IntelliMed-AI'),
-          ],
+    return ValueListenableBuilder<ThemeMode>(
+      valueListenable: widget.themeController,
+      builder: (context, themeMode, _) => MaterialApp(
+        title: 'IntelliMed On-Device',
+        theme: AppTheme.light,
+        darkTheme: AppTheme.dark,
+        themeMode: themeMode,
+        home: ValueListenableBuilder<AuthState>(
+          valueListenable: widget.auth.state,
+          builder: (context, state, _) {
+            if (state != AuthState.signedIn) {
+              return LoginScreen(auth: widget.auth);
+            }
+            // Keep the sync client's token in step with the session.
+            widget.sync.token = widget.auth.token;
+            return AppShell(
+              models: widget.models,
+              sync: widget.sync,
+              auth: widget.auth,
+              repository: widget.repository,
+              themeController: widget.themeController,
+            );
+          },
         ),
       ),
-      drawer: AppDrawer(
-        selectedIndex: _index,
-        onSelect: (i) => setState(() => _index = i),
-      ),
-      body: pages[_index],
     );
   }
 }

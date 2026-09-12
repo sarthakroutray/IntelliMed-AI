@@ -1,0 +1,28 @@
+{
+  "stage": 1,
+  "extraction_engine": "opendataloader-json",
+  "text": "SINGLE-CELL FUSED ROWS",
+  "elements": [
+    {"type": "heading", "text": "SINGLE-CELL FUSED ROWS", "bbox": [72.0, 40.0, 320.0, 58.0], "page": 1}
+  ],
+  "tables": [
+    {
+      "bbox": [72.0, 80.0, 520.0, 200.0],
+      "page": 1,
+      "n_rows": 3,
+      "n_cols": 1,
+      "rows": [
+        {"row": 1, "cells": [
+          {"text": "Hemoglobin (Hb) 11.2 g/dL 13.0-17.0", "bbox": [72.0, 80.0, 520.0, 98.0], "page": 1, "is_header": false, "row": 1, "col": 1}
+        ]},
+        {"row": 2, "cells": [
+          {"text": "WBC 7.5 4.0-11.0", "bbox": [72.0, 100.0, 520.0, 118.0], "page": 1, "is_header": false, "row": 2, "col": 1}
+        ]},
+        {"row": 3, "cells": [
+          {"text": "Platelet Count 250 10^3/uL 150-450", "bbox": [72.0, 120.0, 520.0, 138.0], "page": 1, "is_header": false, "row": 3, "col": 1}
+        ]}
+      ]
+    }
+  ],
+  "warnings": []
+}

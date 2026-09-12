@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 
 import 'cnn_ocr.dart';
+import 'lab/rule_engine.dart';
+import 'lab/stage1_model.dart';
 import 'model_manager.dart';
-import 'normalize.dart';
 import 'schemas.dart';
 import 'slm_runtime.dart';
 import 'sync.dart';
@@ -57,17 +58,25 @@ class _BenchTabState extends State<BenchTab> {
     );
     await lazy.close();
     final normStart = DateTime.now();
-    final doc = normalizeLabText(_sample.text);
+    final doc = buildLabDocument(
+      LabStage1(
+        extractionEngine: 'mlkit-lines-only',
+        text: _sample.text,
+        elements: const [],
+        tables: const [],
+        warnings: const [],
+      ),
+    );
     final normMs = DateTime.now().difference(normStart).inMilliseconds;
-    final problems = validateLabReport(doc);
+    final problems = validateLabReport(doc.toJson());
     lines.add(
-      'deterministic normalization: $normMs ms, '
+      'rule engine (line fallback): $normMs ms, '
       'schema=${problems.isEmpty ? 'OK' : problems.join('; ')}',
     );
 
     final llama = LlamaCppRuntime(modelPath: widget.models.slmGgufAsset);
     await llama.load();
-    final onnx = OnnxSlmRuntime();
+    final onnx = OnnxSummarizer();
     await onnx.load();
     lines.add(
       'slm t5-q8 onnx ready=${onnx.isReady}; '
@@ -82,6 +91,13 @@ class _BenchTabState extends State<BenchTab> {
       'inference queue max depth observed: ${widget.models.queue.maxDepthObserved}',
     );
     lines.add('online=${await V2Sync.isOnline()}');
+    // Device-test triage: which backend is this build actually pointed at, and
+    // does it have a usable token? A wrong API_BASE_URL is the most common
+    // cause of "cannot reach the server" during device testing.
+    lines.add('backend=${widget.sync.baseUrl}');
+    final hasToken =
+        widget.sync.token != null && widget.sync.token!.isNotEmpty;
+    lines.add('auth=${hasToken ? 'token set' : 'no token (sign in required)'}');
     setState(() {
       _report = lines.join('\n');
       _busy = false;
@@ -134,14 +150,14 @@ class _SpikeTabState extends State<SpikeTab> {
     var ready = false;
     var loadMs = 0;
     try {
-      // Reuse the shared standardizer rather than constructing a second one:
+      // Reuse the shared summariser rather than constructing a second one:
       // this reflects exactly what the capture pipeline runs and avoids
       // holding two ~94 MB copies of the T5 sessions at once.
       final t5 = await widget.models.loadSlm(SlmBackend.onnx);
       loadMs = sw.elapsedMilliseconds;
       ready = t5.isReady;
-      if (ready && t5 is OnnxSlmRuntime) {
-        final out = await t5.standardizeText(
+      if (ready && t5 is OnnxSummarizer) {
+        final out = await t5.summarize(
           'The patient was prescribed Amoxicillin 500 mg twice daily for 7 days.',
         );
         probe = '${out['medical_summary']} (${out['latency_ms']} ms)';
@@ -155,7 +171,7 @@ class _SpikeTabState extends State<SpikeTab> {
       _status =
           't5-q8 onnx: ready=$ready (load $loadMs ms)\n'
           'live probe: $probe\n'
-          'Decision: T5 standardizer wired (same checkpoint as backend). '
+          'Decision: T5 summariser wired (same checkpoint as backend). '
           'See docs/APP_SPIKE.md.';
     });
   }
@@ -166,9 +182,9 @@ class _SpikeTabState extends State<SpikeTab> {
       padding: const EdgeInsets.all(16),
       children: [
         const Text(
-          'Spike result: T5 standardizer (same checkpoint as the backend) '
+          'Spike result: T5 summariser (same checkpoint as the backend) '
           'runs on-device via flutter_onnxruntime. The button below loads it '
-          'and runs a live standardization probe.',
+          'and runs a live summarisation probe.',
         ),
         const SizedBox(height: 8),
         FilledButton(

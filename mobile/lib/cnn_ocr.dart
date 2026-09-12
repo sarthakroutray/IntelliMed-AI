@@ -6,6 +6,9 @@ import 'package:flutter_onnxruntime/flutter_onnxruntime.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
+
+import 'lab/ocr_model.dart';
 
 /// Class labels + preprocessing mirror backend/services.py exactly:
 /// ResNet50 head over [Normal, Bacterial Pneumonia, Viral Pneumonia],
@@ -258,14 +261,193 @@ class OcrService {
 
   final TextRecognizer _recognizer;
 
-  Future<String> recognizeFile(File file) async {
-    final input = InputImage.fromFile(file);
+  /// Recognise every page in order, preserving word boxes and confidence.
+  ///
+  /// Sequential on purpose: ML Kit's recogniser is not safe to drive
+  /// concurrently, and the surrounding [InferenceQueue] is serial anyway.
+  /// Boxes are in bitmap pixels of the processed image; the page's pixel
+  /// dimensions are recorded so geometry can be normalised later.
+  ///
+  /// A page ML Kit reports as skewed is rotated and re-recognised before
+  /// giving up, because a page tilted one or two degrees otherwise loses all
+  /// table structure.
+  Future<List<OcrPage>> recognizePages(List<File> pages) async {
+    final out = <OcrPage>[];
+    var pageNumber = 1;
+    for (final page in pages) {
+      var recognized = await _recognizePage(page, pageNumber);
+      if (recognized.isRotated) {
+        final straightened = await _deskew(page, pageNumber, recognized);
+        if (straightened != null) recognized = straightened;
+      }
+      out.add(recognized);
+      pageNumber++;
+    }
+    return out;
+  }
+
+  Future<OcrPage> _recognizePage(File page, int pageNumber) async {
+    final input = InputImage.fromFile(page);
     final result = await _recognizer.processImage(input);
-    return result.text;
+    final size = await _probeImageSize(page);
+    return _toPage(result, pageNumber, size);
+  }
+
+  /// Rotate a skewed page and re-recognise it.
+  ///
+  /// `TextLine.angle`'s sign is not documented consistently, so both
+  /// directions are attempted; the original page is kept when neither clears
+  /// the skew, so this can only help.
+  Future<OcrPage?> _deskew(File file, int pageNumber, OcrPage page) async {
+    final angle = _medianAngle(page);
+    if (angle.abs() < ocrRotatedAngleDeg) return null;
+
+    final Uint8List bytes;
+    try {
+      bytes = await file.readAsBytes();
+    } catch (e) {
+      debugPrint('OcrService: deskew skipped (cannot read ${file.path}) — $e');
+      return null;
+    }
+
+    for (final sign in const [1.0, -1.0]) {
+      final rotated = await compute(_rotatePng, (bytes, angle * sign));
+      if (rotated == null) continue;
+      File? temp;
+      try {
+        temp = await _writeTempPng(rotated);
+        final candidate = await _recognizePage(temp, pageNumber);
+        if (!candidate.isRotated && candidate.lines.isNotEmpty) {
+          debugPrint(
+            'OcrService: deskewed page $pageNumber by '
+            '${(angle * sign).toStringAsFixed(2)}°',
+          );
+          return candidate;
+        }
+      } catch (e) {
+        debugPrint('OcrService: deskew attempt failed — $e');
+      } finally {
+        try {
+          await temp?.delete();
+        } catch (_) {
+          // Scratch cleanup is best-effort.
+        }
+      }
+    }
+    return null;
+  }
+
+  static double _medianAngle(OcrPage page) {
+    if (page.lines.isEmpty) return 0;
+    final angles = [for (final line in page.lines) line.angle]..sort();
+    return angles[angles.length ~/ 2];
+  }
+
+  Future<File> _writeTempPng(Uint8List bytes) async {
+    final dir = await getTemporaryDirectory();
+    final file = File(
+      '${dir.path}/deskew_${DateTime.now().microsecondsSinceEpoch}.png',
+    );
+    await file.writeAsBytes(bytes, flush: true);
+    return file;
+  }
+
+  /// Flat text for a single page. Kept for the prescription and X-ray paths,
+  /// which need no geometry; it walks the same result tree as
+  /// [recognizePages] so there is one extraction path.
+  Future<String> recognizeFile(File file) async {
+    final pages = await recognizePages([file]);
+    if (pages.isEmpty) return '';
+    return pages.first.lines.map((l) => l.text).join('\n');
   }
 
   Future<String> recognizePicked(XFile picked) =>
       recognizeFile(File(picked.path));
 
   void close() => _recognizer.close();
+
+  OcrPage _toPage(RecognizedText recognized, int pageNumber, List<int>? size) {
+    final lines = <OcrLine>[];
+    for (final block in recognized.blocks) {
+      for (final line in block.lines) {
+        lines.add(
+          OcrLine(
+            text: line.text,
+            bbox: line.boundingBox,
+            confidence: line.confidence,
+            angle: line.angle ?? 0,
+            words: [
+              for (final element in line.elements)
+                OcrWord(
+                  text: element.text,
+                  bbox: element.boundingBox,
+                  confidence: element.confidence,
+                ),
+            ],
+          ),
+        );
+      }
+    }
+    return OcrPage(
+      pageNumber: pageNumber,
+      pixelWidth: size?[0] ?? 0,
+      pixelHeight: size?[1] ?? 0,
+      lines: lines,
+    );
+  }
+
+  /// Pixel dimensions of [file], probed from the image header (cheap) with a
+  /// full decode as a fallback for formats the header probe cannot read.
+  Future<List<int>?> _probeImageSize(File file) async {
+    try {
+      final bytes = await file.readAsBytes();
+      return await compute(_probeImageHeader, bytes);
+    } catch (e) {
+      debugPrint('OcrService: could not read image size for ${file.path} — $e');
+      return null;
+    }
+  }
+}
+
+/// Header-only image size probe (runs off the main isolate).
+List<int>? _probeImageHeader(Uint8List bytes) {
+  try {
+    final decoder = img.findDecoderForData(bytes);
+    final probe = decoder?.startDecode(bytes);
+    if (probe != null) return [probe.width, probe.height];
+  } catch (_) {
+    // Fall through to a full decode below.
+  }
+  try {
+    final decoded = img.decodeImage(bytes);
+    if (decoded != null) return [decoded.width, decoded.height];
+  } catch (_) {}
+  return null;
+}
+
+/// Rotate an encoded image by [angle] degrees and return PNG bytes, or null
+/// when it cannot be decoded. Runs off the main isolate.
+///
+/// The rotation leaves empty corners; those are flattened onto white so they
+/// do not read as heavy content to the recogniser.
+Uint8List? _rotatePng((Uint8List, double) args) {
+  final (bytes, angle) = args;
+  final decoded = img.decodeImage(bytes);
+  if (decoded == null) return null;
+  final rgb = decoded.numChannels == 3
+      ? decoded
+      : decoded.convert(numChannels: 3);
+  final rotated = img.copyRotate(
+    rgb,
+    angle: angle,
+    interpolation: img.Interpolation.linear,
+  );
+  final canvas = img.Image(
+    width: rotated.width,
+    height: rotated.height,
+    numChannels: 3,
+  );
+  img.fill(canvas, color: img.ColorRgb8(255, 255, 255));
+  img.compositeImage(canvas, rotated);
+  return img.encodePng(canvas);
 }

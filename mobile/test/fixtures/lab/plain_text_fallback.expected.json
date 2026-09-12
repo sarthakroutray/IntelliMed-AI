@@ -1,0 +1,77 @@
+{
+  "document_type": "lab_report",
+  "patient_context": {
+    "name": "John Roe",
+    "age": 52,
+    "sex": "M",
+    "report_date": null
+  },
+  "lab_name": "CITY LAB",
+  "panels": [
+    {
+      "panel_name": "Ungrouped",
+      "tests": [
+        {
+          "test_name": "Hemoglobin",
+          "raw_test_name": "Hemoglobin",
+          "value": 11.2,
+          "unit": "g/dL",
+          "range_low": 13.0,
+          "range_high": 17.0,
+          "range_raw": "13.0-17.0",
+          "flag_in_source": null,
+          "ocr_confidence": "low",
+          "source_bbox": null
+        },
+        {
+          "test_name": "White Blood Cell Count",
+          "raw_test_name": "WBC",
+          "value": 7.5,
+          "unit": null,
+          "range_low": 4.0,
+          "range_high": 11.0,
+          "range_raw": "4.0-11.0",
+          "flag_in_source": null,
+          "ocr_confidence": "low",
+          "source_bbox": null
+        },
+        {
+          "test_name": "Platelet Count",
+          "raw_test_name": "Platelet Count",
+          "value": 250.0,
+          "unit": null,
+          "range_low": 150.0,
+          "range_high": 450.0,
+          "range_raw": "150-450",
+          "flag_in_source": null,
+          "ocr_confidence": "low",
+          "source_bbox": null
+        },
+        {
+          "test_name": "Serum Creatinine",
+          "raw_test_name": "Creatinine",
+          "value": 1200.0,
+          "unit": "mg/dL",
+          "range_low": 0.7,
+          "range_high": 1.3,
+          "range_raw": "0.7-1.3",
+          "flag_in_source": null,
+          "ocr_confidence": "low",
+          "source_bbox": null
+        },
+        {
+          "test_name": "Serum Creatinine",
+          "raw_test_name": "S. Creatinine (Serum)",
+          "value": 1.1,
+          "unit": "mg/dL",
+          "range_low": null,
+          "range_high": null,
+          "range_raw": null,
+          "flag_in_source": null,
+          "ocr_confidence": "low",
+          "source_bbox": null
+        }
+      ]
+    }
+  ]
+}

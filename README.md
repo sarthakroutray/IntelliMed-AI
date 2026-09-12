@@ -8,13 +8,17 @@ The system supports:
 - Medical document upload, sharing, review, and archival
 - AI pipelines for OCR, medical NLP extraction, and chest X-ray classification
 - Lab report understanding pipeline (v2) with traceable, rule-based flagging
-- On-device Flutter app (Android-first) that syncs structured results to `/api/v2`
+- On-device Flutter app (Android-first) with the same patient feature set as the web app
 
 API versioning: the website uses `/api/v1/*` (frozen contract); the mobile
-app uses `/api/v2/*` for all result traffic (structured ingest tagged
-`source: "app"`) and calls `/api/v1/auth/google-login` once to sign in.
-Doctor-side verification happens on the backend/dashboard; the app only
-produces and syncs structured context for review, never raw documents.
+app uses `/api/v2/*` for structured results and the `/api/v1` patient routes
+for documents, profile, doctors and sharing. Doctor-side verification happens
+on the backend/dashboard; the app supports the patient side of the workflow.
+
+The app runs OCR and normalization on-device and syncs the structured result
+(never the raw image) for the **Capture** flow. It can also upload original
+documents from **Docs**, matching the website — those uploads are always an
+explicit user action and are stored server-side.
 
 ## 1. Project Overview
 
@@ -127,12 +131,13 @@ Schema file:
 - spaCy
 - Pillow
 - NumPy
-- transformers + sentencepiece (Falconsai T5 standardizer)
+- transformers + sentencepiece (Falconsai T5 summarizer)
 - onnx / onnxruntime + optimum (model export + parity checks)
 
 ### Mobile (mobile/)
 - Flutter 3.44 / Dart 3.12, Android-first (minSdk 26)
-- flutter_onnxruntime (X-ray ResNet50 + T5 standardizer, on-device)
+- flutter_onnxruntime (X-ray ResNet50 + T5 summarizer, on-device)
+- on-device lab rule engine (ML Kit geometry -> Stage 1 -> ported Stage 2)
 - google_mlkit_text_recognition (on-device OCR), image_picker (capture)
 - sqflite (result store: pending/synced/failed), connectivity_plus + http (v2 sync)
 
@@ -345,8 +350,8 @@ auto-load `.env`). The real `.env` is gitignored.
 ## 10. API Surface (High-Level)
 
 All website routes live under `/api/v1/*` (frozen contract). The mobile app
-uses `/api/v2/*` for all result traffic; its single v1 call is
-`POST /api/v1/auth/google-login` to exchange a Google ID token for a JWT.
+uses `/api/v2/*` for structured lab results, and the `/api/v1` patient routes
+for auth, documents, profile, doctors and sharing.
 
 ### Auth (`/api/v1`)
 - POST /api/v1/auth/token
@@ -468,7 +473,7 @@ Use this README as your base and structure your report with these sections:
 Suggested quantitative items to include in your report:
 - Number of API endpoints (v1 frozen + v2 lab/ingest)
 - Number of core DB entities (incl. LabReport)
-- AI service components (OCR/NLP/CV + T5 standardizer)
+- AI service components (OCR/NLP/CV + T5 summarizer)
 - On-device parity evidence (ONNX checker, HF greedy-prefix match, tokenizer vectors)
 - Measured response times for analyze endpoint (local and deployed)
 - Error/fallback cases tested

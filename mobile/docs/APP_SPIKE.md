@@ -18,15 +18,15 @@
   weights. `tflite_flutter` stays in pubspec; select it later with
   `--dart-define=CNN_BACKEND=tflite` once `xray_cnn.tflite` is converted.
 
-## 1. SLM: WIRED — the previous standardizer (this session)
+## 1. SLM: WIRED — the T5 summariser, not a structurer (this session)
 
-You were right: git history shows the "SLM" was never a separate file — it
-is the Falconsai T5 summarizer the backend has used since `622ce60` as its
-OCR text standardizer (`medical_summarize_service` in `backend/services.py`,
-still called by both routers today). Same checkpoint, now on-device:
+Git history shows the "SLM" was never a separate file — it is the Falconsai
+T5 summarizer the backend has used since `622ce60` as its OCR-text summariser
+(`medical_summarize_service` in `backend/services.py`, still called by both
+routers today). Same checkpoint, now on-device:
 
 - **Source:** `Falconsai/medical_summarization` (T5-small, 60M params —
-  this is the "~80M-class" standardizer role).
+  this is the "~80M-class" summariser role).
 - **Conversion:** `backend/scripts/export_t5_summarizer_onnx.py` (optimum
   exporter, legacy tracer — torch dynamo exporter cannot handle T5
   attention reshapes). Verified: `onnx.checker` OK on both graphs,
@@ -34,26 +34,49 @@ still called by both routers today). Same checkpoint, now on-device:
 - **Quantized artifacts (tracked):** `mobile/assets/models/t5_encoder_q8.onnx`
   (35.5 MB) + `t5_decoder_q8.onnx` (58.5 MB) — 374 MB fp32 → ~94 MB int8 —
   plus `t5_tokenizer.json` (2.4 MB).
-- **Runtime:** `OnnxSlmRuntime` (encoder once + autoregressive greedy decode
+- **Runtime:** `OnnxSummarizer` (encoder once + autoregressive greedy decode
   via `flutter_onnxruntime`) + `t5_tokenizer.dart` (SentencePiece-Unigram
   Viterbi port, parity-pinned: exact match on 3 HF reference vectors).
-- **Role in the pipeline** (`ModelManager.processDocument`): deterministic
-  schema normalization always runs; the T5 standardizer adds
-  `summary_context: {medical_summary, ...}` on non-prescription documents —
-  mirroring the backend, where prescriptions short-circuit to structured
-  NLP data and never go through the generative path.
+- **Role in the pipeline** (`ModelManager.processDocument`): lab structure
+  comes from the on-device rule engine (see section 1a); the T5 summariser
+  only adds `summary_context: {medical_summary, ...}` on non-prescription
+  documents. It is fed the *rendered structure* (`renderLabText`), not the
+  raw OCR stream. Mirrors the backend, where prescriptions short-circuit to
+  structured NLP data and never go through the generative path.
 - **Known T5 behavior (measured, not a bug in the port):** the checkpoint
   loops/repeats on short lab-value strings ("glucose 98 mg/dL, a glucose
-  98 mg/dL, ...") and mostly echoes prescriptions. It behaves as a
-  prose standardizer, matching its backend role; schema extraction stays
-  deterministic. If schema-grade generative normalization is needed later,
-  that is a fine-tune task, not a porting task.
+  98 mg/dL, ...") and mostly echoes prescriptions. It behaves as a prose
+  summariser, matching its backend role. If schema-grade generative
+  normalization is needed later, that is a fine-tune task, not a porting task.
+
+## 1a. Lab structure: rule engine on-device
+
+Lab structure is not an SLM job. The on-device path is now:
+
+    ML Kit geometry -> OcrPage (lib/lab/ocr_model.dart)
+      -> structure.dart -> Stage 1 (elements + tables/rows/cells)
+      -> rule_engine.dart (ported from backend/lab_pipeline/slm_stage.py)
+      -> the fixed 10-key test schema
+      -> renderLabText -> T5 summarize() (summary_context only)
+
+- `lib/lab/structure.dart` synthesises the backend's Stage 1 shape from word
+  boxes: grid-like line detection, column clustering, row/cell assembly,
+  merged-line re-splitting and wrapped-value attachment. Rotated pages and
+  pages without geometry degrade explicitly (`mlkit-lines-only`) rather than
+  guessing columns.
+- `lib/lab/rule_engine.dart` is a faithful port of `_build_document` and
+  friends. It emits exactly the 10 required keys and never `abnormal` /
+  `direction` — Stage 3 stays server-side.
+- Parity is enforced by `mobile/test/lab_rule_engine_test.dart`: the Dart
+  engine must equal the Python reference's output for every fixture in
+  `mobile/test/fixtures/lab/`. Regenerate the goldens with
+  `python backend/scripts/run_stage2_fixture.py <fixture>`.
 
 ## 2. llama_cpp_dart vs ONNX — decision (made, this session)
 
 - **Decision: ONNX via `flutter_onnxruntime` — no GGUF path.** There is no
   GGUF file anywhere (workspace, history, LFS, HF cache) because the
-  standardizer was always this T5 checkpoint, which exports cleanly to ONNX.
+  summariser was always this T5 checkpoint, which exports cleanly to ONNX.
   `llama_cpp_dart` stays in pubspec as a listed dependency but
   `LlamaCppRuntime` is explicitly unwired; `EAGER_MODEL_LOAD` now loads the
   T5 path.
@@ -64,11 +87,12 @@ still called by both routers today). Same checkpoint, now on-device:
   (ML Kit Latin script).** Rationale: works offline, keeps the offline-queue
   story coherent (capture → OCR → normalize → queue → sync with no network),
   no extra backend call, matches Android-first scope.
-- **Tradeoff flagged:** ML Kit gives text lines, not the table structure +
-  bounding boxes the backend Stage 1 (OpenDataLoader) produces. Mitigation:
-  the deterministic normalizer marks table-missed rows `ocr_confidence:
-  "low"` and the structured envelope carries an `ocr_excerpt`; the backend
-  re-runs Stage 3 rules server-side on ingest.
+- **Tradeoff flagged (updated):** ML Kit's flat text discarded the table
+  structure the backend Stage 1 (OpenDataLoader) provides. The app now keeps
+  ML Kit's word boxes and reconstructs Stage 1 on-device (section 1a), so
+  table-missed rows are still recovered at `ocr_confidence: "low"` and the
+  envelope carries an `ocr_excerpt` plus a `structure` provenance block. The
+  backend still re-runs Stage 3 rules server-side on ingest.
 - **Server OCR stays available** via `POST /api/v2/lab-reports/upload`
   (file upload + full pipeline) for scanned/table-heavy cases the on-device
   pass marks low-confidence. Needs your confirmation that this split is

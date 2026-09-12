@@ -4,6 +4,7 @@
 .env.*.local
 backend/.env
 backend/.env.local
+.commandcode/
 
 # Python
 __pycache__/

@@ -1,4 +1,4 @@
-// On-device verification for the T5 standardizer and the X-ray classifier.
+// On-device verification for the T5 summariser and the X-ray classifier.
 //
 // These exercise the REAL flutter_onnxruntime path against the models bundled
 // in the APK, so they only run on a connected Android device or emulator:
@@ -31,9 +31,9 @@ void main() {
     });
 
     testWidgets(
-      'T5 standardizer loads and produces a summary on device',
+      'T5 summariser loads and produces a summary on device',
       (tester) async {
-        final slm = OnnxSlmRuntime();
+        final slm = OnnxSummarizer();
 
         final loadWatch = Stopwatch()..start();
         await slm.load();
@@ -47,13 +47,13 @@ void main() {
         debugPrint('SLM load: ${loadWatch.elapsedMilliseconds} ms');
 
         final runWatch = Stopwatch()..start();
-        final out = await slm.standardizeText(
+        final out = await slm.summarize(
           'Hemoglobin 11.2 g/dL 13.0-17.0. WBC 7.5 4.0-11.0. '
           'Patient reports fever and productive cough for three days.',
         );
         runWatch.stop();
         debugPrint(
-          'SLM standardize: ${runWatch.elapsedMilliseconds} ms | '
+          'SLM summarize: ${runWatch.elapsedMilliseconds} ms | '
           'input_tokens=${out['input_tokens']} '
           'decode_steps=${out['decode_steps']}',
         );

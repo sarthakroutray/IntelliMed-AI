@@ -4,8 +4,17 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 
 import 'cnn_ocr.dart';
+import 'document_type.dart';
 import 'inference_queue.dart';
+import 'lab/clinical_engine.dart';
+import 'lab/extract.dart';
+import 'lab/ocr_model.dart';
+import 'lab/pdf_text.dart';
+import 'lab/render.dart';
+import 'lab/rule_engine.dart';
+import 'lab/stage1_model.dart';
 import 'normalize.dart';
+import 'page_source.dart';
 import 'schemas.dart';
 import 'slm_runtime.dart';
 import 'store.dart';
@@ -16,6 +25,11 @@ import 'sync.dart';
 /// Default policy: both models stay loaded and resident. Swap-in/swap-out
 /// logic is deliberately NOT built — see docs/MEMORY_REPORT.md: it only gets
 /// added if real-device measurement shows memory pressure.
+///
+/// NOTE: [InferenceQueue] is strictly serial, so the public entry points are
+/// the only things that enqueue. Internal helpers (`_processDocument`,
+/// `_processXray`) must never call `queue.add` — a nested enqueue would wait on
+/// itself and deadlock.
 class ModelManager {
   ModelManager({
     required this.cnnAsset,
@@ -29,7 +43,7 @@ class ModelManager {
 
   final InferenceQueue queue = InferenceQueue();
   CnnClassifier? cnn;
-  SlmRuntime? slm;
+  MedicalSummarizer? slm;
   OcrService? ocr;
   DateTime? cnnLoadedAt;
   DateTime? slmLoadedAt;
@@ -41,16 +55,20 @@ class ModelManager {
   int cnnLoadMs = -1;
   int slmLoadMs = -1;
 
-  /// Whether the T5 standardizer is currently written off after a failure.
+  /// Whether the T5 summariser is currently written off after a failure.
   bool get slmUnavailable => _slmUnavailable;
 
-  /// Allow a later retry of the T5 standardizer (e.g. after the user frees
+  /// Allow a later retry of the T5 summariser (e.g. after the user frees
   /// memory or connectivity/model changes).
   void resetSlmFailure() => _slmUnavailable = false;
 
   Future<void> init() async {
-    ocr = OcrService();
+    // The ML Kit recognizer is built on first use (see `_recognizePages`):
+    // constructing it here put a native platform-channel init on the path
+    // before the first frame, for a handle nothing touches until the user
+    // captures something.
     if (eagerLoad) {
+      ocr = OcrService();
       await loadCnn();
       await loadSlm(SlmBackend.onnx);
     }
@@ -71,13 +89,13 @@ class ModelManager {
     return cnn!;
   }
 
-  Future<SlmRuntime> loadSlm(SlmBackend backend) async {
+  Future<MedicalSummarizer> loadSlm(SlmBackend backend) async {
     final started = DateTime.now();
     var runtime = slm;
     if (runtime == null) {
       runtime = backend == SlmBackend.llamaCpp
           ? LlamaCppRuntime(modelPath: slmGgufAsset)
-          : OnnxSlmRuntime();
+          : OnnxSummarizer();
       slm = runtime;
     }
     try {
@@ -93,148 +111,472 @@ class ModelManager {
     return runtime;
   }
 
-  /// Full on-device pass for a captured document image:
-  /// OCR -> deterministic schema normalization (+ T5 summary context for
-  /// non-prescription docs when the standardizer is loaded) -> store pending.
+  // -------------------------------------------------------------------
+  // Public entry points (each enqueues exactly once)
+  // -------------------------------------------------------------------
+
+  /// Auto-detect the document type, then run the matching pass.
+  ///
+  /// This is the default capture path. Detection uses OCR text first — a lab
+  /// report or prescription is text-dense and unmistakable — and only falls
+  /// back to the X-ray classifier for sparse, evidence-free images. That
+  /// ordering is what stops a prescription being labelled pneumonia by the
+  /// pneumonia classifier.
+  ///
+  /// [source] may be a PDF or an image (see page_source.dart); pages are
+  /// rasterized and their text combined, so a multipage report is normalized
+  /// as one document rather than one capture per page.
+  Future<Map<String, dynamic>> processAuto({
+    required File source,
+    String? token,
+    V2Sync? sync,
+  }) {
+    return queue.add(() async {
+      final started = DateTime.now();
+      final read = await _readPages(source);
+      final ocrPages = read.ocrPages;
+      final pages = read.pages;
+      try {
+        final ocrText = _flatText(ocrPages);
+        final signals = analyseText(ocrText);
+
+        // A digital PDF read from its text layer has no page images to classify.
+        final canClassify = pages.pages.isNotEmpty;
+        XrayPatternResult? classification;
+        TypeDetection detection;
+
+        if (canClassify && needsClassifier(signals)) {
+          // Sparse text with no document markers: only now is the X-ray head
+          // meaningful. A load/run failure must not fail the capture.
+          try {
+            classification = await _classify(pages.pages.first);
+          } catch (e) {
+            debugPrint('ModelManager: classifier unavailable — $e');
+          }
+          detection = decideType(
+            signals: signals,
+            xrayConfidence: classification?.confidence,
+          );
+        } else {
+          detection = decideType(signals: signals);
+        }
+
+        if (detection.type == DocumentType.xray && canClassify) {
+          final result = classification ?? await _classify(pages.pages.first);
+          return _storeAndSync(
+            kind: 'xray',
+            sourcePath: source.path,
+            envelope: _xrayEnvelope(result, detection, pages),
+            sync: sync,
+            token: token,
+          );
+        }
+
+        return _storeAndSync(
+          kind: detection.type.wireName,
+          sourcePath: source.path,
+          envelope: await _documentEnvelope(
+            kind: detection.type.wireName,
+            ocrPages: ocrPages,
+            started: started,
+            detection: detection,
+            pages: pages,
+            usedTextLayer: read.usedTextLayer,
+          ),
+          sync: sync,
+          token: token,
+        );
+      } finally {
+        await pages.dispose();
+      }
+    });
+  }
+
+  /// Full on-device pass for a captured document, with the type chosen
+  /// explicitly by the user:
+  /// OCR -> lab rule engine / prescription normalizer (+ T5 summary context
+  /// for non-prescription docs when the summariser is loaded) -> store pending.
   Future<Map<String, dynamic>> processDocument({
-    required File image,
+    required File source,
     required String kind,
     String? token,
     V2Sync? sync,
   }) {
     return queue.add(() async {
       final started = DateTime.now();
-      final ocrText = await (ocr ??= OcrService()).recognizeFile(image);
-      final normalized = await normalizeInBackground((
-        kind == 'xray' ? 'lab_report' : kind,
-        ocrText,
-      ));
-      var engine = 'deterministic-v1';
-      Map<String, dynamic>? summaryContext;
-      // Prescriptions deliberately stay on the deterministic path, mirroring
-      // the backend short-circuit (structured NLP data, never generative
-      // output). Every other document kind uses the T5 standardizer.
-      //
-      // The standardizer is loaded on first use when the app started lazily
-      // (the default): previously nothing ever called loadSlm() outside the
-      // opt-in eager path, so `slm` stayed null and this block never ran —
-      // the 94 MB of T5 weights shipped but were never exercised.
-      if (kind != 'prescription' && !_slmUnavailable) {
-        try {
-          final runtime = slm ?? await loadSlm(SlmBackend.onnx);
-          if (runtime is OnnxSlmRuntime) {
-            summaryContext = await runtime.standardizeText(ocrText);
-            engine = 'deterministic-v1+t5-q8';
-          }
-        } catch (e) {
-          // Degrade to the deterministic engine rather than failing the
-          // capture. Latch the failure so we don't retry a doomed ~94 MB
-          // load on every subsequent document.
-          _slmUnavailable = true;
-          summaryContext = null;
-          debugPrint('ModelManager: T5 standardizer unavailable — $e');
-        }
-      }
-      final problems = kind == 'prescription'
-          ? validatePrescription(normalized)
-          : validateLabReport(normalized);
-      if (problems.isNotEmpty) {
-        throw StateError('schema validation failed: ${problems.join('; ')}');
-      }
-      final envelope = buildResultEnvelope(
-        kind: kind,
-        normalized: normalized,
-        ocrText: ocrText,
-        engine: engine,
-        latencyMs: DateTime.now().difference(started).inMilliseconds,
-        summaryContext: summaryContext,
-      );
-      final store = await ResultStore.instance();
-      final rowId = await store.insertPending(
-        kind: kind,
-        localPath: image.path,
-        resultJson: encodeEnvelope(envelope),
-      );
-      if (sync != null) {
-        try {
-          final serverId = await sync.postResult(
+      final read = await _readPages(source);
+      final ocrPages = read.ocrPages;
+      final pages = read.pages;
+      try {
+        final detection = TypeDetection(
+          type: DocumentTypeWire.fromWire(kind) ?? DocumentType.labReport,
+          confidence: 1,
+          reasons: const ['selected manually'],
+          autoDetected: false,
+        );
+        return _storeAndSync(
+          kind: kind,
+          sourcePath: source.path,
+          envelope: await _documentEnvelope(
             kind: kind,
-            envelope: envelope,
-            token: token,
-          );
-          await store.markSynced(rowId, serverId: serverId);
-        } on RouteMissingException catch (e) {
-          // Route isn't deployed at this base URL — keep the row pending so
-          // it syncs once the backend is reachable.
-          debugPrint('ModelManager: $e — row $rowId stays pending');
-        } on OfflineException catch (e) {
-          // Offline capture: keep the structured result queued locally and
-          // sync when connectivity returns (V2Sync.watchConnectivity).
-          await store.markPending(rowId);
-          debugPrint('ModelManager: $e — row $rowId stays pending');
-        } on UnauthorizedException catch (e) {
-          // Session lapsed: the on-device result is valid, so keep it queued
-          // for after the next sign-in rather than marking it failed.
-          await store.markPending(rowId);
-          debugPrint('ModelManager: $e — row $rowId stays pending');
-        } catch (e) {
-          await store.markFailed(rowId, '$e');
-        }
+            ocrPages: ocrPages,
+            started: started,
+            detection: detection,
+            pages: pages,
+            usedTextLayer: read.usedTextLayer,
+          ),
+          sync: sync,
+          token: token,
+        );
+      } finally {
+        await pages.dispose();
       }
-      return envelope;
     });
   }
 
-  /// X-ray pattern pass: CNN classify -> structured context -> store pending.
+  /// X-ray pattern pass chosen explicitly by the user. A radiograph is one
+  /// image, so only the first page of a multipage source is classified.
   Future<Map<String, dynamic>> processXray({
-    required File image,
+    required File source,
     String? token,
     V2Sync? sync,
   }) {
     return queue.add(() async {
-      final classifier = cnn ?? await loadCnn(lazy: true);
-      final result = await classifier.classifyFile(image);
-      final envelope = {
-        'kind': 'xray',
-        'engine': 'onnx-resnet50',
-        'latency_ms': result.latencyMs,
-        'normalized': result.toStructuredContext(),
-        'source': 'app',
-      };
-      final store = await ResultStore.instance();
-      final rowId = await store.insertPending(
-        kind: 'xray',
-        localPath: image.path,
-        resultJson: encodeEnvelope(envelope),
-      );
-      if (sync != null) {
-        try {
-          final serverId = await sync.postResult(
-            kind: 'xray',
-            envelope: envelope,
-            token: token,
-          );
-          await store.markSynced(rowId, serverId: serverId);
-        } on RouteMissingException catch (e) {
-          // Route isn't deployed at this base URL — keep the row pending so
-          // it syncs once the backend is reachable.
-          debugPrint('ModelManager: $e — row $rowId stays pending');
-        } on OfflineException catch (e) {
-          // Offline capture: keep the structured result queued locally and
-          // sync when connectivity returns (V2Sync.watchConnectivity).
-          await store.markPending(rowId);
-          debugPrint('ModelManager: $e — row $rowId stays pending');
-        } on UnauthorizedException catch (e) {
-          // Session lapsed: the on-device result is valid, so keep it queued
-          // for after the next sign-in rather than marking it failed.
-          await store.markPending(rowId);
-          debugPrint('ModelManager: $e — row $rowId stays pending');
-        } catch (e) {
-          await store.markFailed(rowId, '$e');
-        }
+      final pages = await PageSource.pagesFor(source.path);
+      try {
+        final result = await _classify(pages.pages.first);
+        final detection = TypeDetection(
+          type: DocumentType.xray,
+          confidence: result.confidence,
+          reasons: const ['selected manually'],
+          autoDetected: false,
+        );
+        return _storeAndSync(
+          kind: 'xray',
+          sourcePath: source.path,
+          envelope: _xrayEnvelope(result, detection, pages),
+          sync: sync,
+          token: token,
+        );
+      } finally {
+        await pages.dispose();
       }
-      return envelope;
     });
+  }
+
+  /// Run only the on-device lab engine (OCR geometry -> Stage 1 -> rule
+  /// engine) and return the structured document plus provenance.
+  ///
+  /// Does not store, sync, or run the summariser. Used by the developer diff
+  /// screen to compare the on-device engine against the server pipeline.
+  Future<Map<String, dynamic>> localLabPreview({required File source}) {
+    return queue.add(() async {
+      final read = await _readPages(source);
+      final ocrPages = read.ocrPages;
+      try {
+        final extraction = extractLabDocument(ocrPages);
+        return {
+          'normalized': extraction.document.toJson(),
+          'structure': _structureJson(
+            extraction.stage1,
+            extraction.document,
+            ocrPages,
+            recoveredTests: extraction.recoveredTests,
+            textLayer: read.usedTextLayer,
+          ),
+        };
+      } finally {
+        await read.pages.dispose();
+      }
+    });
+  }
+
+  // -------------------------------------------------------------------
+  // Internals (never enqueue)
+  // -------------------------------------------------------------------
+
+  /// Read a document into OCR pages.
+  ///
+  /// A digital PDF is read from its exact text layer (pdfrx/pdfium) first;
+  /// rasterize + OCR is only used when there is no usable text layer (scanned
+  /// or image-only PDF, or extraction failed).
+  Future<({List<OcrPage> ocrPages, PageSet pages, bool usedTextLayer})>
+  _readPages(File source) async {
+    if (isPdf(source.path)) {
+      final layer = await readPdfTextLayer(source.path, maxPages: maxPdfPages);
+      if (layer != null) {
+        return (
+          ocrPages: layer.pages,
+          pages: PageSet(
+            pages: const [],
+            totalPages: layer.totalPages,
+            processedCount: layer.pages.length,
+          ),
+          usedTextLayer: true,
+        );
+      }
+    }
+    final pages = await PageSource.pagesFor(source.path);
+    try {
+      final ocrPages = await _recognizePages(pages.pages);
+      return (ocrPages: ocrPages, pages: pages, usedTextLayer: false);
+    } catch (_) {
+      // Never leak rasterized scratch files when OCR fails mid-way.
+      await pages.dispose();
+      rethrow;
+    }
+  }
+
+  /// OCR every page in order, preserving word geometry.
+  ///
+  /// Sequential on purpose: ML Kit's recognizer is not safe to drive
+  /// concurrently, and the surrounding queue is serial anyway.
+  Future<List<OcrPage>> _recognizePages(List<File> pages) async {
+    final service = ocr ??= OcrService();
+    return service.recognizePages(pages);
+  }
+
+  /// Flat reading-order text, for type detection and the non-lab paths.
+  String _flatText(List<OcrPage> pages) =>
+      pages.expand((p) => p.lines.map((l) => l.text)).join('\n');
+
+  Future<XrayPatternResult> _classify(File image) async {
+    final classifier = cnn ?? await loadCnn(lazy: true);
+    return classifier.classifyFile(image);
+  }
+
+  /// Structured normalization plus, for non-prescription kinds, the T5
+  /// summary context.
+  ///
+  /// Lab reports run the deterministic rule engine over Stage 1 geometry
+  /// synthesised from ML Kit boxes (structure.dart -> rule_engine.dart). The
+  /// T5 model is fed the *rendered structure* (renderLabText), not the raw OCR
+  /// stream: it summarises, it does not structure.
+  Future<Map<String, dynamic>> _documentEnvelope({
+    required String kind,
+    required List<OcrPage> ocrPages,
+    required DateTime started,
+    required TypeDetection detection,
+    required PageSet pages,
+    bool usedTextLayer = false,
+  }) async {
+    final ocrText = _flatText(ocrPages);
+    final isPrescription = kind == 'prescription';
+
+    final Map<String, dynamic> normalized;
+    Map<String, dynamic>? stage3;
+    final Map<String, dynamic>? structure;
+    List<String>? warnings;
+    final String baseEngine;
+    var summaryInput = ocrText;
+
+    if (isPrescription) {
+      normalized = await normalizePrescriptionInBackground(ocrText);
+      stage3 = null;
+      structure = null;
+      baseEngine = 'deterministic-v1';
+    } else {
+      // Structural extraction plus a flat-text recovery pass, so a mis-guessed
+      // table can never extract fewer values than the plain-text parser.
+      final extraction = extractLabDocument(ocrPages);
+      final document = extraction.document;
+      normalized = document.toJson();
+
+      // Run Stage 3 arithmetic & clinical rule engine on-device
+      final stage3Result = annotateLabDocument(document);
+      final stage3Doc = stage3Result.document;
+      stage3 = {
+        ...stage3Doc.toJson(),
+        'flagged_patterns': stage3Result.patterns.map((p) => {
+          'pattern_name': p.patternName,
+          'surfaced_text': p.surfacedText,
+          'match_type': p.matchType,
+          'panel_name': p.panelName,
+          'severity': p.severity,
+          'category': p.category,
+          'clinical_implication': p.clinicalImplication,
+          'differential_diagnosis': p.differentialDiagnosis,
+          'triggering_tests': p.triggeringTests.map((t) => {
+            'test_name': t.testName,
+            'raw_test_name': t.rawTestName,
+            'value': t.value,
+            'unit': t.unit,
+            'direction': t.direction,
+            'severity': t.severity,
+          }).toList(),
+        }).toList(),
+      };
+
+      structure = _structureJson(
+        extraction.stage1,
+        document,
+        ocrPages,
+        recoveredTests: extraction.recoveredTests,
+        textLayer: usedTextLayer,
+      );
+      // Surface extraction degradation and arithmetic warnings on device
+      warnings = [
+        ...extraction.stage1.warnings,
+        ...stage3Result.warnings,
+      ];
+      baseEngine = 'rule-engine-v2';
+      summaryInput = renderLabText(stage3Doc, fallback: ocrText);
+    }
+
+    var engine = baseEngine;
+    Map<String, dynamic>? summaryContext;
+
+    // Prescriptions deliberately stay on the deterministic path, mirroring the
+    // backend short-circuit (structured NLP data, never generative output).
+    // Every other document kind uses the T5 summariser, which is loaded on
+    // first use when the app started lazily (the default): previously nothing
+    // ever called loadSlm() outside the opt-in eager path, so `slm` stayed null
+    // and the 94 MB of T5 weights shipped but were never exercised.
+    //
+    // Long text is safe here: the tokenizer truncates to `maxInputTokens`
+    // (128) internally, and renderLabText already bounds the input.
+    if (!isPrescription && !_slmUnavailable) {
+      try {
+        final runtime = slm ?? await loadSlm(SlmBackend.onnx);
+        summaryContext = await runtime.summarize(summaryInput);
+        engine = '$baseEngine+t5-summary';
+      } catch (e) {
+        // Degrade to the deterministic engine rather than failing the capture.
+        // Latch the failure so we don't retry a doomed ~94 MB load every time.
+        _slmUnavailable = true;
+        summaryContext = null;
+        debugPrint('ModelManager: T5 summariser unavailable — $e');
+      }
+    }
+
+    final problems = isPrescription
+        ? validatePrescription(normalized)
+        : validateLabReport(normalized);
+    if (problems.isNotEmpty) {
+      throw StateError('schema validation failed: ${problems.join('; ')}');
+    }
+
+    return buildResultEnvelope(
+      kind: kind,
+      normalized: normalized,
+      stage3: stage3,
+      ocrText: ocrText,
+      engine: engine,
+      latencyMs: DateTime.now().difference(started).inMilliseconds,
+      summaryContext: summaryContext,
+      detection: _detectionJson(detection),
+      structure: structure,
+      warnings: warnings,
+      pageCount: pages.totalPages,
+      pagesTruncated: pages.truncated,
+    );
+  }
+
+  /// Provenance for the lab extraction: how the structure was reconstructed,
+  /// how much of it there was, and how far to trust it.
+  Map<String, dynamic> _structureJson(
+    LabStage1 stage1,
+    LabDocument document,
+    List<OcrPage> ocrPages, {
+    int recoveredTests = 0,
+    bool textLayer = false,
+  }) {
+    final confidences = [
+      for (final panel in document.panels)
+        for (final test in panel.tests) test.ocrConfidence,
+    ];
+    final String confidence;
+    if (confidences.isEmpty || confidences.contains('low')) {
+      confidence = 'low';
+    } else if (confidences.contains('medium')) {
+      confidence = 'medium';
+    } else {
+      confidence = 'high';
+    }
+    return {
+      'engine': stage1.extractionEngine,
+      // Whether values came from a digital PDF's exact text layer or from OCR.
+      'source': textLayer ? 'pdf-text' : 'ocr',
+      'tables': stage1.tables.length,
+      'tests': confidences.length,
+      // How many rows only the flat-text recovery pass found. A reviewer can
+      // see how much the geometry heuristic missed.
+      'recovered': recoveredTests,
+      'confidence': confidence,
+      'pages_without_tables': [
+        for (final page in ocrPages)
+          if (!stage1.tables.any((t) => t.page == page.pageNumber))
+            page.pageNumber,
+      ],
+    };
+  }
+
+  Map<String, dynamic> _xrayEnvelope(
+    XrayPatternResult result,
+    TypeDetection detection,
+    PageSet pages,
+  ) => {
+    'kind': 'xray',
+    'engine': 'onnx-resnet50',
+    'latency_ms': result.latencyMs,
+    'normalized': result.toStructuredContext(),
+    'source': 'app',
+    'detection': _detectionJson(detection),
+    'page_count': pages.totalPages,
+    if (pages.truncated) 'pages_truncated': true,
+  };
+
+  Map<String, dynamic> _detectionJson(TypeDetection detection) => {
+    'type': detection.type.wireName,
+    'confidence': double.parse(detection.confidence.toStringAsFixed(3)),
+    'auto': detection.autoDetected,
+    'used_classifier': detection.usedClassifier,
+    'reasons': detection.reasons,
+  };
+
+  /// Insert the row, then attempt a sync holding the offline contract: a
+  /// transport failure or a lapsed session keeps the row `pending` so nothing
+  /// is lost, while a genuine rejection is `failed`.
+  Future<Map<String, dynamic>> _storeAndSync({
+    required String kind,
+    required String sourcePath,
+    required Map<String, dynamic> envelope,
+    V2Sync? sync,
+    String? token,
+  }) async {
+    final store = await ResultStore.instance();
+    final rowId = await store.insertPending(
+      kind: kind,
+      localPath: sourcePath,
+      resultJson: encodeEnvelope(envelope),
+    );
+    if (sync != null) {
+      try {
+        final serverId = await sync.postResult(
+          kind: kind,
+          envelope: envelope,
+          token: token,
+        );
+        await store.markSynced(rowId, serverId: serverId);
+      } on RouteMissingException catch (e) {
+        // Route isn't deployed at this base URL — keep the row pending so it
+        // syncs once the backend is reachable.
+        debugPrint('ModelManager: $e — row $rowId stays pending');
+      } on OfflineException catch (e) {
+        // Offline capture: keep the structured result queued locally and sync
+        // when connectivity returns (V2Sync.watchConnectivity).
+        await store.markPending(rowId);
+        debugPrint('ModelManager: $e — row $rowId stays pending');
+      } on UnauthorizedException catch (e) {
+        // Session lapsed: the on-device result is valid, so keep it queued for
+        // after the next sign-in rather than marking it failed.
+        await store.markPending(rowId);
+        debugPrint('ModelManager: $e — row $rowId stays pending');
+      } catch (e) {
+        await store.markFailed(rowId, '$e');
+      }
+    }
+    return envelope;
   }
 
   Future<void> dispose() async {

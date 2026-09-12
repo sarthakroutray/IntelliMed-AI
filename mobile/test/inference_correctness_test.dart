@@ -8,23 +8,23 @@ void main() {
     test('bans the token completing a repeated trigram', () {
       // Trailing prefix (1,2) already occurred at index 0 followed by 3.
       expect(
-        OnnxSlmRuntime.bannedByRepeatNgram([1, 2, 3, 1, 2], 3),
+        OnnxSummarizer.bannedByRepeatNgram([1, 2, 3, 1, 2], 3),
         {3},
       );
     });
 
     test('returns nothing when the prefix is new', () {
-      expect(OnnxSlmRuntime.bannedByRepeatNgram([1, 2, 3], 3), isEmpty);
+      expect(OnnxSummarizer.bannedByRepeatNgram([1, 2, 3], 3), isEmpty);
     });
 
     test('bans a degenerate repeated token run', () {
-      expect(OnnxSlmRuntime.bannedByRepeatNgram([5, 5, 5, 5], 3), {5});
+      expect(OnnxSummarizer.bannedByRepeatNgram([5, 5, 5, 5], 3), {5});
     });
 
     test('is inert for short sequences and invalid n', () {
-      expect(OnnxSlmRuntime.bannedByRepeatNgram([1, 2], 3), isEmpty);
-      expect(OnnxSlmRuntime.bannedByRepeatNgram([1, 2, 3], 1), isEmpty);
-      expect(OnnxSlmRuntime.bannedByRepeatNgram(const [], 3), isEmpty);
+      expect(OnnxSummarizer.bannedByRepeatNgram([1, 2], 3), isEmpty);
+      expect(OnnxSummarizer.bannedByRepeatNgram([1, 2, 3], 1), isEmpty);
+      expect(OnnxSummarizer.bannedByRepeatNgram(const [], 3), isEmpty);
     });
   });
 

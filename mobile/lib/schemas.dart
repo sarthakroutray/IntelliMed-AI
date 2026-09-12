@@ -1,5 +1,10 @@
 import 'dart:convert';
 
+import 'lab/test_names.dart';
+
+export 'lab/test_names.dart'
+    show testNameMap, normalizeLookupKey, normalizeTestNameOrNull;
+
 // Lab report schema mirror of backend/lab_pipeline/slm_stage.py::_build_document
 // plus Stage 3 annotation fields (added server-side or by the on-device
 // deterministic rule pass). Prescription schema mirrors
@@ -12,37 +17,8 @@ extracted document text/structure into a fixed JSON schema. You do not
 interpret or make clinical judgments. Output valid JSON only.
 ''';
 
-const testNameMap = <String, String>{
-  'hb': 'Hemoglobin',
-  'hgb': 'Hemoglobin',
-  'wbc': 'White Blood Cell Count',
-  'tlc': 'White Blood Cell Count',
-  'rbc': 'Red Blood Cell Count',
-  'plt': 'Platelet Count',
-  'hct': 'Hematocrit',
-  'pcv': 'Hematocrit',
-  'mcv': 'Mean Corpuscular Volume',
-  'mch': 'Mean Corpuscular Hemoglobin',
-  'mchc': 'Mean Corpuscular Hemoglobin Concentration',
-  'rdw': 'Red Cell Distribution Width',
-  'esr': 'Erythrocyte Sedimentation Rate',
-  'crp': 'C-Reactive Protein',
-  'fbs': 'Fasting Blood Glucose',
-  'hba1c': 'Glycated Hemoglobin (HbA1c)',
-  'sgot': 'Aspartate Aminotransferase (AST)',
-  'sgpt': 'Alanine Aminotransferase (ALT)',
-  'tsh': 'Thyroid Stimulating Hormone',
-  'hdl': 'HDL Cholesterol',
-  'ldl': 'LDL Cholesterol',
-  'creatinine': 'Serum Creatinine',
-  'creat': 'Serum Creatinine',
-  'urea': 'Blood Urea',
-};
-
-String normalizeTestName(String raw) {
-  final key = raw.toLowerCase().replaceAll(RegExp(r'[^a-z0-9 ]'), ' ').trim();
-  return testNameMap[key] ?? raw.trim();
-}
+String normalizeTestName(String raw) =>
+    normalizeTestNameOrNull(raw) ?? raw.trim();
 
 /// Validate a lab report document against the agreed schema.
 /// Returns a list of problems; empty means schema-correct.

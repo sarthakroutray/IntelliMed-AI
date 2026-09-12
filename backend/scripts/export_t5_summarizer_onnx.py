@@ -3,8 +3,8 @@
 The backend `medical_summarize_service` uses this exact checkpoint
 (`Falconsai/medical_summarization`, T5-small 60M) to turn raw OCR text into
 `{medical_summary, key_findings, ...}` for non-prescription documents. This
-script exports both halves so the app's OnnxSlmRuntime can run the same
-standardizer on-device (encoder once per input, decoder autoregressively).
+script exports both halves so the app's OnnxSummarizer can run the same
+summariser on-device (encoder once per input, decoder autoregressively).
 
 Usage:
     python backend/scripts/export_t5_summarizer_onnx.py [--out-dir dir]

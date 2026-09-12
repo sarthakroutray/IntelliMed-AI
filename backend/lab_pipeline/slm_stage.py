@@ -696,6 +696,59 @@ def _build_document(stage1: dict) -> dict:
     }
 
 
+def _series_key(test: dict) -> tuple:
+    """Identity of a row for dedup: canonical test name + unit."""
+    return ((test.get('test_name') or '').lower(), test.get('unit') or '')
+
+
+def _build_document_with_recovery(stage1: dict) -> dict:
+    """_build_document plus a flat-text recovery pass.
+
+    Mirrors `mobile/lib/lab/extract.dart::mergeLabDocuments`. When table
+    detection is slightly wrong, `_build_document` trusts the table and can
+    drop rows a flat-text parse would have caught. This re-parses the full OCR
+    text with the plain-text fallback and appends any row the structural pass
+    missed (deduped by canonical test_name + unit) to an "Ungrouped" panel.
+
+    Strictly additive: it can only ever ADD rows, never remove or rewrite one.
+    """
+    document = _build_document(stage1)
+    if not (stage1.get('text') or '').strip():
+        return document
+
+    seen = {
+        _series_key(test)
+        for panel in (document.get('panels') or [])
+        for test in (panel.get('tests') or [])
+    }
+    # Two complementary re-reads of the full text: the line parser (one test
+    # per line) and the blob scanner (test names fused into long merged text,
+    # e.g. "Urea 30 mg/dL Creatinine 1.2 mg/dL").
+    text = stage1.get('text') or ''
+    candidates = list(_parse_from_plain_text(stage1))
+    candidates += _scan_blob_for_test_rows(text, None, None, set())
+
+    extras = []
+    for test in candidates:
+        key = _series_key(test)
+        if key in seen:
+            continue
+        seen.add(key)
+        extras.append(test)
+    if not extras:
+        return document
+
+    panels = list(document.get('panels') or [])
+    for panel in panels:
+        if panel.get('panel_name') == 'Ungrouped':
+            panel['tests'] = list(panel.get('tests') or []) + extras
+            break
+    else:
+        panels.append({'panel_name': 'Ungrouped', 'tests': extras})
+    document['panels'] = panels
+    return document
+
+
 # --- Optional SLM backend ------------------------------------------------
 
 def _slm_configured() -> bool:
@@ -762,6 +815,6 @@ def run_stage2(stage1: dict) -> tuple:
         except Exception as e:
             warning = f'SLM normalization failed ({e}); falling back to deterministic engine'
             print(f'  Stage 2: {warning}')
-            return _build_document(stage1), 'deterministic-v1', [warning]
+            return _build_document_with_recovery(stage1), 'deterministic-v1', [warning]
 
-    return _build_document(stage1), 'deterministic-v1', []
+    return _build_document_with_recovery(stage1), 'deterministic-v1', []

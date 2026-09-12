@@ -2,83 +2,10 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 
-import 'schemas.dart';
-
-// Deterministic on-device normalizer: mirrors the backend deterministic-v1
-// engine (lab_pipeline/slm_stage.py::_build_document) for printed text. The
-// SLM path (slm_runtime.dart) handles noisy layouts; whatever text path runs,
-// output always passes through the schema validators in schemas.dart.
-
-final _valueUnitRe = RegExp(
-  r'([A-Za-z][A-Za-z .()/%^0-9\-]{2,}?)\s+(\d+(?:\.\d+)?)\s*([A-Za-z/%^µμ]+)?(?:\s+(\d+(?:\.\d+)?\s*[-–—]\s*\d+(?:\.\d+)?))?',
-);
-
-String _confidenceFor({
-  required bool hasValue,
-  required bool hasUnit,
-  required bool knownName,
-}) {
-  if (!hasValue) return 'low';
-  if (!hasUnit || !knownName) return 'medium';
-  return 'high';
-}
-
-Map<String, dynamic> normalizeLabText(String ocrText) {
-  final lines = ocrText
-      .split('\n')
-      .map((l) => l.trim())
-      .where((l) => l.isNotEmpty)
-      .toList();
-  final tests = <Map<String, dynamic>>[];
-  for (final line in lines) {
-    final m = _valueUnitRe.firstMatch(line);
-    if (m == null) continue;
-    final rawName = m.group(1)!.trim();
-    final value = double.tryParse(m.group(2)!);
-    final unit = m.group(3);
-    double? low, high;
-    String? rangeRaw;
-    if (m.group(4) != null) {
-      rangeRaw = m.group(4);
-      final parts = rangeRaw!.split(RegExp(r'[-–—]'));
-      if (parts.length == 2) {
-        low = double.tryParse(parts[0].trim());
-        high = double.tryParse(parts[1].trim());
-      }
-    }
-    final normalized = normalizeTestName(rawName);
-    final known = normalized != rawName;
-    tests.add({
-      'test_name': normalized,
-      'raw_test_name': rawName,
-      'value': value,
-      'unit': unit,
-      'range_low': low,
-      'range_high': high,
-      'range_raw': rangeRaw,
-      'flag_in_source': null,
-      'ocr_confidence': _confidenceFor(
-        hasValue: value != null,
-        hasUnit: unit != null,
-        knownName: known,
-      ),
-      'source_bbox': null,
-    });
-  }
-  return {
-    'document_type': 'lab_report',
-    'patient_context': {
-      'name': null,
-      'age': null,
-      'sex': null,
-      'report_date': null,
-    },
-    'lab_name': null,
-    'panels': [
-      {'panel_name': 'Ungrouped', 'tests': tests},
-    ],
-  };
-}
+// Deterministic on-device normalizer for prescriptions. Lab reports are no
+// longer normalized here: their structure comes from the rule engine
+// (lib/lab/rule_engine.dart), because the flat-text regex this file used to
+// hold could not represent a table, a fused blob or a source flag.
 
 final _rxLineRe = RegExp(
   r'^(.+?)\s+(\d+(?:\.\d+)?\s*(?:mg|ml|mcg|g|iu|units?))\s*(.*)$',
@@ -115,27 +42,38 @@ Map<String, dynamic> normalizePrescriptionText(String ocrText) {
   };
 }
 
-/// Off-main-thread normalization entry point for the inference queue.
-Future<Map<String, dynamic>> normalizeInBackground(
-  (String kind, String text) args,
-) {
-  return compute(_normalizeSync, args);
-}
-
-Map<String, dynamic> _normalizeSync((String, String) args) {
-  final (kind, text) = args;
-  if (kind == 'prescription') return normalizePrescriptionText(text);
-  return normalizeLabText(text);
-}
+/// Off-main-thread prescription normalization for the inference queue.
+Future<Map<String, dynamic>> normalizePrescriptionInBackground(String text) =>
+    compute(normalizePrescriptionText, text);
 
 /// Canonical result envelope stored locally and POSTed to /api/v2/*.
+///
+/// [detection] records how the document type was decided (and whether the user
+/// chose it). It is provenance for the reviewing doctor; the backend ignores
+/// the key.
+///
+/// [structure] records how the lab structure was reconstructed on-device (OCR
+/// engine, table/test counts, derived confidence, pages without tables), so a
+/// reviewer can tell a clean geometric extraction from a degraded line-only
+/// reconstruction. The backend ignores unknown keys.
+///
+/// [pageCount] / [pagesTruncated] describe a multipage source (a PDF). They are
+/// also provenance: the server only ever receives the structured result, so
+/// without these a reviewer could not tell that a 30-page PDF was capped at
+/// [maxPdfPages].
 Map<String, dynamic> buildResultEnvelope({
   required String kind,
   required Map<String, dynamic> normalized,
   required String ocrText,
   required String engine,
   required int latencyMs,
+  Map<String, dynamic>? stage3,
   Map<String, dynamic>? summaryContext,
+  Map<String, dynamic>? detection,
+  Map<String, dynamic>? structure,
+  List<String>? warnings,
+  int pageCount = 1,
+  bool pagesTruncated = false,
 }) {
   return {
     'kind': kind,
@@ -143,7 +81,18 @@ Map<String, dynamic> buildResultEnvelope({
     'latency_ms': latencyMs,
     'normalized': normalized,
     // ignore: use_null_aware_elements (? form is invalid: key is non-nullable)
+    if (stage3 != null) 'stage3': stage3,
+    // ignore: use_null_aware_elements (? form is invalid: key is non-nullable)
     if (summaryContext != null) 'summary_context': summaryContext,
+    // ignore: use_null_aware_elements (? form is invalid: key is non-nullable)
+    if (detection != null) 'detection': detection,
+    // ignore: use_null_aware_elements (? form is invalid: key is non-nullable)
+    if (structure != null) 'structure': structure,
+    // ignore: use_null_aware_elements (? form is invalid: key is non-nullable)
+    if (warnings != null && warnings.isNotEmpty) 'warnings': warnings,
+    'page_count': pageCount,
+    // ignore: use_null_aware_elements (? form is invalid: key is non-nullable)
+    if (pagesTruncated) 'pages_truncated': true,
     'ocr_excerpt': ocrText.length > 500 ? ocrText.substring(0, 500) : ocrText,
     'source': 'app',
   };

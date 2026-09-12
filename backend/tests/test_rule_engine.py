@@ -108,7 +108,7 @@ WBC_NORMAL = _test('White Blood Cell Count', 7.5, 4.0, 11.0)
 
 
 def _rule_table():
-    return rule_engine.load_rule_table()
+    return rule_engine.load_rule_table(rule_engine.LEGACY_RULES_PATH)
 
 
 def _placeholder_rules():
@@ -190,7 +190,7 @@ def test_default_rule_table_loads_and_is_all_placeholder():
 def test_placeholder_rules_fire_against_flagged_document():
     table = _rule_table()
     doc = _doc([_panel('CBC', [HEM_LOW, HCT_LOW])])
-    out = rule_engine.apply_rules(doc)
+    out = rule_engine.apply_rules(doc, rules_path=rule_engine.LEGACY_RULES_PATH)
     names = [p['pattern_name'] for p in out['flagged_patterns']]
     assert 'PLACEHOLDER_example_combined_low_pattern' in names
 
@@ -210,7 +210,7 @@ def test_invalid_match_type_rejected(tmp_path):
         'rules': [{
             'pattern_name': 'bad',
             'conditions': [{'test_name': 'X', 'direction': 'high'}],
-            'match_type': 'any',
+            'match_type': 'invalid_mode',
             'surfaced_text': 'nope',
         }]
     }

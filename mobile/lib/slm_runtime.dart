@@ -1,12 +1,16 @@
-// SLM runtime abstraction: T5 standardizer on ONNX (wired) vs
-// llama_cpp_dart GGUF (future). Both sit behind one interface so the spike
-// (docs/APP_SPIKE.md) can A/B them without touching call sites.
+// Medical summariser runtime: T5 on ONNX (wired) vs llama_cpp_dart GGUF
+// (future). Both sit behind one interface so the spike (docs/APP_SPIKE.md) can
+// A/B them without touching call sites.
 //
-// The wired path runs the same checkpoint the backend uses as its OCR text
-// standardizer: Falconsai/medical_summarization (T5-small, 60M) behind
-// backend `medical_summarize_service`, exported to quantized encoder/decoder
-// ONNX. It standardizes raw OCR text into {medical_summary, key_findings}
-// context for doctor review — never flag fields (rejected at parse time).
+// The wired checkpoint is the one the backend uses as its OCR-text summariser:
+// Falconsai/medical_summarization (T5-small, 60M) behind the `summarize: `
+// prefix, exported to quantized encoder/decoder ONNX. It is a *summariser* — it
+// compresses prose. It is not a structurer: lab-report structure comes from the
+// deterministic rule engine (lib/lab/rule_engine.dart). The interface below
+// makes "ask T5 to emit structure" unrepresentable rather than discouraged.
+//
+// Output is {medical_summary, key_findings, ...} context for doctor review.
+// Never flag fields (rejected at parse time).
 
 import 'dart:convert';
 
@@ -18,18 +22,22 @@ import 't5_tokenizer.dart';
 
 enum SlmBackend { llamaCpp, onnx }
 
-abstract class SlmRuntime {
+/// Summarisation contract. Deliberately has no JSON/structuring entry point.
+abstract class MedicalSummarizer {
   SlmBackend get backend;
   bool get isReady;
   Future<void> load();
-  Future<Map<String, dynamic>> normalizeJson(String stage1Json);
+
+  /// Compress already-structured text into summary context for review.
+  Future<Map<String, dynamic>> summarize(String text);
+
   Future<void> close();
 }
 
 /// llama.cpp path (future): GGUF SLM via llama_cpp_dart isolate API. Kept as
 /// the documented alternative in docs/APP_SPIKE.md; not wired since the
-/// standardizer role is already filled by the T5 ONNX path above.
-class LlamaCppRuntime implements SlmRuntime {
+/// summariser role is already filled by the T5 ONNX path above.
+class LlamaCppRuntime implements MedicalSummarizer {
   LlamaCppRuntime({required this.modelPath});
 
   final String modelPath;
@@ -50,15 +58,15 @@ class LlamaCppRuntime implements SlmRuntime {
   }
 
   @override
-  Future<Map<String, dynamic>> normalizeJson(String stage1Json) {
-    throw StateError('LlamaCppRuntime not wired — use OnnxSlmRuntime');
+  Future<Map<String, dynamic>> summarize(String text) {
+    throw StateError('LlamaCppRuntime not wired — use OnnxSummarizer');
   }
 
   @override
   Future<void> close() async {}
 }
 
-/// ONNX Runtime path (WIRED): the Falconsai T5 standardizer as quantized
+/// ONNX Runtime path (WIRED): the Falconsai T5 summariser as quantized
 /// encoder/decoder ONNX behind flutter_onnxruntime.
 ///
 /// Assets (tracked build artifacts of the HF checkpoint, see
@@ -68,12 +76,12 @@ class LlamaCppRuntime implements SlmRuntime {
 ///   t5_tokenizer.dart — parity-pinned against HF vectors)
 ///
 /// Runs the backend's `medical_summarize_service` contract on-device:
-/// "summarize: [ocr text]" in, greedy decode out, wrapped as
+/// "summarize: [text]" in, greedy decode out, wrapped as
 /// `{medical_summary, key_findings, ...}` context for doctor review.
 /// Prescription inputs short-circuit to the deterministic builder, mirroring
 /// the backend (structured NLP data, never generative output).
-class OnnxSlmRuntime implements SlmRuntime {
-  OnnxSlmRuntime({
+class OnnxSummarizer implements MedicalSummarizer {
+  OnnxSummarizer({
     this.encoderAsset = 'assets/models/t5_encoder_q8.onnx',
     this.decoderAsset = 'assets/models/t5_decoder_q8.onnx',
     this.maxInputTokens = 128,
@@ -121,31 +129,13 @@ class OnnxSlmRuntime implements SlmRuntime {
     }
   }
 
-  /// Standardize raw OCR text into summary context for doctor review.
-  /// Output contract mirrors backend `medical_summarize_service` for
-  /// non-prescription documents: {medical_summary, key_findings, ...}.
-  /// Never emits flag fields.
-  Future<Map<String, dynamic>> standardizeText(String ocrText) {
-    return _standardize(ocrText);
-  }
-
+  /// Summarise already-structured text into context for doctor review. Output
+  /// contract mirrors backend `medical_summarize_service` for non-prescription
+  /// documents: {medical_summary, key_findings, ...}. Never emits flag fields.
   @override
-  Future<Map<String, dynamic>> normalizeJson(String stage1Json) async {
-    // Back-compat entry point: accept the compact Stage-1 payload, pull its
-    // text, and standardize. Used by ModelManager until call sites migrate.
-    var text = stage1Json;
-    try {
-      final decoded = jsonDecode(stage1Json);
-      if (decoded is Map && decoded['text'] is String) {
-        text = decoded['text'] as String;
-      }
-    } catch (_) {
-      // Not JSON — treat the whole input as raw OCR text.
-    }
-    return _standardize(text);
-  }
+  Future<Map<String, dynamic>> summarize(String text) => _run(text);
 
-  Future<Map<String, dynamic>> _standardize(String ocrText) async {
+  Future<Map<String, dynamic>> _run(String text) async {
     final started = DateTime.now();
     await load();
     final tokenizer = _tokenizer!;
@@ -153,7 +143,7 @@ class OnnxSlmRuntime implements SlmRuntime {
     final decoder = _decoder!;
 
     final inputIds = tokenizer.encode(
-      'summarize: $ocrText',
+      'summarize: $text',
       maxLength: maxInputTokens,
     );
     final attn = List<int>.filled(inputIds.length, 1);
@@ -165,7 +155,7 @@ class OnnxSlmRuntime implements SlmRuntime {
         'document_type': 'summary_context',
         'medical_summary': summary,
         'key_findings': <String>[],
-        'original_length': ocrText.length,
+        'original_length': text.length,
         'summary_length': summary.length,
         // Decode steps drive on-device latency: each step re-runs the decoder
         // over the whole prefix (no KV cache) and transfers the full
@@ -302,9 +292,10 @@ class OnnxSlmRuntime implements SlmRuntime {
   }
 }
 
-/// Parse + validate raw SLM JSON output. Rejects Stage 3 flag fields and
+/// Parse + validate raw summariser JSON output. Rejects Stage 3 flag fields and
 /// anything that fails the agreed schemas; throws on invalid output so the
-/// caller can fall back to the deterministic normalizer.
+/// caller can fall back to the deterministic result. (The wired ONNX path
+/// produces the map directly; this guards any future JSON-emitting runtime.)
 Map<String, dynamic> parseSlmOutput(String raw) {
   final decoded = jsonDecode(raw);
   if (decoded is! Map<String, dynamic>) {
@@ -320,9 +311,4 @@ Map<String, dynamic> parseSlmOutput(String raw) {
     );
   }
   return doc;
-}
-
-/// Prompt builder shared by both backends (kept identical for the A/B).
-String buildSlmUserPayload({required String ocrText}) {
-  return jsonEncode({'text': ocrText, 'elements': [], 'tables': []});
 }
