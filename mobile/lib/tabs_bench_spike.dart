@@ -74,19 +74,38 @@ class _BenchTabState extends State<BenchTab> {
       'schema=${problems.isEmpty ? 'OK' : problems.join('; ')}',
     );
 
-    final llama = LlamaCppRuntime(modelPath: widget.models.slmGgufAsset);
-    await llama.load();
-    final onnx = OnnxSummarizer();
-    await onnx.load();
+    // Active SLM: Qwen3-0.6B. Loaded through the real path so this number
+    // reflects what a capture or an insight request pays on first use.
+    final qwen = QwenSlmRuntime(modelPath: widget.models.slmGgufAsset);
+    final qwenStart = DateTime.now();
+    var qwenReady = false;
+    String qwenNote = '';
+    try {
+      await qwen.load();
+      qwenReady = qwen.isReady;
+    } catch (e) {
+      qwenNote = ' — error: $e';
+    }
     lines.add(
-      'slm t5-q8 onnx ready=${onnx.isReady}; '
-      'llama_cpp_dart ready=${llama.isReady} (future path)',
+      'slm qwen3-0.6b load: '
+      '${DateTime.now().difference(qwenStart).inMilliseconds} ms '
+      '(ready=$qwenReady)$qwenNote',
     );
-    // Release the ~94 MB of native T5 sessions this run created. Without
-    // this, every tap of "Run measurements" leaked another pair of sessions
-    // and would eventually OOM the device.
+    await qwen.close();
+
+    // Legacy T5 ONNX path stays measurable for A/B comparison.
+    // ignore: deprecated_member_use_from_same_package
+    final onnx = OnnxSummarizer();
+    String onnxNote = '';
+    try {
+      await onnx.load();
+    } catch (e) {
+      onnxNote = ' — error: $e';
+    }
+    lines.add('slm t5-q8 onnx (legacy) ready=${onnx.isReady}$onnxNote');
+    // Release the native T5 sessions this run created. Without this, every tap
+    // of "Run measurements" leaked another pair of sessions.
     await onnx.close();
-    await llama.close();
     lines.add(
       'inference queue max depth observed: ${widget.models.queue.maxDepthObserved}',
     );
@@ -150,17 +169,19 @@ class _SpikeTabState extends State<SpikeTab> {
     var ready = false;
     var loadMs = 0;
     try {
-      // Reuse the shared summariser rather than constructing a second one:
-      // this reflects exactly what the capture pipeline runs and avoids
-      // holding two ~94 MB copies of the T5 sessions at once.
-      final t5 = await widget.models.loadSlm(SlmBackend.onnx);
+      // Reuse the shared runtime rather than constructing a second one: this
+      // reflects what a capture or an insight request pays on first use.
+      final runtime = await widget.models.loadSlm(SlmBackend.llamaCpp);
       loadMs = sw.elapsedMilliseconds;
-      ready = t5.isReady;
-      if (ready && t5 is OnnxSummarizer) {
-        final out = await t5.summarize(
-          'The patient was prescribed Amoxicillin 500 mg twice daily for 7 days.',
+      ready = runtime.isReady;
+      if (ready && runtime is QwenSlmRuntime) {
+        final out = await runtime.explainBiomarker(
+          testName: 'Hemoglobin',
+          value: '11.2',
+          unit: 'g/dL',
+          direction: 'low',
         );
-        probe = '${out['medical_summary']} (${out['latency_ms']} ms)';
+        probe = out.isEmpty ? '(empty output)' : out;
       }
     } catch (e) {
       probe = 'failed: $e';
@@ -169,9 +190,9 @@ class _SpikeTabState extends State<SpikeTab> {
     setState(() {
       _busy = false;
       _status =
-          't5-q8 onnx: ready=$ready (load $loadMs ms)\n'
+          'qwen3-0.6b: ready=$ready (load $loadMs ms)\n'
           'live probe: $probe\n'
-          'Decision: T5 summariser wired (same checkpoint as backend). '
+          'Decision: Qwen3-0.6B is the on-device SLM (llama_cpp_dart). '
           'See docs/APP_SPIKE.md.';
     });
   }
@@ -182,9 +203,9 @@ class _SpikeTabState extends State<SpikeTab> {
       padding: const EdgeInsets.all(16),
       children: [
         const Text(
-          'Spike result: T5 summariser (same checkpoint as the backend) '
-          'runs on-device via flutter_onnxruntime. The button below loads it '
-          'and runs a live summarisation probe.',
+          'Spike result: Qwen3-0.6B (Q3_K_S GGUF) runs on-device via '
+          'llama_cpp_dart and powers the summary context and AI insights. '
+          'The button below loads it and runs a live explanation probe.',
         ),
         const SizedBox(height: 8),
         FilledButton(

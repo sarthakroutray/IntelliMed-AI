@@ -22,7 +22,7 @@ const cnnModelAsset = String.fromEnvironment(
 const cnnBackend = String.fromEnvironment('CNN_BACKEND', defaultValue: 'onnx');
 const slmGgufAsset = String.fromEnvironment(
   'SLM_GGUF_ASSET',
-  defaultValue: 'assets/models/slm_norm_q4.gguf',
+  defaultValue: 'assets/models/Qwen3-0.6B-Q3_K_S.gguf',
 );
 const eagerModelLoad = bool.fromEnvironment(
   'EAGER_MODEL_LOAD',

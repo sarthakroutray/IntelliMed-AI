@@ -150,3 +150,9 @@ poetry.lock
 .vscode/extensions/
 
 /generated/prisma
+
+# Android native libraries for llama.cpp (built by
+# mobile/tool/build_llama_android.ps1). Required at runtime, so they are
+# tracked — the broad *.so rule above targets Python extension modules.
+!mobile/android/app/src/main/jniLibs/**/*.so
+

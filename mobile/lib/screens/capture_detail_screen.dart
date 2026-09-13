@@ -15,6 +15,7 @@ import '../theme.dart';
 import '../widgets/app_card.dart';
 import '../widgets/confirm_dialog.dart';
 import '../widgets/feedback.dart';
+import '../widgets/insight_card.dart';
 import '../widgets/result_viewers.dart';
 import '../widgets/status_chip.dart';
 
@@ -351,6 +352,10 @@ class _CaptureDetailScreenState extends State<CaptureDetailScreen> {
                   const SizedBox(height: 16),
                   if (_envelope != null)
                     ResultEnvelopeView(envelope: _envelope!),
+                  if (_envelope != null) ...[
+                    const SizedBox(height: 16),
+                    InsightCard(models: widget.models, envelope: _envelope!),
+                  ],
                 ],
                 const SizedBox(height: 16),
                 const InlineBanner(

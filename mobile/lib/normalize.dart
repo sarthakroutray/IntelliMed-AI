@@ -46,6 +46,63 @@ Map<String, dynamic> normalizePrescriptionText(String ocrText) {
 Future<Map<String, dynamic>> normalizePrescriptionInBackground(String text) =>
     compute(normalizePrescriptionText, text);
 
+/// Deterministic rendering of a prescription for the summariser.
+///
+/// Mirrors renderLabText (lab/render.dart): the structured items the
+/// deterministic normalizer extracted come first, so a mis-parsed line can
+/// never become a medication in the summary. [context] (the document's own
+/// text) is appended afterwards so the model can also summarise the details the
+/// item extractor does not capture — timing, duration, tests, follow-up — with
+/// exact repeats of item lines dropped. Falls back to [fallback] (the raw OCR
+/// text) when nothing was extracted.
+String renderPrescriptionText(
+  Map<String, dynamic> normalized, {
+  String fallback = '',
+  String context = '',
+}) {
+  final lines = <String>[];
+  final panels = normalized['panels'];
+  if (panels is List) {
+    for (final panel in panels) {
+      if (panel is! Map) continue;
+      final items = panel['items'];
+      if (items is! List) continue;
+      for (final item in items) {
+        if (item is! Map) continue;
+        final parts = [item['medication'], item['dosage'], item['frequency']]
+            .where((v) => v != null && '$v'.trim().isNotEmpty)
+            .map((v) => '$v'.trim());
+        if (parts.isNotEmpty) lines.add(parts.join(' '));
+      }
+    }
+  }
+
+  if (lines.isEmpty) return fallback.isNotEmpty ? fallback : context;
+
+  final buffer = StringBuffer('Prescribed items:\n${lines.join('\n')}');
+  final extra = _uncoveredContextLines(context, lines);
+  if (extra.isNotEmpty) {
+    buffer.write('\n\nOther text on the prescription:\n$extra');
+  }
+  return buffer.toString();
+}
+
+/// [context] lines that are not already covered by the rendered [items],
+/// de-duplicated and in order.
+List<String> _uncoveredContextLines(String context, List<String> items) {
+  final covered = items.map((l) => l.toLowerCase()).toSet();
+  final seen = <String>{};
+  final kept = <String>[];
+  for (final raw in context.split('\n')) {
+    final line = raw.trim();
+    if (line.isEmpty) continue;
+    final key = line.toLowerCase();
+    if (covered.contains(key) || !seen.add(key)) continue;
+    kept.add(line);
+  }
+  return kept;
+}
+
 /// Canonical result envelope stored locally and POSTed to /api/v2/*.
 ///
 /// [detection] records how the document type was decided (and whether the user

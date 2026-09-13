@@ -48,18 +48,19 @@ class ModelManager {
   DateTime? cnnLoadedAt;
   DateTime? slmLoadedAt;
 
-  /// Latched after a failed T5 load so each capture doesn't re-attempt a
-  /// ~94 MB model load that already failed. Cleared by [resetSlmFailure].
+  /// Latched after a failed SLM *load* so each passive capture doesn't
+  /// re-attempt a doomed ~372 MB model load. A user-initiated insight clears
+  /// it by loading successfully; a generation failure never sets it.
   bool _slmUnavailable = false;
 
   int cnnLoadMs = -1;
   int slmLoadMs = -1;
 
-  /// Whether the T5 summariser is currently written off after a failure.
+  /// Whether the on-device SLM is currently written off after a failed load.
   bool get slmUnavailable => _slmUnavailable;
 
-  /// Allow a later retry of the T5 summariser (e.g. after the user frees
-  /// memory or connectivity/model changes).
+  /// Allow a later retry of the SLM (e.g. after the user frees memory or the
+  /// model becomes available again).
   void resetSlmFailure() => _slmUnavailable = false;
 
   Future<void> init() async {
@@ -70,7 +71,7 @@ class ModelManager {
     if (eagerLoad) {
       ocr = OcrService();
       await loadCnn();
-      await loadSlm(SlmBackend.onnx);
+      await loadSlm(SlmBackend.llamaCpp);
     }
   }
 
@@ -89,12 +90,17 @@ class ModelManager {
     return cnn!;
   }
 
+  /// Load the on-device SLM.
+  ///
+  /// [SlmBackend.llamaCpp] is the active path (Qwen3-0.6B GGUF);
+  /// [SlmBackend.onnx] remains only for the dev A/B harness.
   Future<MedicalSummarizer> loadSlm(SlmBackend backend) async {
     final started = DateTime.now();
     var runtime = slm;
     if (runtime == null) {
       runtime = backend == SlmBackend.llamaCpp
-          ? LlamaCppRuntime(modelPath: slmGgufAsset)
+          ? QwenSlmRuntime(modelPath: slmGgufAsset)
+          // ignore: deprecated_member_use_from_same_package
           : OnnxSummarizer();
       slm = runtime;
     }
@@ -109,6 +115,30 @@ class ModelManager {
     slmLoadedAt ??= DateTime.now();
     slmLoadMs = DateTime.now().difference(started).inMilliseconds;
     return runtime;
+  }
+
+  /// Run an SLM-powered insight task through the serial queue.
+  ///
+  /// The SLM is loaded lazily on first use. Only a *load* failure latches
+  /// [_slmUnavailable] (so passive captures stop retrying a doomed ~372 MB
+  /// load); a user-initiated tap is always allowed to retry, and a successful
+  /// load clears the latch. A generation failure (e.g. a timeout) never
+  /// disables later insights.
+  Future<String> runInsightTask(Future<String> Function(QwenSlmRuntime) task) {
+    return queue.add(() async {
+      MedicalSummarizer? runtime;
+      try {
+        runtime = slm ?? await loadSlm(SlmBackend.llamaCpp);
+      } catch (e) {
+        _slmUnavailable = true;
+        rethrow;
+      }
+      if (runtime is! QwenSlmRuntime) {
+        throw StateError('Expected QwenSlmRuntime, got ${runtime.runtimeType}');
+      }
+      _slmUnavailable = false;
+      return task(runtime);
+    });
   }
 
   // -------------------------------------------------------------------
@@ -194,8 +224,8 @@ class ModelManager {
 
   /// Full on-device pass for a captured document, with the type chosen
   /// explicitly by the user:
-  /// OCR -> lab rule engine / prescription normalizer (+ T5 summary context
-  /// for non-prescription docs when the summariser is loaded) -> store pending.
+  /// OCR -> lab rule engine / prescription normalizer (+ SLM summary context)
+  /// -> store pending.
   Future<Map<String, dynamic>> processDocument({
     required File source,
     required String kind,
@@ -345,13 +375,13 @@ class ModelManager {
     return classifier.classifyFile(image);
   }
 
-  /// Structured normalization plus, for non-prescription kinds, the T5
-  /// summary context.
+  /// Structured normalization plus on-device SLM summary context.
   ///
   /// Lab reports run the deterministic rule engine over Stage 1 geometry
-  /// synthesised from ML Kit boxes (structure.dart -> rule_engine.dart). The
-  /// T5 model is fed the *rendered structure* (renderLabText), not the raw OCR
-  /// stream: it summarises, it does not structure.
+  /// synthesised from ML Kit boxes (structure.dart -> rule_engine.dart);
+  /// prescriptions run the deterministic normalizer. The SLM is fed the
+  /// *rendered structure* (renderLabText / renderPrescriptionText), not the raw
+  /// OCR stream: it summarises, it does not structure.
   Future<Map<String, dynamic>> _documentEnvelope({
     required String kind,
     required List<OcrPage> ocrPages,
@@ -375,6 +405,13 @@ class ModelManager {
       stage3 = null;
       structure = null;
       baseEngine = 'deterministic-v1';
+      // The SLM summarises the extracted items, plus the rest of the document
+      // text so it can cover timing, duration and follow-up too.
+      summaryInput = renderPrescriptionText(
+        normalized,
+        fallback: ocrText,
+        context: ocrText,
+      );
     } else {
       // Structural extraction plus a flat-text recovery pass, so a mis-guessed
       // table can never extract fewer values than the plain-text parser.
@@ -423,29 +460,57 @@ class ModelManager {
       summaryInput = renderLabText(stage3Doc, fallback: ocrText);
     }
 
+    // The model's context is 2048 tokens; an unbounded prompt (the raw-OCR
+    // fallback on a dense page) would overflow it and fail the generation.
+    summaryInput = _capSummaryInput(summaryInput);
+
     var engine = baseEngine;
     Map<String, dynamic>? summaryContext;
+    // Non-fatal SLM problems, surfaced with the extraction warnings so a
+    // missing summary is never silent.
+    final summaryWarnings = <String>[];
 
-    // Prescriptions deliberately stay on the deterministic path, mirroring the
-    // backend short-circuit (structured NLP data, never generative output).
-    // Every other document kind uses the T5 summariser, which is loaded on
-    // first use when the app started lazily (the default): previously nothing
-    // ever called loadSlm() outside the opt-in eager path, so `slm` stayed null
-    // and the 94 MB of T5 weights shipped but were never exercised.
+    // Every document kind — lab report and prescription alike — gets summary
+    // context from the on-device SLM (Qwen3-0.6B GGUF), fed the *extracted*
+    // structure rather than the raw OCR stream. It is loaded on first use when
+    // the app started lazily (the default).
     //
-    // Long text is safe here: the tokenizer truncates to `maxInputTokens`
-    // (128) internally, and renderLabText already bounds the input.
-    if (!isPrescription && !_slmUnavailable) {
+    // It stays a summariser: lab structure comes from the rule engine,
+    // prescription items from the deterministic normalizer, and every
+    // flag/panic verdict from clinical_engine — never from here.
+    if (!_slmUnavailable) {
+      MedicalSummarizer? runtime;
       try {
-        final runtime = slm ?? await loadSlm(SlmBackend.onnx);
-        summaryContext = await runtime.summarize(summaryInput);
-        engine = '$baseEngine+t5-summary';
+        runtime = slm ?? await loadSlm(SlmBackend.llamaCpp);
       } catch (e) {
-        // Degrade to the deterministic engine rather than failing the capture.
-        // Latch the failure so we don't retry a doomed ~94 MB load every time.
+        // A load failure is not recoverable within this capture. Latch it so
+        // later captures skip the doomed ~372 MB load; a user-initiated insight
+        // tap clears the latch by loading successfully.
         _slmUnavailable = true;
-        summaryContext = null;
-        debugPrint('ModelManager: T5 summariser unavailable — $e');
+        debugPrint('ModelManager: SLM load failed — $e');
+      }
+      if (runtime != null) {
+        try {
+          final summary = isPrescription
+              ? await runtime.summarizePrescription(summaryInput)
+              : await runtime.summarize(summaryInput);
+          if (_hasSummaryText(summary)) {
+            summaryContext = summary;
+            engine = '$baseEngine+qwen-summary';
+          } else {
+            // The runtime ran but produced nothing usable. Do not claim a
+            // summary engine, and surface it rather than hiding a blank card.
+            debugPrint('ModelManager: SLM returned an empty summary');
+            summaryWarnings.add(
+              'The on-device summary came back empty on this device.',
+            );
+          }
+        } catch (e) {
+          // A generation failure (load, slot allocation, timeout) degrades this
+          // capture only; the runtime stays resident for the next one.
+          debugPrint('ModelManager: SLM generation failed — $e');
+          summaryWarnings.add('On-device summary unavailable: $e');
+        }
       }
     }
 
@@ -466,10 +531,28 @@ class ModelManager {
       summaryContext: summaryContext,
       detection: _detectionJson(detection),
       structure: structure,
-      warnings: warnings,
+      warnings: [...?warnings, ...summaryWarnings],
       pageCount: pages.totalPages,
       pagesTruncated: pages.truncated,
     );
+  }
+
+  /// Upper bound on the text handed to the SLM, in characters. The model's
+  /// context is 2048 tokens and the reply is capped at [maxNewTokens]; a dense
+  /// raw-OCR fallback can otherwise overrun the context and fail.
+  static const int _maxSummaryChars = 4000;
+
+  static String _capSummaryInput(String text) =>
+      text.length <= _maxSummaryChars
+          ? text
+          : text.substring(0, _maxSummaryChars);
+
+  /// Whether a summariser result carries any usable text.
+  static bool _hasSummaryText(Map<String, dynamic> summary) {
+    final text = summary['medical_summary'];
+    if (text is String && text.trim().isNotEmpty) return true;
+    final findings = summary['key_findings'];
+    return findings is List && findings.isNotEmpty;
   }
 
   /// Provenance for the lab extraction: how the structure was reconstructed,

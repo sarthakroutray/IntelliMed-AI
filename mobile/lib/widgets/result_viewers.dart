@@ -610,7 +610,7 @@ class ResultEnvelopeView extends StatelessWidget {
               child: FlaggedPatternCard(pattern: pattern),
             ),
         ],
-        if (envelope.panels.isNotEmpty) ...[
+        if (envelope.testCount > 0) ...[
           Padding(
             padding: const EdgeInsets.only(bottom: 8),
             child: _SectionLabel(

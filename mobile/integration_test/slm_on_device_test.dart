@@ -1,7 +1,9 @@
-// On-device verification for the T5 summariser and the X-ray classifier.
+// On-device verification for the Qwen3 SLM (plus the retained T5 tokenizer)
+// and the X-ray classifier.
 //
-// These exercise the REAL flutter_onnxruntime path against the models bundled
-// in the APK, so they only run on a connected Android device or emulator:
+// These exercise the REAL llama_cpp_dart / flutter_onnxruntime paths against
+// the models bundled in the APK, so they only run on a connected Android
+// device or emulator:
 //
 //     flutter test integration_test/slm_on_device_test.dart -d <device-id>
 //
@@ -31,9 +33,14 @@ void main() {
     });
 
     testWidgets(
-      'T5 summariser loads and produces a summary on device',
+      'Qwen3-0.6B loads and produces a biomarker explanation on device',
       (tester) async {
-        final slm = OnnxSummarizer();
+        final slm = QwenSlmRuntime(
+          modelPath: 'assets/models/Qwen3-0.6B-Q3_K_S.gguf',
+          // Emits raw-output stats (length, whether the <think> block closed)
+          // so a failure here is diagnosable from the test log.
+          verbose: true,
+        );
 
         final loadWatch = Stopwatch()..start();
         await slm.load();
@@ -42,33 +49,28 @@ void main() {
         expect(
           slm.isReady,
           isTrue,
-          reason: 'T5 encoder/decoder failed to load on this device',
+          reason: 'Qwen3 GGUF failed to load on this device',
         );
-        debugPrint('SLM load: ${loadWatch.elapsedMilliseconds} ms');
+        debugPrint('Qwen3 load: ${loadWatch.elapsedMilliseconds} ms');
 
         final runWatch = Stopwatch()..start();
-        final out = await slm.summarize(
-          'Hemoglobin 11.2 g/dL 13.0-17.0. WBC 7.5 4.0-11.0. '
-          'Patient reports fever and productive cough for three days.',
+        final explanation = await slm.explainBiomarker(
+          testName: 'Hemoglobin',
+          value: '11.2',
+          unit: 'g/dL',
+          direction: 'low',
         );
         runWatch.stop();
-        debugPrint(
-          'SLM summarize: ${runWatch.elapsedMilliseconds} ms | '
-          'input_tokens=${out['input_tokens']} '
-          'decode_steps=${out['decode_steps']}',
-        );
-        debugPrint('SLM summary: ${out['medical_summary']}');
+        debugPrint('Explain: ${runWatch.elapsedMilliseconds} ms | $explanation');
 
-        final summary = out['medical_summary'];
-        expect(summary, isA<String>());
         expect(
-          (summary as String).trim(),
+          explanation.trim(),
           isNotEmpty,
-          reason: 'greedy decode produced an empty summary',
+          reason: 'model produced no answer (thinking block never closed?)',
         );
-        expect(out['summary_length'], greaterThan(0));
-        expect(out['decode_steps'], greaterThan(0));
-        expect(out['latency_ms'], isA<int>());
+        // The <think> block and echoed ChatML control tokens must be gone.
+        expect(explanation, isNot(contains('<think>')));
+        expect(explanation, isNot(contains('<|im_end|>')));
 
         await slm.close();
         expect(slm.isReady, isFalse);

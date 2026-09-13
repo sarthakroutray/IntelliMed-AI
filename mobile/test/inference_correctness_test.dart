@@ -1,6 +1,8 @@
+// ignore_for_file: deprecated_member_use_from_same_package
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
 import 'package:intellimed_app/cnn_ocr.dart';
+import 'package:intellimed_app/normalize.dart';
 import 'package:intellimed_app/slm_runtime.dart';
 
 void main() {
@@ -150,6 +152,116 @@ void main() {
           reason: 'channel $c should carry the promoted grey value',
         );
       }
+    });
+  });
+
+  group('prescription render for the SLM', () {
+    test('renders extracted items in order, skipping blanks', () {
+      final normalized = {
+        'document_type': 'prescription',
+        'panels': [
+          {
+            'panel_name': 'Prescribed items',
+            'items': [
+              {'medication': 'amoxicillin', 'dosage': '500 mg', 'frequency': 'TID'},
+              {'medication': 'paracetamol', 'dosage': '650 mg'},
+            ],
+          },
+        ],
+      };
+      expect(
+        renderPrescriptionText(normalized, fallback: 'RAW OCR'),
+        'Prescribed items:\namoxicillin 500 mg TID\nparacetamol 650 mg',
+      );
+    });
+
+    test('appends uncovered document text and drops item duplicates', () {
+      final normalized = {
+        'document_type': 'prescription',
+        'panels': [
+          {
+            'panel_name': 'Prescribed items',
+            'items': [
+              {'medication': 'amoxicillin', 'dosage': '500 mg', 'frequency': 'TID'},
+            ],
+          },
+        ],
+      };
+      final rendered = renderPrescriptionText(
+        normalized,
+        fallback: 'RAW OCR',
+        context: 'Amoxicillin 500 mg TID\nTake after food\nFollow up in 5 days',
+      );
+      expect(rendered, startsWith('Prescribed items:\namoxicillin 500 mg TID'));
+      expect(rendered, contains('Take after food'));
+      expect(rendered, contains('Follow up in 5 days'));
+      // The item line is dropped from the context block, not repeated.
+      expect('amoxicillin 500 mg TID'.allMatches(rendered).length, 1);
+    });
+
+    test('falls back to the raw text when no items were extracted', () {
+      expect(
+        renderPrescriptionText(
+          const {'document_type': 'prescription', 'panels': []},
+          fallback: 'RAW OCR',
+        ),
+        'RAW OCR',
+      );
+    });
+
+    test('normalizes a real prescription line via the normalizer', () {
+      final normalized = normalizePrescriptionText('Amoxicillin 500 mg TID');
+      expect(
+        renderPrescriptionText(normalized, fallback: 'RAW OCR'),
+        'Prescribed items:\namoxicillin 500 mg TID',
+      );
+    });
+  });
+
+  group('Qwen3 ChatML prompt', () {
+    test('wraps the system and user turns and leaves the assistant open', () {
+      final prompt = buildChatMlPrompt('SYS', 'USER');
+      expect(prompt, contains('<|im_start|>system\nSYS<|im_end|>'));
+      expect(prompt, contains('<|im_start|>user\nUSER<|im_end|>'));
+      expect(prompt, endsWith('<|im_start|>assistant\n'));
+    });
+
+    test('prefixes /no_think when thinking is disabled', () {
+      final prompt = buildChatMlPrompt('SYS', 'USER', enableThinking: false);
+      expect(prompt, contains('<|im_start|>user\n/no_think\nUSER<|im_end|>'));
+    });
+
+    test('omits /no_think when thinking is enabled', () {
+      final prompt = buildChatMlPrompt('SYS', 'USER', enableThinking: true);
+      expect(prompt, isNot(contains('/no_think')));
+    });
+  });
+
+  group('thinking strip', () {
+    test('removes a complete think block', () {
+      expect(
+        stripThinking('<think>reasoning here</think>The answer.'),
+        'The answer.',
+      );
+    });
+
+    test('returns text unchanged when no think block is present', () {
+      expect(stripThinking('Just the answer.'), 'Just the answer.');
+    });
+
+    test('drops echoed ChatML control tokens', () {
+      expect(stripThinking('Answer<|im_end|>'), 'Answer');
+    });
+
+    test('returns empty when thinking was truncated before the answer', () {
+      expect(stripThinking('<think>still reasoning'), isEmpty);
+    });
+
+    test('keeps a multi-line answer that follows the block', () {
+      expect(
+        stripThinking('<think>x</think>\n1. First\n2. Second'),
+        '1. First\n2. Second',
+      );
     });
   });
 }

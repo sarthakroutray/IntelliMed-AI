@@ -191,11 +191,11 @@ void main() {
   );
 
   testWidgets(
-    'full processDocument pipeline: OCR -> T5 -> validate -> store',
+    'full processDocument pipeline: OCR -> rule engine + SLM -> validate -> store',
     (tester) async {
       final models = ModelManager(
         cnnAsset: 'assets/models/pneumonia_resnet50.onnx',
-        slmGgufAsset: 'assets/models/slm_norm_q4.gguf',
+        slmGgufAsset: 'assets/models/Qwen3-0.6B-Q3_K_S.gguf',
       );
       await models.init();
       try {
@@ -219,11 +219,11 @@ void main() {
         final normalized = envelope['normalized'] as Map<String, dynamic>;
         final panels = normalized['panels'] as List;
         expect(panels, isNotEmpty, reason: 'no panels in the lab envelope');
-        // The T5 summariser should have been exercised, not skipped.
+        // The on-device SLM should have been exercised, not skipped.
         expect(
           envelope['engine'],
-          contains('t5-summary'),
-          reason: 'T5 summariser did not run in the default pipeline',
+          contains('qwen-summary'),
+          reason: 'SLM summariser did not run in the default pipeline',
         );
         expect(envelope['summary_context'], isA<Map<String, dynamic>>());
 
@@ -246,7 +246,7 @@ void main() {
     (tester) async {
       final models = ModelManager(
         cnnAsset: 'assets/models/pneumonia_resnet50.onnx',
-        slmGgufAsset: 'assets/models/slm_norm_q4.gguf',
+        slmGgufAsset: 'assets/models/Qwen3-0.6B-Q3_K_S.gguf',
       );
       await models.init();
       try {

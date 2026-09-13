@@ -108,3 +108,65 @@ Lab structure is not an SLM job. The on-device path is now:
   latency numbers from the Bench tab on a mid-range device, recorded in
   `docs/MEMORY_REPORT.md`. Only if resident memory causes pressure do we
   add lazy/evict logic.
+
+## 5. Qwen3-0.6B SLM (this session)
+
+- **Qwen3-0.6B (Q3_K_S GGUF) is now the active SLM**, replacing the T5-small
+  ONNX summariser as the `MedicalSummarizer` implementation. It produces the
+  capture-path `summary_context` (engine suffix `+qwen-summary`) and powers the
+  new insight tasks. `OnnxSummarizer` + `t5_tokenizer.dart` are retained but
+  `@Deprecated` for A/B comparison and rollback.
+- **Insight tasks** (`QwenSlmRuntime.explainBiomarker`, `doctorVisitPrep`,
+  `translateInstructions`) are reached through `ModelManager.runInsightTask`,
+  which serialises on the shared `InferenceQueue` and loads the model lazily.
+  They surface in the capture detail screen (`widgets/insight_card.dart`):
+  per-value explanations, three doctor-visit questions, and Hindi/Spanish
+  instruction translation for prescriptions.
+- **No parallel clinical engine.** Explanations only describe values that
+  `lab/clinical_engine.dart` already flagged (`is_panic_value`,
+  `abnormal`/`direction`); flagging and panic detection stay deterministic.
+  The SLM never emits a flag or verdict.
+- **Thinking mode**: ON for explanations and visit prep, OFF (`/no_think`) for
+  summary and translation. Output length varies run to run, so `_complete`
+  retries once without thinking if the `<think>` block never closes.
+
+### Deployment requirements (verified, not assumed)
+
+- **Native llama.cpp libraries — checked in** under
+  `mobile/android/app/src/main/jniLibs/arm64-v8a/`: `libmtmd.so`, `libllama.so`,
+  `libggml.so`, `libggml-cpu.so`, `libggml-base.so`, `libomp.so`,
+  `libc++_shared.so` (~6 MB stripped, 16 KB-page aligned). Built from llama.cpp
+  at commit `4ffc47cb` — the revision pinned by `llama_cpp_dart` 0.2.2, so the
+  FFI bindings match its headers. Rebuild with
+  `pwsh mobile/tool/build_llama_android.ps1` (add `-Abi x86_64` for an
+  emulator). `libggml-cpu.so` links the OpenMP runtime and `libllama.so` links
+  `libc++_shared`, so both must ship or `dlopen("libmtmd.so")` fails.
+- **GGUF model** at `assets/models/Qwen3-0.6B-Q3_K_S.gguf` (~372 MB,
+  gitignored); fetch with `pwsh mobile/tool/download_qwen3_gguf.ps1`. Header
+  verified: GGUF v3, 311 tensors, `general.architecture = qwen3`, 28 blocks /
+  1024 hidden / 16 heads, 4168-char chat template, `eos_token_id = 151645`.
+
+### Runtime gotchas (probed against llama_cpp_dart 0.2.2 and llama.cpp)
+
+- **`ModelParams.mainGpu` must be `-1` on a CPU-only build.** llama.cpp builds
+  its device list from GPU/IGPU/RPC devices only; with no GPU backend the list
+  is empty and the default `main_gpu = 0` fails the range check in
+  `llama_model_load_from_file_impl` with
+  `invalid value for main_gpu: 0 (available devices: 0)`.
+  `nGpuLayers = 0` alone does not avoid it.
+- `LlamaLoad` has no `format:` field; prompts are built by hand
+  (`buildChatMlPrompt`) because `ChatMLFormat` re-wraps whatever it is given.
+- Completion is awaited via `waitForCompletion(promptId)`; there is no
+  empty-string stream sentinel.
+- llama.cpp needs a real file path, so a bundled asset key is extracted once
+  to application support storage (atomically) before loading.
+- `verbose: true` is inert on Android: the package never wires its Dart log
+  callback and llama.cpp's logger writes to stderr, which the platform drops.
+  Native errors require capturing logcat after temporarily installing
+  `llamaLogCallbackPrint`.
+
+### Measured on-device (Galaxy S23, arm64-v8a, Android 16)
+
+- Qwen3-0.6B Q3_K_S load: **~3–4 s** (28-layer CPU context, 224 MiB f16 KV).
+- `explainBiomarker` (thinking): **13–38 s**, dominated by the think block.
+- First use extracts ~372 MB out of the APK.

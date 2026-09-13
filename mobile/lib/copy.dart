@@ -35,3 +35,12 @@ const trendReadingCaption =
 const trendUnitSplitNote =
     'This measurement appears under different units. Each unit is shown '
     'separately and never compared across units.';
+
+/// Caption for the on-device AI insights section.
+const insightsCaption =
+    'Generated on this device to help you understand your results. '
+    'Not medical advice.';
+
+/// Disclaimer shown under every piece of SLM-generated insight text.
+const insightDisclaimer =
+    'For reference only — consult your doctor for medical decisions.';
