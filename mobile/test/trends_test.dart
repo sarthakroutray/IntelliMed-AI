@@ -236,6 +236,24 @@ void main() {
       expect(series.any((s) => s.testName == 'LDL Cholesterol'), isTrue);
     });
 
+    test('a non-lab row\'s server_id does not hide a lab report', () {
+      final rows = [
+        _row(
+          id: 1,
+          createdAt: '2026-01-02 10:00:00',
+          serverId: 7,
+          kind: 'xray',
+          envelope: const {
+            'kind': 'xray',
+            'normalized': {'document_type': 'xray', 'top_pattern': 'Normal'},
+          },
+        ),
+      ];
+      // Server ids are per-table: an X-ray row must not suppress the lab report
+      // that happens to share the number.
+      expect(syncedServerIds(rows), isEmpty);
+    });
+
     test('reports without a timestamp are skipped', () {
       final reports = [
         LabReport.fromJson({
@@ -263,8 +281,10 @@ void main() {
     test('new trend copy never judges or diagnoses', () {
       const files = [
         'lib/trends.dart',
+        'lib/patient_summary.dart',
         'lib/screens/trends_screen.dart',
         'lib/screens/trend_detail_screen.dart',
+        'lib/screens/patient_summary_screen.dart',
         'lib/widgets/trend_sparkline.dart',
         'lib/copy.dart',
       ];

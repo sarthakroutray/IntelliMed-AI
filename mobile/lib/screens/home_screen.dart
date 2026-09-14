@@ -13,6 +13,7 @@ import '../widgets/app_card.dart';
 import '../widgets/feedback.dart';
 import '../widgets/stat_card.dart';
 import 'capture_detail_screen.dart';
+import 'patient_summary_screen.dart';
 import 'trends_screen.dart';
 
 /// Patient dashboard: real counts, quick actions, connected doctors and the
@@ -247,6 +248,24 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               icon: const Icon(Icons.show_chart, size: 18),
               label: const Text('Your values over time'),
+            ),
+          ),
+          const SizedBox(height: 10),
+          // The full-patient summary spans captures, reports and documents, so
+          // it opens as its own screen too (same reasoning as Trends above).
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.tonalIcon(
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => PatientSummaryScreen(
+                    repository: widget.repository,
+                    models: widget.models,
+                  ),
+                ),
+              ),
+              icon: const Icon(Icons.summarize_outlined, size: 18),
+              label: const Text('Full patient summary'),
             ),
           ),
           const SizedBox(height: 20),

@@ -6,67 +6,9 @@ import 'package:http/testing.dart';
 import 'package:image/image.dart' as img;
 import 'package:intellimed_app/cnn_ocr.dart';
 import 'package:intellimed_app/inference_queue.dart';
-import 'package:intellimed_app/slm_runtime.dart';
 import 'package:intellimed_app/sync.dart';
 
 void main() {
-  test('SLM output parser rejects flag fields', () {
-    final bad = jsonEncode({
-      'document_type': 'lab_report',
-      'patient_context': {},
-      'lab_name': null,
-      'panels': [
-        {
-          'panel_name': 'CBC',
-          'tests': [
-            {
-              'test_name': 'Hemoglobin',
-              'raw_test_name': 'Hb',
-              'value': 11.2,
-              'unit': 'g/dL',
-              'range_low': 13.0,
-              'range_high': 17.0,
-              'range_raw': '13.0-17.0',
-              'flag_in_source': null,
-              'ocr_confidence': 'high',
-              'source_bbox': null,
-              'abnormal': true,
-            },
-          ],
-        },
-      ],
-    });
-    expect(() => parseSlmOutput(bad), throwsFormatException);
-  });
-
-  test('SLM output parser accepts schema-correct JSON', () {
-    final good = jsonEncode({
-      'document_type': 'lab_report',
-      'patient_context': {},
-      'lab_name': null,
-      'panels': [
-        {
-          'panel_name': 'CBC',
-          'tests': [
-            {
-              'test_name': 'Hemoglobin',
-              'raw_test_name': 'Hb',
-              'value': 11.2,
-              'unit': 'g/dL',
-              'range_low': 13.0,
-              'range_high': 17.0,
-              'range_raw': '13.0-17.0',
-              'flag_in_source': null,
-              'ocr_confidence': 'high',
-              'source_bbox': null,
-            },
-          ],
-        },
-      ],
-    });
-    expect(parseSlmOutput(good)['document_type'], 'lab_report');
-  });
-
   test('inference queue serializes overlapping calls', () async {
     final queue = InferenceQueue();
     final order = <int>[];

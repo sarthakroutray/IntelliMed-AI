@@ -9,21 +9,17 @@
 # .gitignore; listed here so it holds regardless of the root file.
 .env
 .env.local
-# Bundled model binaries: the pneumonia ResNet50 ONNX and the quantized T5
-# summarizer are tracked build artifacts (see backend/scripts/). All other
-# binaries (future .tflite/.gguf, SLM candidates) stay untracked.
+# Bundled model binaries: the pneumonia ResNet50 ONNX is a tracked build
+# artifact (see backend/scripts/). All other binaries stay untracked — the SLM
+# GGUF is fetched with mobile/tool/download_qwen3_gguf.ps1.
 assets/models/*.tflite
 assets/models/*.gguf
 assets/models/*.onnx
 !assets/models/pneumonia_resnet50.onnx
-!assets/models/t5_encoder_q8.onnx
-!assets/models/t5_decoder_q8.onnx
 assets/models/*.json
-!assets/models/t5_tokenizer.json
 !assets/models/.gitkeep
 assets/sample/*
 !assets/sample/.gitkeep
-!assets/sample/t5_parity_vectors.txt
 .atom/
 .build/
 .buildlog/

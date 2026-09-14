@@ -19,10 +19,9 @@ const cnnModelAsset = String.fromEnvironment(
   'CNN_MODEL_ASSET',
   defaultValue: 'assets/models/pneumonia_resnet50.onnx',
 );
-const cnnBackend = String.fromEnvironment('CNN_BACKEND', defaultValue: 'onnx');
 const slmGgufAsset = String.fromEnvironment(
   'SLM_GGUF_ASSET',
-  defaultValue: 'assets/models/Qwen3-0.6B-Q3_K_S.gguf',
+  defaultValue: 'assets/models/Qwen3-0.6B-Q4_0.gguf',
 );
 const eagerModelLoad = bool.fromEnvironment(
   'EAGER_MODEL_LOAD',

@@ -195,7 +195,7 @@ void main() {
     (tester) async {
       final models = ModelManager(
         cnnAsset: 'assets/models/pneumonia_resnet50.onnx',
-        slmGgufAsset: 'assets/models/Qwen3-0.6B-Q3_K_S.gguf',
+        slmGgufAsset: 'assets/models/Qwen3-0.6B-Q4_0.gguf',
       );
       await models.init();
       try {
@@ -246,7 +246,7 @@ void main() {
     (tester) async {
       final models = ModelManager(
         cnnAsset: 'assets/models/pneumonia_resnet50.onnx',
-        slmGgufAsset: 'assets/models/Qwen3-0.6B-Q3_K_S.gguf',
+        slmGgufAsset: 'assets/models/Qwen3-0.6B-Q4_0.gguf',
       );
       await models.init();
       try {

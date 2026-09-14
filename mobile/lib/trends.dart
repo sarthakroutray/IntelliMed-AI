@@ -215,11 +215,16 @@ List<TrendPoint> trendPointsFromLocalRows(List<Map<String, Object?>> rows) {
   return points;
 }
 
-/// Server report ids already represented by a local row, so the merged history
-/// does not double-count a capture that has synced.
+/// Server **lab-report** ids already represented by a local row, so the merged
+/// history does not double-count a capture that has synced.
+///
+/// Filtered by `kind`: server ids are per-table, and the ids this skip-set is
+/// compared against are lab-report ids, so an X-ray or prescription row's
+/// `server_id` must not hide an unrelated lab report that shares the number.
 Set<int> syncedServerIds(List<Map<String, Object?>> localRows) => {
   for (final row in localRows)
-    if (row['server_id'] is int) row['server_id'] as int,
+    if ('${row['kind']}' == 'lab_report' && row['server_id'] is int)
+      row['server_id'] as int,
 };
 
 /// Readings from server reports, skipping any already covered by a local row.

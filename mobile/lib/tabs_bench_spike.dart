@@ -92,20 +92,6 @@ class _BenchTabState extends State<BenchTab> {
       '(ready=$qwenReady)$qwenNote',
     );
     await qwen.close();
-
-    // Legacy T5 ONNX path stays measurable for A/B comparison.
-    // ignore: deprecated_member_use_from_same_package
-    final onnx = OnnxSummarizer();
-    String onnxNote = '';
-    try {
-      await onnx.load();
-    } catch (e) {
-      onnxNote = ' — error: $e';
-    }
-    lines.add('slm t5-q8 onnx (legacy) ready=${onnx.isReady}$onnxNote');
-    // Release the native T5 sessions this run created. Without this, every tap
-    // of "Run measurements" leaked another pair of sessions.
-    await onnx.close();
     lines.add(
       'inference queue max depth observed: ${widget.models.queue.maxDepthObserved}',
     );
@@ -171,7 +157,7 @@ class _SpikeTabState extends State<SpikeTab> {
     try {
       // Reuse the shared runtime rather than constructing a second one: this
       // reflects what a capture or an insight request pays on first use.
-      final runtime = await widget.models.loadSlm(SlmBackend.llamaCpp);
+      final runtime = await widget.models.loadSlm();
       loadMs = sw.elapsedMilliseconds;
       ready = runtime.isReady;
       if (ready && runtime is QwenSlmRuntime) {
@@ -203,7 +189,7 @@ class _SpikeTabState extends State<SpikeTab> {
       padding: const EdgeInsets.all(16),
       children: [
         const Text(
-          'Spike result: Qwen3-0.6B (Q3_K_S GGUF) runs on-device via '
+          'Spike result: Qwen3-0.6B (Q4_0 GGUF) runs on-device via '
           'llama_cpp_dart and powers the summary context and AI insights. '
           'The button below loads it and runs a live explanation probe.',
         ),

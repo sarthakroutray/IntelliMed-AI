@@ -15,6 +15,7 @@ import 'lab/rule_engine.dart';
 import 'lab/stage1_model.dart';
 import 'normalize.dart';
 import 'page_source.dart';
+import 'patient_summary.dart';
 import 'schemas.dart';
 import 'slm_runtime.dart';
 import 'store.dart';
@@ -56,13 +57,6 @@ class ModelManager {
   int cnnLoadMs = -1;
   int slmLoadMs = -1;
 
-  /// Whether the on-device SLM is currently written off after a failed load.
-  bool get slmUnavailable => _slmUnavailable;
-
-  /// Allow a later retry of the SLM (e.g. after the user frees memory or the
-  /// model becomes available again).
-  void resetSlmFailure() => _slmUnavailable = false;
-
   Future<void> init() async {
     // The ML Kit recognizer is built on first use (see `_recognizePages`):
     // constructing it here put a native platform-channel init on the path
@@ -71,7 +65,7 @@ class ModelManager {
     if (eagerLoad) {
       ocr = OcrService();
       await loadCnn();
-      await loadSlm(SlmBackend.llamaCpp);
+      await loadSlm();
     }
   }
 
@@ -90,18 +84,12 @@ class ModelManager {
     return cnn!;
   }
 
-  /// Load the on-device SLM.
-  ///
-  /// [SlmBackend.llamaCpp] is the active path (Qwen3-0.6B GGUF);
-  /// [SlmBackend.onnx] remains only for the dev A/B harness.
-  Future<MedicalSummarizer> loadSlm(SlmBackend backend) async {
+  /// Load the on-device SLM (Qwen3-0.6B GGUF).
+  Future<MedicalSummarizer> loadSlm() async {
     final started = DateTime.now();
     var runtime = slm;
     if (runtime == null) {
-      runtime = backend == SlmBackend.llamaCpp
-          ? QwenSlmRuntime(modelPath: slmGgufAsset)
-          // ignore: deprecated_member_use_from_same_package
-          : OnnxSummarizer();
+      runtime = QwenSlmRuntime(modelPath: slmGgufAsset);
       slm = runtime;
     }
     try {
@@ -128,7 +116,7 @@ class ModelManager {
     return queue.add(() async {
       MedicalSummarizer? runtime;
       try {
-        runtime = slm ?? await loadSlm(SlmBackend.llamaCpp);
+        runtime = slm ?? await loadSlm();
       } catch (e) {
         _slmUnavailable = true;
         rethrow;
@@ -139,6 +127,70 @@ class ModelManager {
       _slmUnavailable = false;
       return task(runtime);
     });
+  }
+
+  /// Summarise a patient's whole record set for a doctor: map -> reduce.
+  ///
+  /// [cards] are terse per-record texts (see patient_summary.dart). Runs inside
+  /// a single queued task and drives the resident runtime directly — it never
+  /// re-enters [queue], so it cannot deadlock (see the serial-queue note at the
+  /// top of this file). The SLM is loaded lazily like an insight task.
+  Future<String> summarizePatient(List<String> cards) {
+    return queue.add(() async {
+      if (cards.isEmpty) return '';
+      MedicalSummarizer? runtime;
+      try {
+        runtime = slm ?? await loadSlm();
+      } catch (e) {
+        _slmUnavailable = true;
+        rethrow;
+      }
+      if (runtime is! QwenSlmRuntime) {
+        throw StateError('Expected QwenSlmRuntime, got ${runtime.runtimeType}');
+      }
+      _slmUnavailable = false;
+
+      final chunks = chunkCardsByBudget(cards);
+      debugPrint('ModelManager: patient summary over ${cards.length} card(s) '
+          'in ${chunks.length} chunk(s)');
+      if (chunks.length == 1) {
+        return (await runtime.summarizePatient(chunks.first)).trim();
+      }
+      final partials = <String>[];
+      for (final chunk in chunks) {
+        final part = (await runtime.summarizeRecordBatch(chunk)).trim();
+        if (part.isNotEmpty) partials.add(part);
+      }
+      if (partials.isEmpty) return '';
+      return _reducePatient(runtime, partials, depth: 0);
+    });
+  }
+
+  /// Recursively reduce per-batch notes until they fit one final prompt.
+  Future<String> _reducePatient(
+    QwenSlmRuntime runtime,
+    List<String> partials, {
+    required int depth,
+  }) async {
+    final chunks = chunkCardsByBudget(partials);
+    if (chunks.length == 1) {
+      return (await runtime.summarizePatient(chunks.first)).trim();
+    }
+    if (depth >= 3) {
+      // Notes are not shrinking fast enough; make one bounded final pass.
+      final joined = partials.join('\n\n');
+      final capped = joined.length <= _maxSummaryChars
+          ? joined
+          : joined.substring(0, _maxSummaryChars);
+      return (await runtime.summarizePatient(capped)).trim();
+    }
+    final next = <String>[];
+    for (final chunk in chunks) {
+      final part = (await runtime.summarizeRecordBatch(chunk)).trim();
+      if (part.isNotEmpty) next.add(part);
+    }
+    if (next.isEmpty) return '';
+    return _reducePatient(runtime, next, depth: depth + 1);
   }
 
   // -------------------------------------------------------------------
@@ -481,7 +533,7 @@ class ModelManager {
     if (!_slmUnavailable) {
       MedicalSummarizer? runtime;
       try {
-        runtime = slm ?? await loadSlm(SlmBackend.llamaCpp);
+        runtime = slm ?? await loadSlm();
       } catch (e) {
         // A load failure is not recoverable within this capture. Latch it so
         // later captures skip the doomed ~372 MB load; a user-initiated insight
@@ -537,10 +589,12 @@ class ModelManager {
     );
   }
 
-  /// Upper bound on the text handed to the SLM, in characters. The model's
-  /// context is 2048 tokens and the reply is capped at [maxNewTokens]; a dense
-  /// raw-OCR fallback can otherwise overrun the context and fail.
-  static const int _maxSummaryChars = 4000;
+  /// Upper bound on the text handed to the SLM, in characters.
+  ///
+  /// Kept well under the model's prompt budget (`nBatch` tokens): prefill time
+  /// grows with prompt length, and a dense raw-OCR fallback would otherwise
+  /// both slow every summary down and overflow the batch.
+  static const int _maxSummaryChars = 2500;
 
   static String _capSummaryInput(String text) =>
       text.length <= _maxSummaryChars

@@ -11,12 +11,6 @@ export 'lab/test_names.dart'
 // backend/services.py nlp prescription objects, lifted into panels so both
 // document kinds share one envelope.
 
-const labSystemPromptExcerpt = '''
-You are a medical document normalization engine. Your ONLY job is to convert
-extracted document text/structure into a fixed JSON schema. You do not
-interpret or make clinical judgments. Output valid JSON only.
-''';
-
 String normalizeTestName(String raw) =>
     normalizeTestNameOrNull(raw) ?? raw.trim();
 

@@ -1,4 +1,3 @@
-// ignore_for_file: deprecated_member_use_from_same_package
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
 import 'package:intellimed_app/cnn_ocr.dart';
@@ -6,30 +5,6 @@ import 'package:intellimed_app/normalize.dart';
 import 'package:intellimed_app/slm_runtime.dart';
 
 void main() {
-  group('no-repeat n-gram', () {
-    test('bans the token completing a repeated trigram', () {
-      // Trailing prefix (1,2) already occurred at index 0 followed by 3.
-      expect(
-        OnnxSummarizer.bannedByRepeatNgram([1, 2, 3, 1, 2], 3),
-        {3},
-      );
-    });
-
-    test('returns nothing when the prefix is new', () {
-      expect(OnnxSummarizer.bannedByRepeatNgram([1, 2, 3], 3), isEmpty);
-    });
-
-    test('bans a degenerate repeated token run', () {
-      expect(OnnxSummarizer.bannedByRepeatNgram([5, 5, 5, 5], 3), {5});
-    });
-
-    test('is inert for short sequences and invalid n', () {
-      expect(OnnxSummarizer.bannedByRepeatNgram([1, 2], 3), isEmpty);
-      expect(OnnxSummarizer.bannedByRepeatNgram([1, 2, 3], 1), isEmpty);
-      expect(OnnxSummarizer.bannedByRepeatNgram(const [], 3), isEmpty);
-    });
-  });
-
   group('softmax', () {
     test('does not invert predictions with wide logit spread', () {
       // Regression: the hand-rolled Taylor-series exp went negative for the
@@ -226,14 +201,19 @@ void main() {
       expect(prompt, endsWith('<|im_start|>assistant\n'));
     });
 
-    test('prefixes /no_think when thinking is disabled', () {
+    test('suppresses thinking by prefilling a closed empty think block', () {
       final prompt = buildChatMlPrompt('SYS', 'USER', enableThinking: false);
-      expect(prompt, contains('<|im_start|>user\n/no_think\nUSER<|im_end|>'));
+      expect(prompt, contains('<|im_start|>user\nUSER<|im_end|>'));
+      expect(
+        prompt,
+        endsWith('<|im_start|>assistant\n<think>\n\n</think>\n\n'),
+      );
     });
 
-    test('omits /no_think when thinking is enabled', () {
+    test('leaves the assistant turn open when thinking is enabled', () {
       final prompt = buildChatMlPrompt('SYS', 'USER', enableThinking: true);
-      expect(prompt, isNot(contains('/no_think')));
+      expect(prompt, endsWith('<|im_start|>assistant\n'));
+      expect(prompt, isNot(contains('<think>')));
     });
   });
 

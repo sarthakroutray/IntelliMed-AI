@@ -44,3 +44,22 @@ const insightsCaption =
 /// Disclaimer shown under every piece of SLM-generated insight text.
 const insightDisclaimer =
     'For reference only — consult your doctor for medical decisions.';
+
+/// Caption for the full-patient summary screen.
+const patientSummaryCaption =
+    'Everything captured on this device and stored in your account, brought '
+    'together for review with your doctor.';
+
+/// Disclaimer under a generated patient summary.
+const patientSummaryDisclaimer =
+    'Generated on this device from your stored records. Not medical advice.';
+
+/// Shown when the on-device model could not produce the written summary.
+const patientSummaryUnavailable =
+    'The written summary could not be generated on this device. The '
+    'structured facts below are complete and can still be shared.';
+
+/// Caption above the "changes over time" facts on the summary screen.
+const patientSummaryTrendsCaption =
+    'Values shown in date order, never compared as better or worse. '
+    'For review with your doctor.';

@@ -20,6 +20,10 @@
 
 ## 1. SLM: WIRED — the T5 summariser, not a structurer (this session)
 
+> **Superseded — see §5.** The T5/ONNX summariser described below was replaced
+> by Qwen3-0.6B (Q4_0 GGUF). `OnnxSummarizer`, `t5_tokenizer.dart` and the T5
+> assets were removed in the cleanup; this section is kept as history.
+
 Git history shows the "SLM" was never a separate file — it is the Falconsai
 T5 summarizer the backend has used since `622ce60` as its OCR-text summariser
 (`medical_summarize_service` in `backend/services.py`, still called by both
@@ -74,6 +78,9 @@ Lab structure is not an SLM job. The on-device path is now:
 
 ## 2. llama_cpp_dart vs ONNX — decision (made, this session)
 
+> **Superseded — see §5.** The "ONNX only, no GGUF path" decision below no
+> longer holds: Qwen3-0.6B runs on `llama_cpp_dart` (GGUF).
+
 - **Decision: ONNX via `flutter_onnxruntime` — no GGUF path.** There is no
   GGUF file anywhere (workspace, history, LFS, HF cache) because the
   summariser was always this T5 checkpoint, which exports cleanly to ONNX.
@@ -111,11 +118,11 @@ Lab structure is not an SLM job. The on-device path is now:
 
 ## 5. Qwen3-0.6B SLM (this session)
 
-- **Qwen3-0.6B (Q3_K_S GGUF) is now the active SLM**, replacing the T5-small
+- **Qwen3-0.6B (Q4_0 GGUF) is now the active SLM**, replacing the T5-small
   ONNX summariser as the `MedicalSummarizer` implementation. It produces the
   capture-path `summary_context` (engine suffix `+qwen-summary`) and powers the
-  new insight tasks. `OnnxSummarizer` + `t5_tokenizer.dart` are retained but
-  `@Deprecated` for A/B comparison and rollback.
+  new insight tasks. The T5/ONNX summariser it replaced (`OnnxSummarizer`,
+  `t5_tokenizer.dart`) and its assets were removed; Qwen3-0.6B is the only SLM.
 - **Insight tasks** (`QwenSlmRuntime.explainBiomarker`, `doctorVisitPrep`,
   `translateInstructions`) are reached through `ModelManager.runInsightTask`,
   which serialises on the shared `InferenceQueue` and loads the model lazily.
@@ -126,9 +133,11 @@ Lab structure is not an SLM job. The on-device path is now:
   `lab/clinical_engine.dart` already flagged (`is_panic_value`,
   `abnormal`/`direction`); flagging and panic detection stay deterministic.
   The SLM never emits a flag or verdict.
-- **Thinking mode**: ON for explanations and visit prep, OFF (`/no_think`) for
-  summary and translation. Output length varies run to run, so `_complete`
-  retries once without thinking if the `<think>` block never closes.
+- **Non-thinking, always.** The `/no_think` text hint is not honoured reliably,
+  so thinking is suppressed the way the model was trained: `buildChatMlPrompt`
+  pre-fills the assistant turn with an empty, already-closed `<think>` block and
+  the model answers directly. With thinking on, the block could consume the
+  whole token budget without closing and yield no answer at all.
 
 ### Deployment requirements (verified, not assumed)
 
@@ -141,7 +150,7 @@ Lab structure is not an SLM job. The on-device path is now:
   `pwsh mobile/tool/build_llama_android.ps1` (add `-Abi x86_64` for an
   emulator). `libggml-cpu.so` links the OpenMP runtime and `libllama.so` links
   `libc++_shared`, so both must ship or `dlopen("libmtmd.so")` fails.
-- **GGUF model** at `assets/models/Qwen3-0.6B-Q3_K_S.gguf` (~372 MB,
+- **GGUF model** at `assets/models/Qwen3-0.6B-Q4_0.gguf` (~364 MB,
   gitignored); fetch with `pwsh mobile/tool/download_qwen3_gguf.ps1`. Header
   verified: GGUF v3, 311 tensors, `general.architecture = qwen3`, 28 blocks /
   1024 hidden / 16 heads, 4168-char chat template, `eos_token_id = 151645`.
@@ -167,6 +176,12 @@ Lab structure is not an SLM job. The on-device path is now:
 
 ### Measured on-device (Galaxy S23, arm64-v8a, Android 16)
 
-- Qwen3-0.6B Q3_K_S load: **~3–4 s** (28-layer CPU context, 224 MiB f16 KV).
-- `explainBiomarker` (thinking): **13–38 s**, dominated by the think block.
-- First use extracts ~372 MB out of the APK.
+- Active model is **Q4_0** (~364 MB extracted out of the APK on first use),
+  chosen over Q3_K_S for CPU speed: legacy quants dequantize with simpler SIMD
+  than the K-quants.
+- All tasks run non-thinking (see above). Historical Q3_K_S numbers with
+  thinking ON: `explainBiomarker` **13–38 s**, dominated by the think block —
+  and it often produced no answer when the block never closed.
+- Every generation now logs its own timing, so this table is no longer the only
+  source of truth:
+  `QwenSlmRuntime: scope raw=<chars> chars in <ms> ms, thinkOpen=…, thinkClose=…`.

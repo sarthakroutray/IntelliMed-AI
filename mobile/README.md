@@ -89,11 +89,14 @@ file locally and syncs just the structured envelope.
   ImageNet-norm, mirrors `backend/services.py`) + on-device ML Kit OCR.
   Eager vs lazy load is switchable for the responsiveness comparison.
   (`tflite_flutter` stays as the future quantized path.)
-- `lib/slm_runtime.dart` — T5 **summariser** on ONNX (`OnnxSummarizer`, same
-  Falconsai checkpoint as the backend) + `t5_tokenizer.dart` (SentencePiece
-  port); `llama_cpp_dart` path documented as future-only. It compresses text
-  and never emits structure (the interface has no JSON entry point). Decision
-  in `docs/APP_SPIKE.md`.
+- `lib/slm_runtime.dart` — Qwen3-0.6B (Q4_0 GGUF) via `llama_cpp_dart`: the
+  on-device summariser/explainer behind every capture summary and AI insight.
+  It compresses/explains text and never emits structure (the interface has no
+  JSON entry point). Fetched with `tool/download_qwen3_gguf.ps1`; active-model
+  notes in `docs/APP_SPIKE.md`.
+- `lib/patient_summary.dart` + `lib/screens/patient_summary_screen.dart` — the
+  doctor hand-off: every stored prescription/lab report reduced to deterministic
+  facts plus one on-device model pass (map -> reduce). Reached from Home.
 - `lib/lab/` — the on-device lab pipeline: `ocr_model.dart` (ML Kit geometry),
   `structure.dart` (geometry -> backend-compatible Stage 1), `rule_engine.dart`
   (ported deterministic Stage 2, parity-tested against the Python reference),
@@ -280,11 +283,10 @@ Google sign-in is the normal path.
 
 No `google-services.json` is required — that is Firebase, not `google_sign_in`.
 
-Model files (all tracked under `assets/models/`): the pneumonia ONNX
-(regenerated via `backend/scripts/export_pneumonia_onnx.py`) and the
-quantized T5 summariser (`t5_encoder_q8.onnx` + `t5_decoder_q8.onnx` +
-`t5_tokenizer.json`, via `backend/scripts/export_t5_summarizer_onnx.py` —
-same Falconsai checkpoint the backend uses).
+Model files: the pneumonia ONNX under `assets/models/` is tracked (regenerated
+via `backend/scripts/export_pneumonia_onnx.py`). The SLM GGUF
+(`assets/models/Qwen3-0.6B-Q4_0.gguf`, ~364 MB) is **not** committed — fetch it
+with `mobile/tool/download_qwen3_gguf.ps1`.
 
 ## Open questions (need sign-off, see docs/APP_SPIKE.md)
 
