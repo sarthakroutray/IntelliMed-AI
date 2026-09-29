@@ -1,9 +1,10 @@
 # Downloads the Qwen3-0.6B Q4_0 GGUF used by the on-device SLM into
 # mobile/assets/models/Qwen3-0.6B-Q4_0.gguf.
 #
-# The file is ~364 MB and is NOT committed to git (see .gitignore). Without it
-# the Insights tab reports a clear "asset missing" error instead of failing
-# silently.
+# The file is ~364 MB and is tracked via Git LFS, so it normally arrives with
+# `git lfs pull`. This script is the fallback when it is missing locally.
+# Without it the Insights tab reports a clear "asset missing" error instead of
+# failing silently.
 #
 # Q4_0 is a legacy (non-K) quant: it dequantizes with simpler SIMD than the
 # K-quants, so token decode is faster on a CPU-only phone.

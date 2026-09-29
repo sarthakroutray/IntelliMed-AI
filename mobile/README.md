@@ -285,8 +285,9 @@ No `google-services.json` is required — that is Firebase, not `google_sign_in`
 
 Model files: the pneumonia ONNX under `assets/models/` is tracked (regenerated
 via `backend/scripts/export_pneumonia_onnx.py`). The SLM GGUF
-(`assets/models/Qwen3-0.6B-Q4_0.gguf`, ~364 MB) is **not** committed — fetch it
-with `mobile/tool/download_qwen3_gguf.ps1`.
+(`assets/models/Qwen3-0.6B-Q4_0.gguf`, ~364 MB) is tracked via Git LFS, so it
+arrives with `git lfs pull` — no manual fetch needed. If it is ever missing
+locally, fetch it with `mobile/tool/download_qwen3_gguf.ps1`.
 
 ## Open questions (need sign-off, see docs/APP_SPIKE.md)
 

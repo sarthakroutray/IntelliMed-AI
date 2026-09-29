@@ -10,7 +10,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart' show rootBundle;
+import 'package:flutter/services.dart' show AssetManifest, rootBundle;
 import 'package:llama_cpp_dart/llama_cpp_dart.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -56,6 +56,34 @@ String buildChatMlPrompt(
   return '<|im_start|>system\n$system<|im_end|>\n'
       '<|im_start|>user\n$user<|im_end|>\n'
       '$assistantOpen';
+}
+
+String? resolveSiblingGgufAsset(String basename, Iterable<String> assets) {
+  if (p.extension(basename).toLowerCase() != '.gguf') return null;
+  final assetByLowercase = {
+    for (final asset in assets) asset.toLowerCase(): asset,
+  };
+  if (assetByLowercase.containsKey('assets/models/${basename.toLowerCase()}')) {
+    return null;
+  }
+  final lowerBasename = basename.toLowerCase();
+  final quantStart = lowerBasename.lastIndexOf('-q');
+  if (quantStart <= 0) return null;
+  final stem = lowerBasename.substring(0, quantStart);
+  const preferredQuants = ['-q4_0', '-q3_k_s', '-q4_k_m', '-q8_0'];
+  for (final quant in preferredQuants) {
+    final hit = assetByLowercase['assets/models/$stem$quant.gguf'];
+    if (hit != null) return hit;
+  }
+  final prefix = 'assets/models/$stem-';
+  final siblings = assetByLowercase.entries
+      .where(
+        (entry) =>
+            entry.key.startsWith(prefix) && entry.key.endsWith('.gguf'),
+      )
+      .toList()
+    ..sort((a, b) => a.key.compareTo(b.key));
+  return siblings.isEmpty ? null : siblings.first.value;
 }
 
 /// Strip a `<think>…</think>` reasoning block and echoed ChatML control tokens
@@ -121,6 +149,7 @@ class QwenSlmRuntime implements MedicalSummarizer {
 
   LlamaParent? _llama;
   bool _ready = false;
+  String? _loadedModelPath;
 
   /// How long to wait for a stopped generation's terminal isDone before
   /// reclaiming its slot.
@@ -129,7 +158,7 @@ class QwenSlmRuntime implements MedicalSummarizer {
   /// The quant actually loaded, derived from the file name, so stored results
   /// record the truth instead of a hardcoded string.
   String get _modelLabel =>
-      p.basenameWithoutExtension(modelPath).toLowerCase();
+      p.basenameWithoutExtension(_loadedModelPath ?? modelPath).toLowerCase();
 
   @override
   bool get isReady => _ready;
@@ -138,6 +167,7 @@ class QwenSlmRuntime implements MedicalSummarizer {
   Future<void> load() async {
     if (_ready) return;
     final path = await _resolveModelPath(modelPath);
+    _loadedModelPath = path;
     final llama = LlamaParent(
       LlamaLoad(
         path: path,
@@ -213,12 +243,21 @@ class QwenSlmRuntime implements MedicalSummarizer {
         'bundled asset key (assets/models/…).',
       );
     }
+    // The asset key in code may lag behind the bundled file (e.g. a quant
+    // rename like Q3_K_S -> Q4_0). If the exact key is absent but another GGUF
+    // with the same stem sits next to it, resolve to that sibling with a log
+    // instead of failing the load.
+    final basename = p.basename(path);
+    final sibling = await _findSiblingGguf(basename);
+    final effectiveKey = sibling ?? path;
     final support = await getApplicationSupportDirectory();
-    final target = File(p.join(support.path, 'models', p.basename(path)));
+    final target = File(
+      p.join(support.path, 'models', p.basename(effectiveKey)),
+    );
     if (await target.exists()) return target.path;
     await target.parent.create(recursive: true);
     try {
-      final data = await rootBundle.load(path);
+      final data = await rootBundle.load(effectiveKey);
       // Write to a temp file and rename so an interrupted ~372 MB extraction
       // can never leave a truncated file that a later launch would trust.
       final tmp = File('${target.path}.tmp');
@@ -229,12 +268,29 @@ class QwenSlmRuntime implements MedicalSummarizer {
       await tmp.rename(target.path);
     } on FlutterError catch (e) {
       throw StateError(
-        'Bundled SLM asset "$path" is missing from the build. Place the GGUF '
-        'at mobile/$path (see mobile/tool/download_qwen3_gguf.ps1) and rebuild '
-        '— original error: $e',
+        'Bundled SLM asset "$path" is missing from the build. Run '
+        'mobile/tool/download_qwen3_gguf.ps1 to fetch the GGUF into '
+        'mobile/$path and rebuild — original error: $e',
       );
     }
     return target.path;
+  }
+
+  /// A bundled GGUF whose name shares the `[stem]-<quant>.gguf` prefix with
+  /// [basename] (e.g. `qwen3-0.6b`), so a stale asset key still resolves after
+  /// a quant change.
+  ///
+  /// Probing the asset manifest avoids repeated `rootBundle.load` attempts,
+  /// each of which would read a hundreds-of-MB file if it hit.
+  Future<String?> _findSiblingGguf(String basename) async {
+    final manifest = await AssetManifest.loadFromAssetBundle(rootBundle);
+    final sibling = resolveSiblingGgufAsset(basename, manifest.listAssets());
+    if (sibling != null) {
+      debugPrint(
+        'QwenSlmRuntime: "$basename" absent; using bundled "$sibling"',
+      );
+    }
+    return sibling;
   }
 
   /// Run one prompt and return the thinking-stripped answer.

@@ -217,6 +217,60 @@ void main() {
     });
   });
 
+  group('GGUF asset resolution', () {
+    test('uses the matching sibling quant when the requested key is absent', () {
+      expect(
+        resolveSiblingGgufAsset('Qwen3-0.6B-Q3_K_S.gguf', [
+          'assets/models/Qwen3-0.6B-Q4_0.gguf',
+        ]),
+        'assets/models/Qwen3-0.6B-Q4_0.gguf',
+      );
+    });
+
+    test('keeps an exact bundled asset instead of selecting another quant', () {
+      expect(
+        resolveSiblingGgufAsset('Qwen3-0.6B-Q3_K_S.gguf', [
+          'assets/models/Qwen3-0.6B-Q3_K_S.gguf',
+          'assets/models/Qwen3-0.6B-Q4_0.gguf',
+        ]),
+        isNull,
+      );
+    });
+
+    test('finds a sibling with an unlisted quantization', () {
+      expect(
+        resolveSiblingGgufAsset('Qwen3-0.6B-Q3_K_S.gguf', [
+          'assets/models/Qwen3-0.6B-Q5_K_M.gguf',
+        ]),
+        'assets/models/Qwen3-0.6B-Q5_K_M.gguf',
+      );
+    });
+
+    test('does not match a different model family', () {
+      expect(
+        resolveSiblingGgufAsset('Qwen3-0.6B-Q3_K_S.gguf', [
+          'assets/models/Qwen3-1.7B-Q4_0.gguf',
+        ]),
+        isNull,
+      );
+    });
+
+    test('ignores non-GGUF keys and names without a quant suffix', () {
+      expect(
+        resolveSiblingGgufAsset('Qwen3-0.6B.onnx', [
+          'assets/models/Qwen3-0.6B-Q4_0.gguf',
+        ]),
+        isNull,
+      );
+      expect(
+        resolveSiblingGgufAsset('Qwen3.gguf', [
+          'assets/models/Qwen3-q4_0.gguf',
+        ]),
+        isNull,
+      );
+    });
+  });
+
   group('thinking strip', () {
     test('removes a complete think block', () {
       expect(
