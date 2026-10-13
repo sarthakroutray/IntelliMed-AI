@@ -264,6 +264,7 @@ class AuthService {
     TokenStore? store,
     http.Client? client,
     this.devToken = '',
+    this.exchangeTimeout = const Duration(seconds: 90),
   }) : _provider =
            provider ?? GoogleIdTokenProvider(serverClientId: webClientId),
        _store = store ?? SecureTokenStore(),
@@ -298,7 +299,9 @@ class AuthService {
   /// Deadline for the token exchange. Without it, a backend that accepts the
   /// connection but never answers leaves the sign-in button spinning forever —
   /// the transport-error handlers only catch a connection that fails outright.
-  static const _exchangeTimeout = Duration(seconds: 20);
+  /// Generous by default: a cold-started backend can take a while before the
+  /// first login answers. Override per build with `--dart-define=AUTH_TIMEOUT_SECONDS=`.
+  final Duration exchangeTimeout;
 
   /// Configure the Google plugin. Does not sign anyone in.
   Future<void> initialize() => _provider.initialize();
@@ -389,7 +392,7 @@ class AuthService {
             headers: {'Content-Type': 'application/json'},
             body: jsonEncode({'token': idToken, 'role': appAuthRole}),
           )
-          .timeout(_exchangeTimeout);
+          .timeout(exchangeTimeout);
     } on TimeoutException {
       throw AuthException(
         AuthErrorKind.offline,

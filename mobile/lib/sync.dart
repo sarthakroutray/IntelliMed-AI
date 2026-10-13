@@ -66,6 +66,7 @@ class V2Sync {
     http.Client? client,
     this.token,
     TokenRefresher? onUnauthorized,
+    this.requestTimeout = const Duration(seconds: 60),
   }) : baseUrl = baseUrl,
        _store = store,
        _client = client ?? http.Client(),
@@ -81,7 +82,7 @@ class V2Sync {
 
   /// Deadline for one sync POST. A reachable-but-unresponsive backend must not
   /// stall a retry sweep forever.
-  static const _requestTimeout = Duration(seconds: 30);
+  final Duration requestTimeout;
 
   static final Connectivity _connectivity = Connectivity();
 
@@ -103,7 +104,7 @@ class V2Sync {
     try {
       return await _client
           .post(uri, headers: _authHeaders(token), body: jsonEncode(payload))
-          .timeout(_requestTimeout);
+          .timeout(requestTimeout);
     } on TimeoutException {
       throw OfflineException(uri);
     } on http.ClientException catch (_) {

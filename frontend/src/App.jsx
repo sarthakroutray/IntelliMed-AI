@@ -11,10 +11,10 @@ const MedicalDocumentViewer = lazy(() => import('./pages/MedicalDocumentViewer.j
 
 // Loading fallback component
 const LoadingFallback = () => (
-  <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-[#0f1419]">
+  <div className="min-h-screen flex items-center justify-center bg-canvas">
     <div className="flex flex-col items-center gap-4">
-      <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-      <p className="text-gray-600 dark:text-gray-400 text-sm">Loading...</p>
+      <div className="w-12 h-12 border-4 border-primary/25 border-t-primary rounded-full animate-spin"></div>
+      <p className="text-muted text-sm">Loading...</p>
     </div>
   </div>
 );

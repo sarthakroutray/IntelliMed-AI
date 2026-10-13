@@ -3,6 +3,8 @@ import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import api, { analyzeDocument } from '../services/api';
 import Icon from '../components/Icon';
+import { Alert, Toast, Spinner, EmptyState } from '../components/ui.jsx';
+import { ui } from '../styles/ui.js';
 
 const AIAnalysis = () => {
   const { user } = useAuth();
@@ -11,6 +13,7 @@ const AIAnalysis = () => {
   const [selectedDoc, setSelectedDoc] = useState(null);
   const [loading, setLoading] = useState(true);
   const [analyzing, setAnalyzing] = useState(null);
+  const [toast, setToast] = useState(null);
 
   useEffect(() => {
     const fetchDocumentsWithAI = async () => {
@@ -94,7 +97,7 @@ const AIAnalysis = () => {
       );
     } catch (err) {
       console.error('AI analysis failed', err);
-      alert(err.response?.data?.detail || 'AI analysis failed. Please try again.');
+      setToast({ type: 'error', message: err.response?.data?.detail || 'AI analysis failed. Please try again.' });
     } finally {
       setAnalyzing(null);
     }
@@ -179,33 +182,33 @@ const AIAnalysis = () => {
       <div className="max-w-[1400px] mx-auto flex flex-col gap-8">
         {/* Header */}
         <div>
-          <h1 className="text-3xl font-black text-gray-900 dark:text-white mb-2">
+          <h1 className={ui.pageTitle}>
             AI Analysis Dashboard
           </h1>
-          <p className="text-gray-500 dark:text-gray-400">
+          <p className={`${ui.pageSubtitle} mt-2`}>
             Review AI-powered insights and recommendations from medical documents.
           </p>
         </div>
 
         {loading ? (
           <div className="flex items-center justify-center py-20">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+            <Spinner className="size-12" />
           </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Left Panel - Document List */}
             <div className="lg:col-span-1 space-y-4">
               {/* Stats Card */}
-              <div className="bg-gradient-to-br from-primary to-blue-600 rounded-xl p-6 text-white">
+              <div className="bg-gradient-to-br from-primary to-primary-strong rounded-2xl p-6 text-white shadow-card">
                 <div className="flex items-center gap-3 mb-4">
                   <Icon name="auto_awesome" className="text-3xl" />
                   <div>
                     <p className="text-sm opacity-90">AI Analysis</p>
-                    <p className="text-2xl font-black">{analyzedDocs.length}/{documents.length}</p>
+                    <p className="text-2xl font-extrabold">{analyzedDocs.length}/{documents.length}</p>
                   </div>
                 </div>
                 <div className="w-full bg-white/20 rounded-full h-2">
-                  <div 
+                  <div
                     className="bg-white rounded-full h-2 transition-all duration-500"
                     style={{ width: `${documents.length > 0 ? (analyzedDocs.length / documents.length) * 100 : 0}%` }}
                   ></div>
@@ -213,27 +216,27 @@ const AIAnalysis = () => {
               </div>
 
               {/* Analyzed Documents */}
-              <div className="bg-white dark:bg-[#1a202c] rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
-                <div className="p-4 border-b border-gray-200 dark:border-gray-800">
-                  <h3 className="font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                    <Icon name="check_circle" className="text-green-600 dark:text-green-400 text-[20px]" />
+              <div className={`${ui.card} overflow-hidden`}>
+                <div className="p-4 border-b border-line">
+                  <h3 className="font-bold text-ink flex items-center gap-2">
+                    <Icon name="check_circle" className="text-success text-[20px]" />
                     Analyzed ({analyzedDocs.length})
                   </h3>
                 </div>
-                <div className="max-h-[400px] overflow-y-auto divide-y divide-gray-200 dark:divide-gray-800">
+                <div className="max-h-[400px] overflow-y-auto divide-y divide-line">
                   {analyzedDocs.map((doc) => (
                     <div key={doc.id} className="relative group">
                       <button type="button"
                         onClick={() => setSelectedDoc(doc)}
-                        className={`w-full p-4 text-left hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors ${
-                          selectedDoc?.id === doc.id ? 'bg-primary/10 dark:bg-primary/20' : ''
+                        className={`w-full p-4 text-left hover:bg-surface-2 transition-colors ${
+                          selectedDoc?.id === doc.id ? 'bg-primary/10' : ''
                         }`}
                       >
-                        <p className="text-sm font-bold text-gray-900 dark:text-white truncate pr-8">{doc.filename}</p>
+                        <p className="text-sm font-bold text-ink truncate pr-8">{doc.filename}</p>
                         {user.role === 'doctor' && (
-                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Patient: {doc.patientName}</p>
+                          <p className="text-xs text-muted mt-1">Patient: {doc.patientName}</p>
                         )}
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        <p className="text-xs text-muted mt-1">
                           {new Date(doc.upload_timestamp).toLocaleDateString()}
                         </p>
                       </button>
@@ -248,7 +251,7 @@ const AIAnalysis = () => {
                     </div>
                   ))}
                   {analyzedDocs.length === 0 && (
-                    <div className="p-8 text-center text-gray-500 dark:text-gray-400 text-sm">
+                    <div className="p-8 text-center text-muted text-sm">
                       No analyzed documents yet
                     </div>
                   )}
@@ -257,28 +260,28 @@ const AIAnalysis = () => {
 
               {/* Pending Analysis */}
               {pendingDocs.length > 0 && (
-                <div className="bg-white dark:bg-[#1a202c] rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
-                  <div className="p-4 border-b border-gray-200 dark:border-gray-800">
-                    <h3 className="font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                      <Icon name="pending" className="text-orange-600 dark:text-orange-400 text-[20px]" />
+                <div className={`${ui.card} overflow-hidden`}>
+                  <div className="p-4 border-b border-line">
+                    <h3 className="font-bold text-ink flex items-center gap-2">
+                      <Icon name="pending" className="text-warning text-[20px]" />
                       Pending ({pendingDocs.length})
                     </h3>
                   </div>
-                  <div className="max-h-[300px] overflow-y-auto divide-y divide-gray-200 dark:divide-gray-800">
+                  <div className="max-h-[300px] overflow-y-auto divide-y divide-line">
                     {pendingDocs.map((doc) => (
-                      <div key={doc.id} className="p-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
-                        <p className="text-sm font-bold text-gray-900 dark:text-white truncate mb-2">{doc.filename}</p>
+                      <div key={doc.id} className="p-4 hover:bg-surface-2 transition-colors">
+                        <p className="text-sm font-bold text-ink truncate mb-2">{doc.filename}</p>
                         {user.role === 'doctor' && (
-                          <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Patient: {doc.patientName}</p>
+                          <p className="text-xs text-muted mb-2">Patient: {doc.patientName}</p>
                         )}
                         <button type="button"
                           onClick={() => handleAnalyze(doc.id)}
                           disabled={analyzing === doc.id}
-                          className="w-full flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary text-xs font-bold transition-colors disabled:opacity-50"
+                          className={`${ui.btn} ${ui.btnSoftPrimary} ${ui.btnSm} w-full`}
                         >
                           {analyzing === doc.id ? (
                             <>
-                              <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-primary"></div>
+                              <Spinner className="size-3" />
                               <span>Analyzing...</span>
                             </>
                           ) : (
@@ -298,24 +301,24 @@ const AIAnalysis = () => {
             {/* Right Panel - Analysis Details */}
             <div className="lg:col-span-2">
               {selectedDoc ? (
-                <div className="bg-white dark:bg-[#1a202c] rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
+                <div className={`${ui.card} overflow-hidden`}>
                   {/* Document Header */}
-                  <div className="p-6 border-b border-gray-200 dark:border-gray-800 bg-gradient-to-r from-gray-50 to-white dark:from-gray-900 dark:to-[#1a202c]">
+                  <div className="p-6 border-b border-line bg-surface-2/60">
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex-1">
-                        <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">{selectedDoc.filename}</h2>
+                        <h2 className="text-xl font-bold text-ink mb-2">{selectedDoc.filename}</h2>
                         {user.role === 'doctor' && (
-                          <p className="text-sm text-gray-600 dark:text-gray-400">
+                          <p className="text-sm text-body">
                             Patient: <span className="font-medium">{selectedDoc.patientName}</span>
                           </p>
                         )}
-                        <p className="text-sm text-gray-500 dark:text-gray-500 mt-1">
+                        <p className="text-sm text-muted mt-1">
                           Analyzed on {new Date(selectedDoc.upload_timestamp).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
                         </p>
                       </div>
                       <button type="button"
                         onClick={() => navigate(`/document/${selectedDoc.id}`)}
-                        className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary hover:bg-blue-700 text-white text-sm font-bold transition-colors"
+                        className={`${ui.btn} ${ui.btnPrimary}`}
                       >
                         <Icon name="visibility" className="text-[18px]" />
                         <span>View Document</span>
@@ -329,10 +332,7 @@ const AIAnalysis = () => {
                       const analysis = parseAIAnalysis(selectedDoc.ai_analysis);
                       if (!analysis) {
                         return (
-                          <div className="text-center py-12">
-                            <Icon name="error" className="text-gray-300 dark:text-gray-600 text-5xl mx-auto mb-3" />
-                            <p className="text-gray-500 dark:text-gray-400">Unable to parse AI analysis</p>
-                          </div>
+                          <EmptyState icon="error" title="Unable to parse AI analysis" />
                         );
                       }
 
@@ -343,19 +343,19 @@ const AIAnalysis = () => {
                         <>
                           {/* Classification Result - Only show for X-rays */}
                           {isXray && analysis.classification && (
-                            <div className={`p-4 rounded-lg border ${
+                            <div className={`p-4 rounded-xl border ${
                               analysis.classification === 'Normal'
-                                ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
-                                : 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
+                                ? 'bg-success/5 border-success/20'
+                                : 'bg-danger/5 border-danger/20'
                             }`}>
                               <div className="flex items-center gap-3 mb-2">
-                                <Icon name={analysis.classification === 'Normal' ? 'check_circle' : 'warning'} 
-                                  className={`text-2xl ${analysis.classification === 'Normal' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`} />
+                                <Icon name={analysis.classification === 'Normal' ? 'check_circle' : 'warning'}
+                                  className={`text-2xl ${analysis.classification === 'Normal' ? 'text-success' : 'text-danger'}`} />
                                 <div>
-                                  <p className={`text-lg font-black ${analysis.classification === 'Normal' ? 'text-green-900 dark:text-green-300' : 'text-red-900 dark:text-red-300'}`}>
+                                  <p className={`text-lg font-extrabold ${analysis.classification === 'Normal' ? 'text-success' : 'text-danger'}`}>
                                     {analysis.classification}
                                   </p>
-                                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                                  <p className="text-sm text-body">
                                     Confidence: {analysis.confidence ? `${(analysis.confidence * 100).toFixed(1)}%` : 'N/A'}
                                   </p>
                                 </div>
@@ -366,7 +366,7 @@ const AIAnalysis = () => {
                           {/* Probabilities - Only show for X-rays */}
                           {isXray && analysis.probabilities && (
                             <div>
-                              <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+                              <h3 className="text-lg font-bold text-ink mb-3 flex items-center gap-2">
                                 <Icon name="bar_chart" className="text-primary" />
                                 Class Probabilities
                               </h3>
@@ -374,13 +374,13 @@ const AIAnalysis = () => {
                                 {Object.entries(analysis.probabilities).map(([label, prob]) => (
                                   <div key={label}>
                                     <div className="flex justify-between text-sm mb-1">
-                                      <span className="font-medium text-gray-700 dark:text-gray-300">{label}</span>
-                                      <span className="text-gray-500 dark:text-gray-400">{(prob * 100).toFixed(1)}%</span>
+                                      <span className="font-medium text-body">{label}</span>
+                                      <span className="text-muted">{(prob * 100).toFixed(1)}%</span>
                                     </div>
-                                    <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5">
+                                    <div className="w-full bg-surface-2 rounded-full h-2.5">
                                       <div
                                         className={`h-2.5 rounded-full transition-all duration-500 ${
-                                          label === 'Normal' ? 'bg-green-500' : 'bg-red-500'
+                                          label === 'Normal' ? 'bg-success' : 'bg-danger'
                                         }`}
                                         style={{ width: `${Math.max(prob * 100, 1)}%` }}
                                       ></div>
@@ -394,11 +394,11 @@ const AIAnalysis = () => {
                           {/* Summary - Only show if meaningful */}
                           {analysis.summary && !analysis.summary.includes('Analysis completed') && (
                             <div>
-                              <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+                              <h3 className="text-lg font-bold text-ink mb-3 flex items-center gap-2">
                                 <Icon name="summarize" className="text-primary" />
                                 Summary
                               </h3>
-                              <p className="text-gray-700 dark:text-gray-300 leading-relaxed p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
+                              <p className="text-body leading-relaxed p-4 bg-surface-2 rounded-xl">
                                 {analysis.summary}
                               </p>
                             </div>
@@ -407,12 +407,12 @@ const AIAnalysis = () => {
                           {/* Medical Summary (T5-generated) */}
                           {analysis.medical_summary && analysis.medical_summary.length > 10 && (
                             <div>
-                              <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
-                                <Icon name="clinical_notes" className="text-emerald-600 dark:text-emerald-400" />
+                              <h3 className="text-lg font-bold text-ink mb-3 flex items-center gap-2">
+                                <Icon name="clinical_notes" className="text-success" />
                                 Medical Summary
-                                <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 ml-auto">AI Generated</span>
+                                <span className={`${ui.badge} ${ui.badgeSuccess} ml-auto`}>AI Generated</span>
                               </h3>
-                              <p className="text-gray-700 dark:text-gray-300 leading-relaxed p-4 bg-emerald-50 dark:bg-emerald-900/10 rounded-lg border border-emerald-200 dark:border-emerald-800">
+                              <p className="text-body leading-relaxed p-4 bg-success/5 rounded-xl border border-success/20">
                                 {analysis.medical_summary}
                               </p>
                             </div>
@@ -421,15 +421,15 @@ const AIAnalysis = () => {
                           {/* Key Findings */}
                           {analysis.key_findings && analysis.key_findings.length > 0 && (
                             <div>
-                              <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
-                                <Icon name="fact_check" className="text-amber-600 dark:text-amber-400" />
+                              <h3 className="text-lg font-bold text-ink mb-3 flex items-center gap-2">
+                                <Icon name="fact_check" className="text-warning" />
                                 Key Findings
                               </h3>
                               <div className="space-y-2">
                                 {analysis.key_findings.map((finding, index) => (
-                                  <div key={index} className="flex items-start gap-3 p-3 bg-amber-50 dark:bg-amber-900/10 rounded-lg border border-amber-200 dark:border-amber-800">
-                                    <Icon name="arrow_right" className="text-amber-600 dark:text-amber-400 text-[18px] mt-0.5 flex-shrink-0" />
-                                    <p className="text-sm text-gray-700 dark:text-gray-300">{finding}</p>
+                                  <div key={index} className="flex items-start gap-3 p-3 bg-warning/5 rounded-xl border border-warning/20">
+                                    <Icon name="arrow_right" className="text-warning text-[18px] mt-0.5 flex-shrink-0" />
+                                    <p className="text-sm text-body">{finding}</p>
                                   </div>
                                 ))}
                               </div>
@@ -439,20 +439,20 @@ const AIAnalysis = () => {
                           {/* Entities - Only for prescriptions */}
                           {isPrescription && analysis.entities && analysis.entities.length > 0 && (
                             <div>
-                              <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+                              <h3 className="text-lg font-bold text-ink mb-3 flex items-center gap-2">
                                 <Icon name="label" className="text-primary" />
                                 Key Entities Detected
                               </h3>
                               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 {analysis.entities.map((entity, index) => (
-                                  <div key={index} className="p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-700">
-                                    <p className="text-sm font-bold text-gray-900 dark:text-white">{entity.text}</p>
+                                  <div key={index} className="p-4 bg-surface-2 rounded-xl border border-line">
+                                    <p className="text-sm font-bold text-ink">{entity.text}</p>
                                     <div className="flex items-center justify-between mt-2">
-                                      <span className="text-xs px-2 py-1 rounded-full bg-primary/10 text-primary font-medium">
+                                      <span className={`${ui.badge} ${ui.badgeInfo}`}>
                                         {entity.label}
                                       </span>
                                       {entity.confidence && (
-                                        <span className="text-xs text-gray-500 dark:text-gray-400">
+                                        <span className="text-xs text-muted">
                                           {Math.round(entity.confidence * 100)}% confidence
                                         </span>
                                       )}
@@ -466,15 +466,15 @@ const AIAnalysis = () => {
                           {/* Recommendations */}
                           {analysis.recommendations && analysis.recommendations.length > 0 && (
                             <div>
-                              <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+                              <h3 className="text-lg font-bold text-ink mb-3 flex items-center gap-2">
                                 <Icon name="lightbulb" className="text-primary" />
                                 AI Recommendations
                               </h3>
                               <div className="space-y-2">
                                 {analysis.recommendations.map((rec, index) => (
-                                  <div key={index} className="flex items-start gap-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
-                                    <Icon name="check" className="text-blue-600 dark:text-blue-400 text-[18px] mt-0.5" />
-                                    <p className="text-sm text-gray-700 dark:text-gray-300">{rec}</p>
+                                  <div key={index} className="flex items-start gap-3 p-3 bg-info/5 rounded-xl border border-info/20">
+                                    <Icon name="check" className="text-info text-[18px] mt-0.5" />
+                                    <p className="text-sm text-body">{rec}</p>
                                   </div>
                                 ))}
                               </div>
@@ -484,42 +484,42 @@ const AIAnalysis = () => {
                           {/* Prescription Details - Only show for prescriptions */}
                           {isPrescription && analysis.prescriptions && analysis.prescriptions.length > 0 && (
                             <div>
-                              <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+                              <h3 className="text-lg font-bold text-ink mb-3 flex items-center gap-2">
                                 <Icon name="medication" className="text-primary" />
                                 Prescription Details
                               </h3>
                               <div className="space-y-3">
                                 {analysis.prescriptions.map((rx, index) => (
-                                  <div key={index} className="p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-200 dark:border-purple-800">
+                                  <div key={index} className="p-4 bg-primary/5 rounded-xl border border-primary/20">
                                     <div className="flex items-center gap-2 mb-2">
-                                      <Icon name="pill" className="text-purple-600 dark:text-purple-400 text-[18px]" />
-                                      <p className="text-base font-bold text-purple-900 dark:text-purple-300 capitalize">
+                                      <Icon name="pill" className="text-primary text-[18px]" />
+                                      <p className="text-base font-bold text-primary capitalize">
                                         {rx.medication}
                                       </p>
                                     </div>
                                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-2">
                                       {rx.dosage && (
-                                        <div className="bg-white dark:bg-gray-800 rounded-md px-3 py-1.5 border border-purple-100 dark:border-purple-800">
-                                          <p className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Dosage</p>
-                                          <p className="text-sm font-bold text-gray-900 dark:text-white">{rx.dosage}</p>
+                                        <div className="bg-surface rounded-lg px-3 py-1.5 border border-line">
+                                          <p className="text-[10px] font-bold text-muted uppercase tracking-wider">Dosage</p>
+                                          <p className="text-sm font-bold text-ink">{rx.dosage}</p>
                                         </div>
                                       )}
                                       {rx.frequency && (
-                                        <div className="bg-white dark:bg-gray-800 rounded-md px-3 py-1.5 border border-purple-100 dark:border-purple-800">
-                                          <p className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Frequency</p>
-                                          <p className="text-sm font-bold text-gray-900 dark:text-white capitalize">{rx.frequency}</p>
+                                        <div className="bg-surface rounded-lg px-3 py-1.5 border border-line">
+                                          <p className="text-[10px] font-bold text-muted uppercase tracking-wider">Frequency</p>
+                                          <p className="text-sm font-bold text-ink capitalize">{rx.frequency}</p>
                                         </div>
                                       )}
                                       {rx.route && (
-                                        <div className="bg-white dark:bg-gray-800 rounded-md px-3 py-1.5 border border-purple-100 dark:border-purple-800">
-                                          <p className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Route</p>
-                                          <p className="text-sm font-bold text-gray-900 dark:text-white capitalize">{rx.route}</p>
+                                        <div className="bg-surface rounded-lg px-3 py-1.5 border border-line">
+                                          <p className="text-[10px] font-bold text-muted uppercase tracking-wider">Route</p>
+                                          <p className="text-sm font-bold text-ink capitalize">{rx.route}</p>
                                         </div>
                                       )}
                                       {rx.duration && (
-                                        <div className="bg-white dark:bg-gray-800 rounded-md px-3 py-1.5 border border-purple-100 dark:border-purple-800">
-                                          <p className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Duration</p>
-                                          <p className="text-sm font-bold text-gray-900 dark:text-white capitalize">{rx.duration}</p>
+                                        <div className="bg-surface rounded-lg px-3 py-1.5 border border-line">
+                                          <p className="text-[10px] font-bold text-muted uppercase tracking-wider">Duration</p>
+                                          <p className="text-sm font-bold text-ink capitalize">{rx.duration}</p>
                                         </div>
                                       )}
                                     </div>
@@ -532,13 +532,13 @@ const AIAnalysis = () => {
                           {/* Medications List (if prescription but no structured prescriptions) - Only show for prescriptions */}
                           {isPrescription && analysis.medications && analysis.medications.length > 0 && (!analysis.prescriptions || analysis.prescriptions.length === 0) && (
                             <div>
-                              <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+                              <h3 className="text-lg font-bold text-ink mb-3 flex items-center gap-2">
                                 <Icon name="medication" className="text-primary" />
                                 Medications Detected
                               </h3>
                               <div className="flex flex-wrap gap-2">
                                 {analysis.medications.map((med, index) => (
-                                  <span key={index} className="px-3 py-1.5 bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300 rounded-full text-sm font-bold capitalize">
+                                  <span key={index} className="px-3 py-1.5 bg-primary/10 text-primary rounded-full text-sm font-bold capitalize">
                                     {med}
                                   </span>
                                 ))}
@@ -549,12 +549,12 @@ const AIAnalysis = () => {
                           {/* OCR Extracted Text - Only show for prescriptions */}
                           {isPrescription && analysis.ocr_text && (
                             <div>
-                              <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+                              <h3 className="text-lg font-bold text-ink mb-3 flex items-center gap-2">
                                 <Icon name="text_fields" className="text-primary" />
                                 OCR Extracted Text
                               </h3>
                               <div className="relative">
-                                <pre className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-700 whitespace-pre-wrap font-mono max-h-[300px] overflow-y-auto">
+                                <pre className="text-sm text-body leading-relaxed p-4 bg-surface-2 rounded-xl border border-line whitespace-pre-wrap font-mono max-h-[300px] overflow-y-auto">
                                   {analysis.ocr_text}
                                 </pre>
                               </div>
@@ -566,12 +566,12 @@ const AIAnalysis = () => {
                   </div>
                 </div>
               ) : (
-                <div className="bg-white dark:bg-[#1a202c] rounded-xl border border-gray-200 dark:border-gray-800 p-12 text-center">
-                  <Icon name="analytics" className="text-gray-300 dark:text-gray-600 text-6xl mx-auto mb-4" />
-                  <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Select a document</h3>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">
-                    Choose a document from the list to view its AI analysis
-                  </p>
+                <div className={`${ui.card} p-12 text-center`}>
+                  <EmptyState
+                    icon="analytics"
+                    title="Select a document"
+                    hint="Choose a document from the list to view its AI analysis"
+                  />
                 </div>
               )}
             </div>
@@ -579,19 +579,20 @@ const AIAnalysis = () => {
         )}
 
         {/* Info Banner */}
-        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-4">
-          <div className="flex items-start gap-3">
-            <Icon name="info" className="text-blue-600 dark:text-blue-400 text-[24px]" />
-            <div className="flex-1">
-              <p className="text-sm font-bold text-blue-900 dark:text-blue-300 mb-1">AI Analysis Note</p>
-              <p className="text-sm text-blue-700 dark:text-blue-400">
-                AI analysis is provided for informational purposes only and should not replace professional medical judgment. 
-                Always consult with a qualified healthcare provider for medical decisions.
-              </p>
-            </div>
-          </div>
-        </div>
+        <Alert type="info">
+          <p className="font-bold mb-1">AI Analysis Note</p>
+          <p>
+            AI analysis is provided for informational purposes only and should not replace professional medical judgment. 
+            Always consult with a qualified healthcare provider for medical decisions.
+          </p>
+        </Alert>
       </div>
+
+      <Toast
+        message={toast?.message}
+        type={toast?.type}
+        onClose={() => setToast(null)}
+      />
     </div>
   );
 };

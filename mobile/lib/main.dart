@@ -32,6 +32,30 @@ const eagerModelLoad = bool.fromEnvironment(
 /// is only a fallback so a token can still be injected without the OAuth flow.
 const devAuthToken = String.fromEnvironment('AUTH_TOKEN', defaultValue: '');
 
+/// Network deadlines in seconds. Override per build with
+/// `--dart-define=AUTH_TIMEOUT_SECONDS=120` (or in `.env` via
+/// `--dart-define-from-file=.env`).
+///
+/// [authTimeoutSeconds] covers the Google sign-in token exchange, which can
+/// legitimately be slow against a cold-started backend.
+const authTimeoutSeconds = int.fromEnvironment(
+  'AUTH_TIMEOUT_SECONDS',
+  defaultValue: 90,
+);
+
+/// [apiTimeoutSeconds] covers ordinary reads/writes and sync posts.
+const apiTimeoutSeconds = int.fromEnvironment(
+  'API_TIMEOUT_SECONDS',
+  defaultValue: 60,
+);
+
+/// [apiHeavyTimeoutSeconds] covers endpoints that run the OCR/CV/NLP/summary
+/// pipeline inline on the server (upload, analyze).
+const apiHeavyTimeoutSeconds = int.fromEnvironment(
+  'API_HEAVY_TIMEOUT_SECONDS',
+  defaultValue: 600,
+);
+
 /// Web OAuth client ID (NOT the Android one). Passed to Google as
 /// `serverClientId` so the idToken is audienced to the backend's
 /// `GOOGLE_CLIENT_ID`.
@@ -65,6 +89,7 @@ Future<void> main() async {
     webClientId: googleWebClientId,
     devToken: devAuthToken,
     client: httpClient,
+    exchangeTimeout: Duration(seconds: authTimeoutSeconds),
   );
 
   // Independent work, run together so the first frame is not gated on the sum
@@ -85,6 +110,8 @@ Future<void> main() async {
     tokenProvider: () => auth.token,
     onUnauthorized: auth.refresh,
     client: httpClient,
+    timeout: Duration(seconds: apiTimeoutSeconds),
+    heavyTimeout: Duration(seconds: apiHeavyTimeoutSeconds),
   );
   final repository = PatientRepository(apiClient);
 
@@ -94,6 +121,7 @@ Future<void> main() async {
     // One silent re-auth when the JWT lapses; V2Sync adopts the new token.
     onUnauthorized: auth.refresh,
     client: httpClient,
+    requestTimeout: Duration(seconds: apiTimeoutSeconds),
   );
   V2Sync.watchConnectivity(() => sync.retryQueued());
 

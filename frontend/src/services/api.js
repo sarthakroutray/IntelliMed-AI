@@ -7,8 +7,12 @@ const apiBaseUrl = normalizedApiBaseUrl.endsWith('/api/v1')
   ? normalizedApiBaseUrl
   : `${normalizedApiBaseUrl}/api/v1`;
 
+const REQUEST_TIMEOUT_MS = parseInt(import.meta.env.VITE_REQUEST_TIMEOUT_MS || '120000', 10);
+const HEAVY_TIMEOUT_MS = parseInt(import.meta.env.VITE_HEAVY_TIMEOUT_MS || '900000', 10);
+
 const api = axios.create({
   baseURL: apiBaseUrl,
+  timeout: REQUEST_TIMEOUT_MS,
 });
 
 api.interceptors.request.use(
@@ -39,13 +43,15 @@ export const register = (email, password, role, doctorAccessCode) => {
   return api.post('/auth/register', { email, password, role, doctor_access_code: doctorAccessCode });
 };
 
-export const uploadDocument = (file) => {
+export const uploadDocument = (file, onUploadProgress) => {
   const formData = new FormData();
   formData.append('file', file);
   return api.post('/patient/upload/', formData, {
     headers: {
       'Content-Type': 'multipart/form-data',
     },
+    timeout: HEAVY_TIMEOUT_MS,
+    onUploadProgress,
   }).then(result => {
     // Invalidate documents cache after upload
     invalidateCache.documents();
@@ -117,7 +123,9 @@ export const archiveDocument = (documentId) => {
 };
 
 export const analyzeDocument = (documentId) => {
-  return api.post(`/documents/${documentId}/analyze`).then(result => {
+  return api.post(`/documents/${documentId}/analyze`, null, {
+    timeout: HEAVY_TIMEOUT_MS,
+  }).then(result => {
     // Invalidate document cache after analysis
     invalidateCache.document(documentId);
     return result;

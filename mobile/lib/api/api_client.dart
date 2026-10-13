@@ -75,8 +75,8 @@ class ApiClient {
     this.tokenProvider,
     this.onUnauthorized,
     http.Client? client,
-    this.timeout = const Duration(seconds: 30),
-    this.heavyTimeout = const Duration(seconds: 240),
+    this.timeout = const Duration(seconds: 60),
+    this.heavyTimeout = const Duration(seconds: 600),
   }) : baseUrl = baseUrl.replaceAll(RegExp(r'/+$'), ''),
        _client = client ?? http.Client();
 

@@ -1,4 +1,5 @@
 from typing import List
+import asyncio
 import os
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi_cache.decorator import cache
@@ -111,7 +112,9 @@ async def get_patient_documents_for_doctor(
         if doc.file_path:
             storage_path = Path(supabase_storage.to_storage_path(doc.file_path))
             filename = storage_path.name
-            file_url = supabase_storage.create_signed_url(str(storage_path))
+            file_url = await asyncio.to_thread(
+                supabase_storage.create_signed_url, str(storage_path)
+            )
 
         result.append(
             DocumentDetail(

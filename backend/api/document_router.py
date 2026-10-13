@@ -28,7 +28,7 @@ router = APIRouter()
 CACHE_TTL = int(os.getenv("CACHE_TTL_SECONDS", "300"))
 
 
-def _safe_file_url(file_path: str | None) -> str:
+async def _safe_file_url(file_path: str | None) -> str:
     """Best-effort signed URL; '' when there is no file or storage is unhappy.
 
     Documents produced on-device carry a synthetic "app-structured/<kind>" path
@@ -39,8 +39,9 @@ def _safe_file_url(file_path: str | None) -> str:
     if not has_stored_file(file_path):
         return ''
     try:
-        return supabase_storage.create_signed_url(
-            supabase_storage.to_storage_path(file_path)
+        return await asyncio.to_thread(
+            supabase_storage.create_signed_url,
+            supabase_storage.to_storage_path(file_path),
         )
     except Exception as e:
         logger.warning("  ⚠ Document signed URL unavailable for %s: %s", file_path, e)
@@ -234,7 +235,7 @@ async def get_document(
     # Build short-lived signed URL and file metadata. On-device results have no
     # object to sign, so this degrades to "no file" instead of failing the read.
     file_name = file_ref_name(document.file_path)
-    file_url = _safe_file_url(document.file_path)
+    file_url = await _safe_file_url(document.file_path)
 
     # Detect real file type from extension
     ext = os.path.splitext(file_name)[1].lower()
@@ -314,7 +315,7 @@ async def analyze_document(
     try:
         # Download from Supabase to a temp file for AI processing
         storage_path = supabase_storage.to_storage_path(file_path)
-        tmp_path = supabase_storage.download_to_temp(storage_path)
+        tmp_path = await asyncio.to_thread(supabase_storage.download_to_temp, storage_path)
 
         # Run OCR and CV in parallel
         ocr_task = asyncio.create_task(services.ocr_service(tmp_path))
@@ -621,5 +622,5 @@ async def download_document(
 
     # Redirect to a short-lived signed URL for private object access
     storage_path = supabase_storage.to_storage_path(file_path)
-    signed_url = supabase_storage.create_signed_url(storage_path)
+    signed_url = await asyncio.to_thread(supabase_storage.create_signed_url, storage_path)
     return RedirectResponse(url=signed_url)

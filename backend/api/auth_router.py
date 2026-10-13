@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from datetime import timedelta
 from pydantic import BaseModel
+import asyncio
 import os
 
 import sys
@@ -37,7 +38,10 @@ async def login_for_access_token(
         return {"access_token": access_token, "token_type": "bearer"}
 
     user = await auth.get_user(db, email=form_data.username)
-    if not user or not auth.verify_password(form_data.password, user.hashed_password):
+    password_ok = user and await asyncio.to_thread(
+        auth.verify_password, form_data.password, user.hashed_password
+    )
+    if not user or not password_ok:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
@@ -52,7 +56,9 @@ async def login_for_access_token(
 
 @router.post("/google-login", response_model=schemas.Token)
 async def google_login(request: GoogleLoginRequest, db: Prisma = Depends(get_db)):
-    user_info = verify_google_token(request.token)
+    # Blocking network + CPU work: run it off the event loop so a slow Google
+    # call cannot stall every other request on the server.
+    user_info = await asyncio.to_thread(verify_google_token, request.token)
     
     email = user_info['email']
     name = user_info.get('name', '')
@@ -67,11 +73,12 @@ async def google_login(request: GoogleLoginRequest, db: Prisma = Depends(get_db)
     user = await auth.get_user(db, email=email)
     if not user:
         # Create new user with the requested role
+        hashed_password = await asyncio.to_thread(auth.get_password_hash, user_info['sub'])
         user = await db.user.create(
             data={
                 'email': email,
                 'name': name,
-                'hashed_password': auth.get_password_hash(user_info['sub']),
+                'hashed_password': hashed_password,
                 'role': request.role
             }
         )
@@ -110,7 +117,7 @@ async def register_user(user: schemas.UserCreate, db: Prisma = Depends(get_db)):
             status_code=400, detail="Email already registered"
         )
     
-    hashed_password = auth.get_password_hash(user.password)
+    hashed_password = await asyncio.to_thread(auth.get_password_hash, user.password)
     
     db_user = await db.user.create(
         data={

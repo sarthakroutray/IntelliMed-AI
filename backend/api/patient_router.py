@@ -102,9 +102,10 @@ async def upload_document(
             tmp.write(file_bytes)
             tmp_path = tmp.name
 
-        # Upload to Supabase Storage
+        # Upload to Supabase Storage (blocking client — keep it off the loop)
         storage_path = f"patients/{current_user.id}/{file.filename}"
-        stored_path = supabase_storage.upload_file(
+        stored_path = await asyncio.to_thread(
+            supabase_storage.upload_file,
             file_bytes=file_bytes,
             destination_path=storage_path,
             content_type=file.content_type,
@@ -253,7 +254,7 @@ async def delete_document(
         if document.file_path:
             try:
                 storage_path = supabase_storage.to_storage_path(document.file_path)
-                supabase_storage.delete_file(storage_path)
+                await asyncio.to_thread(supabase_storage.delete_file, storage_path)
             except Exception as e:
                 logger.warning("Warning: could not delete file from storage: %s", e)
 

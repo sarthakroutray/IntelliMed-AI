@@ -1,27 +1,63 @@
-body {
-  margin: 0;
-  font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  background-color: #fff;
-  color: #111318;
-  transition: background-color 0.3s, color 0.3s;
+/* ---------------------------------------------------------------------------
+   IntelliMed design tokens.
+
+   One palette for every surface in the app. Values are bare RGB channels so
+   Tailwind color utilities keep working with opacity modifiers
+   (e.g. `bg-primary/10`). Dark mode flips the same token names, so components
+   use `bg-surface text-ink` and never repeat `dark:` color variants.
+   --------------------------------------------------------------------------- */
+:root {
+  --color-primary: 37 99 235;
+  --color-primary-strong: 29 78 216;
+  --color-canvas: 248 250 252;
+  --color-surface: 255 255 255;
+  --color-surface-2: 241 245 249;
+  --color-ink: 15 23 42;
+  --color-body: 51 65 85;
+  --color-muted: 100 116 139;
+  --color-subtle: 148 163 184;
+  --color-line: 226 232 240;
+  --color-success: 5 150 105;
+  --color-warning: 217 119 6;
+  --color-danger: 220 38 38;
+  --color-info: 2 132 199;
 }
 
-html.dark body {
-  background-color: #0f172a;
-  color: #e2e8f0;
-}
-
-code {
-  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
-    monospace;
+html.dark {
+  --color-primary: 96 165 250;
+  --color-primary-strong: 147 197 253;
+  --color-canvas: 11 18 32;
+  --color-surface: 17 26 43;
+  --color-surface-2: 26 36 56;
+  --color-ink: 241 245 249;
+  --color-body: 203 213 225;
+  --color-muted: 148 163 184;
+  --color-subtle: 100 116 139;
+  --color-line: 38 51 73;
+  --color-success: 52 211 153;
+  --color-warning: 251 191 36;
+  --color-danger: 248 113 113;
+  --color-info: 56 189 248;
 }
 
 * {
   box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: 'Manrope', ui-sans-serif, system-ui, -apple-system, 'Segoe UI',
+    'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans',
+    'Helvetica Neue', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: rgb(var(--color-canvas));
+  color: rgb(var(--color-body));
+  transition: background-color 0.25s ease, color 0.25s ease;
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New', monospace;
 }
 
 html, body, #root {
@@ -30,16 +66,15 @@ html, body, #root {
   overflow: hidden;
 }
 
-/* Smooth dark mode transition */
-html.dark {
-  color-scheme: dark;
-}
-
 html {
   color-scheme: light;
 }
 
-/* Material Icons styling */
+html.dark {
+  color-scheme: dark;
+}
+
+/* Material Symbols */
 .material-symbols-outlined {
   font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
   user-select: none;
@@ -49,12 +84,43 @@ html {
   font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
 }
 
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Custom scrollbars tuned to the palette */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(var(--color-subtle) / 0.5) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background-color: rgb(var(--color-subtle) / 0.5);
+  border-radius: 9999px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
 /* Mobile-first responsive design */
 @media (max-width: 640px) {
   body {
     font-size: 14px;
   }
-  
+
   html, body, #root {
     overflow: visible;
   }
@@ -66,7 +132,7 @@ html {
     min-height: 44px;
     min-width: 44px;
   }
-  
+
   a {
     min-height: 44px;
     display: inline-flex;

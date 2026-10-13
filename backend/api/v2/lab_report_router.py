@@ -10,6 +10,7 @@ Every read returns the structured context object with source traceability
 (bbox + triggering values).
 """
 
+import asyncio
 import logging
 import os
 import tempfile
@@ -38,7 +39,7 @@ MAX_UPLOAD_SIZE_MB = int(os.getenv('MAX_UPLOAD_SIZE_MB', '10'))
 VALID_SOURCES = ('web', 'app')
 
 
-def _safe_file_url(file_path: str | None) -> str:
+async def _safe_file_url(file_path: str | None) -> str:
     """Best-effort signed URL; '' when there is no file or storage is unhappy.
 
     A storage hiccup must never turn a read into a 500 — the structured result
@@ -47,8 +48,9 @@ def _safe_file_url(file_path: str | None) -> str:
     if not has_stored_file(file_path):
         return ''
     try:
-        return supabase_storage.create_signed_url(
-            supabase_storage.to_storage_path(file_path)
+        return await asyncio.to_thread(
+            supabase_storage.create_signed_url,
+            supabase_storage.to_storage_path(file_path),
         )
     except Exception as e:
         logger.warning('  ⚠ Lab report signed URL unavailable for %s: %s', file_path, e)
@@ -196,7 +198,8 @@ async def upload_lab_report(
             tmp_path = tmp.name
 
         storage_path = f'patients/{current_user.id}/lab-reports/{file.filename}'
-        stored_path = supabase_storage.upload_file(
+        stored_path = await asyncio.to_thread(
+            supabase_storage.upload_file,
             file_bytes=file_bytes,
             destination_path=storage_path,
             content_type=file.content_type,
@@ -251,17 +254,18 @@ async def get_patient_lab_reports_for_doctor(
         )
 
     reports = await db.labreport.find_many(where={'patient_id': patient_id})
+    file_urls = await asyncio.gather(*[_safe_file_url(r.file_path) for r in reports])
     return [
         {
             'id': report.id,
             'patient_id': report.patient_id,
             'source': report.source,
             'filename': file_ref_name(report.file_path),
-            'file_url': _safe_file_url(report.file_path),
+            'file_url': file_url,
             'upload_timestamp': report.upload_timestamp,
             'result': report.result_json,
         }
-        for report in reports
+        for report, file_url in zip(reports, file_urls)
     ]
 
 
@@ -318,7 +322,7 @@ async def get_lab_report(
                 detail="You don't have access to this lab report",
             )
 
-    file_url = _safe_file_url(report.file_path)
+    file_url = await _safe_file_url(report.file_path)
 
     return {
         'id': report.id,
@@ -361,8 +365,9 @@ async def delete_lab_report(
         # Structured app results have no stored object; web uploads do.
         if has_stored_file(report.file_path):
             try:
-                supabase_storage.delete_file(
-                    supabase_storage.to_storage_path(report.file_path)
+                await asyncio.to_thread(
+                    supabase_storage.delete_file,
+                    supabase_storage.to_storage_path(report.file_path),
                 )
             except Exception as e:
                 # An orphaned blob is better than failing the record delete.

@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import os
 from pathlib import Path
@@ -17,6 +18,7 @@ from fastapi_cache.backends.inmemory import InMemoryBackend
 from api import auth_router, patient_router, doctor_router, linking_router, document_router, profile_router, sharing_router
 from api.v2 import lab_report_router
 from prisma_db import db
+import services
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +28,18 @@ if google_client_id:
 else:
     logger.warning("⚠ GOOGLE_CLIENT_ID not found in environment")
 
+AI_WARMUP_ON_STARTUP = os.getenv("AI_WARMUP_ON_STARTUP", "true").strip().lower() in ("1", "true", "yes")
+
+
+async def _warmup_models_in_background():
+    """Pay the AI model load cost up front so the first upload doesn't spend
+    minutes downloading/loading models inside a single request."""
+    try:
+        await asyncio.to_thread(services.warmup_models)
+        logger.info("✓ AI models warmed up")
+    except Exception as e:
+        logger.warning("⚠ AI model warm-up failed (models will load on first request): %s", e)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -33,7 +47,12 @@ async def lifespan(app: FastAPI):
     logger.info("✓ Database connected")
     FastAPICache.init(InMemoryBackend(), prefix="intellimed-cache")
     logger.info("✓ In-memory cache initialised")
+    warmup_task = None
+    if AI_WARMUP_ON_STARTUP:
+        warmup_task = asyncio.create_task(_warmup_models_in_background())
     yield
+    if warmup_task is not None and not warmup_task.done():
+        warmup_task.cancel()
     if db.is_connected():
         await db.disconnect()
         logger.info("✓ Database disconnected")

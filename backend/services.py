@@ -1328,6 +1328,28 @@ def _get_medical_summarizer():
     return _medical_summarizer
 
 
+def warmup_models() -> None:
+    """Eagerly load the heavy models used by the upload/analyze pipeline.
+
+    Each loader is lazy and thread-safe, so this is safe to run concurrently
+    with requests — it just pays the load cost (and any model download) before
+    the first upload instead of inside it, where it blows request deadlines.
+    Individual failures are non-fatal: the corresponding model then loads on
+    first use, exactly as before.
+    """
+    for name, loader in (
+        ('EasyOCR reader', _get_ocr_reader),
+        ('spaCy model', _load_spacy_model),
+        ('pneumonia classifier', _load_pneumonia_model),
+        ('medical summarizer', _get_medical_summarizer),
+    ):
+        try:
+            loader()
+            print(f"✓ Warmed up {name}")
+        except Exception as e:
+            print(f"⚠ Could not warm up {name}: {e}")
+
+
 def _chunk_text(text: str, max_chars: int) -> list:
     """
     Split long text into chunks that fit within the model's context window.

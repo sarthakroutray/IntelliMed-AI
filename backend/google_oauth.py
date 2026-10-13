@@ -14,6 +14,23 @@ load_dotenv(dotenv_path=env_path, override=True)
 
 logger = logging.getLogger(__name__)
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
+GOOGLE_VERIFY_TIMEOUT_S = float(os.getenv("GOOGLE_VERIFY_TIMEOUT_S", "10"))
+
+
+class _BoundedRequest(google_requests.Request):
+    """
+    Transport with a pinned request deadline.
+
+    `id_token.verify_oauth2_token` accepts no timeout of its own — the deadline
+    travels with the transport, and the library default is far longer than any
+    client waits. Every verification fetches Google's signing certs over the
+    network, so without a bound a stalled connection to googleapis.com hangs the
+    login request indefinitely.
+    """
+
+    def __call__(self, *args, **kwargs):
+        kwargs.setdefault("timeout", GOOGLE_VERIFY_TIMEOUT_S)
+        return super().__call__(*args, **kwargs)
 
 
 def verify_google_token(token: str):
@@ -41,7 +58,7 @@ def verify_google_token(token: str):
     
     try:
         logger.info("Verifying Google token signature and claims")
-        request = google_requests.Request()
+        request = _BoundedRequest()
         idinfo = id_token.verify_oauth2_token(token, request, GOOGLE_CLIENT_ID)
 
         issuer = idinfo.get("iss")
