@@ -1,3 +1,4 @@
+import logging
 import os
 from pathlib import Path
 from dotenv import load_dotenv
@@ -17,23 +18,25 @@ from api import auth_router, patient_router, doctor_router, linking_router, docu
 from api.v2 import lab_report_router
 from prisma_db import db
 
+logger = logging.getLogger(__name__)
+
 google_client_id = os.getenv('GOOGLE_CLIENT_ID')
 if google_client_id:
-    print(f"✓ GOOGLE_CLIENT_ID loaded: {google_client_id[:20]}...")
+    logger.info("✓ GOOGLE_CLIENT_ID loaded: %s...", google_client_id[:20])
 else:
-    print("⚠ GOOGLE_CLIENT_ID not found in environment")
+    logger.warning("⚠ GOOGLE_CLIENT_ID not found in environment")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await db.connect()
-    print("✓ Database connected")
+    logger.info("✓ Database connected")
     FastAPICache.init(InMemoryBackend(), prefix="intellimed-cache")
-    print("✓ In-memory cache initialised")
+    logger.info("✓ In-memory cache initialised")
     yield
     if db.is_connected():
         await db.disconnect()
-        print("✓ Database disconnected")
+        logger.info("✓ Database disconnected")
 
 
 app = FastAPI(title="IntelliMed AI", lifespan=lifespan)

@@ -1,3 +1,4 @@
+import logging
 from typing import List
 import os
 import tempfile
@@ -18,6 +19,8 @@ import supabase_storage
 
 from fastapi_cache import FastAPICache
 from fastapi_cache.decorator import cache
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -124,7 +127,7 @@ async def upload_document(
         is_prescription = nlp_result.get('is_prescription', False)
         has_medications = len(nlp_result.get('medications', [])) > 0
         
-        print(f"  Document type detection: is_prescription={is_prescription}, has_medications={has_medications}, medications={nlp_result.get('medications', [])}")
+        logger.info("  Document type detection: is_prescription=%s, has_medications=%s, medications=%s", is_prescription, has_medications, nlp_result.get('medications', []))
         
         # Only consider it an X-ray if NO prescription markers are found
         is_meaningful_xray = (
@@ -147,7 +150,7 @@ async def upload_document(
         else:
             final_type = "document"
         
-        print(f"  Final document type: {final_type}")
+        logger.info("  Final document type: %s", final_type)
 
         aggregated_analysis = {
             "ocr_result": ocr_result,
@@ -171,7 +174,7 @@ async def upload_document(
         except OSError:
             pass
 
-        print(f"✓ Document uploaded successfully: {db_document.id}")
+        logger.info("✓ Document uploaded successfully: %s", db_document.id)
         return DocumentInfo(
             id=db_document.id,
             filename=file.filename,
@@ -179,7 +182,7 @@ async def upload_document(
             ai_analysis=db_document.ai_analysis_json,
         )
     except Exception as e:
-        print(f"✗ Document upload failed: {str(e)}")
+        logger.error("✗ Document upload failed: %s", e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Document upload failed: {str(e)}"
@@ -202,7 +205,7 @@ async def get_own_documents(
         documents = await db.medicaldocument.find_many(
             where={'patient_id': current_user.id}
         )
-        print(f"✓ Found {len(documents)} documents for user {current_user.id}")
+        logger.info("✓ Found %s documents for user %s", len(documents), current_user.id)
         return [
             DocumentInfo(
                 id=doc.id,
@@ -213,7 +216,7 @@ async def get_own_documents(
             for doc in documents
         ]
     except Exception as e:
-        print(f"✗ Failed to fetch documents: {str(e)}")
+        logger.error("✗ Failed to fetch documents: %s", e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to fetch documents: {str(e)}"
@@ -252,13 +255,13 @@ async def delete_document(
                 storage_path = supabase_storage.to_storage_path(document.file_path)
                 supabase_storage.delete_file(storage_path)
             except Exception as e:
-                print(f"Warning: could not delete file from storage: {e}")
+                logger.warning("Warning: could not delete file from storage: %s", e)
 
         await db.medicaldocument.delete(
             where={'id': document_id}
         )
     except Exception as e:
-        print(f"✗ Failed to delete document: {e}")
+        logger.error("✗ Failed to delete document: %s", e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to delete document: {str(e)}",

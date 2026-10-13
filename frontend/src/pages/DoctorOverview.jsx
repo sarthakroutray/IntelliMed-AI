@@ -194,7 +194,7 @@ const DoctorOverview = () => {
             <div className="bg-white dark:bg-[#1a202c] rounded-xl border border-gray-200 dark:border-gray-800 p-6">
               <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-4">Quick Actions</h2>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                <button 
+                <button type="button" 
                   onClick={() => navigate('/dashboard/patients')}
                   className="flex items-center gap-3 p-4 rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-700 hover:border-primary dark:hover:border-primary hover:bg-primary/5 transition-colors text-left"
                 >
@@ -204,7 +204,7 @@ const DoctorOverview = () => {
                     <p className="text-xs text-gray-500 dark:text-gray-400">Manage patient list</p>
                   </div>
                 </button>
-                <button 
+                <button type="button" 
                   onClick={() => navigate('/dashboard/documents')}
                   className="flex items-center gap-3 p-4 rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-700 hover:border-primary dark:hover:border-primary hover:bg-primary/5 transition-colors text-left"
                 >
@@ -214,7 +214,7 @@ const DoctorOverview = () => {
                     <p className="text-xs text-gray-500 dark:text-gray-400">View all records</p>
                   </div>
                 </button>
-                <button 
+                <button type="button" 
                   onClick={() => navigate('/dashboard/ai-analysis')}
                   className="flex items-center gap-3 p-4 rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-700 hover:border-primary dark:hover:border-primary hover:bg-primary/5 transition-colors text-left"
                 >

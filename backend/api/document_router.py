@@ -1,3 +1,4 @@
+import logging
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Request, Body, Query
 from fastapi.responses import RedirectResponse
@@ -20,6 +21,8 @@ import services
 import supabase_storage
 from api.v2.lab_refs import file_ref_name, has_stored_file
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter()
 
 CACHE_TTL = int(os.getenv("CACHE_TTL_SECONDS", "300"))
@@ -40,7 +43,7 @@ def _safe_file_url(file_path: str | None) -> str:
             supabase_storage.to_storage_path(file_path)
         )
     except Exception as e:
-        print(f"  ⚠ Document signed URL unavailable for {file_path}: {e}")
+        logger.warning("  ⚠ Document signed URL unavailable for %s: %s", file_path, e)
         return ''
 
 
@@ -331,7 +334,7 @@ async def analyze_document(
         is_prescription = nlp_result.get('is_prescription', False)
         has_medications = len(nlp_result.get('medications', [])) > 0
         
-        print(f"  Document type detection: is_prescription={is_prescription}, has_medications={has_medications}, medications={nlp_result.get('medications', [])}")
+        logger.info("  Document type detection: is_prescription=%s, has_medications=%s, medications=%s", is_prescription, has_medications, nlp_result.get('medications', []))
         
         # Only consider it an X-ray if NO prescription markers are found
         is_meaningful_xray = (
@@ -354,7 +357,7 @@ async def analyze_document(
         else:
             final_type = "document"
         
-        print(f"  Final document type: {final_type}")
+        logger.info("  Final document type: %s", final_type)
         
         aggregated_analysis = {
             "ocr_result": ocr_result,
@@ -376,7 +379,7 @@ async def analyze_document(
             "analysis": aggregated_analysis
         }
     except Exception as e:
-        print(f"\u2717 AI analysis failed for document {document_id}: {e}")
+        logger.error("\u2717 AI analysis failed for document %s: %s", document_id, e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"AI analysis failed: {str(e)}"

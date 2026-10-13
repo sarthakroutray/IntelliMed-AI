@@ -74,7 +74,7 @@ const PatientDashboardLayout = () => {
           
           {/* Navigation */}
           <div className="flex flex-col gap-1">
-            <button 
+            <button type="button" 
               className={`flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors ${
                 activeTab === 'dashboard'
                   ? 'bg-primary/10 text-primary'
@@ -86,7 +86,7 @@ const PatientDashboardLayout = () => {
               <p className={`text-sm ${activeTab === 'dashboard' ? 'font-bold' : 'font-medium'}`}>Dashboard</p>
             </button>
 
-            <button 
+            <button type="button" 
               className={`flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors ${
                 activeTab === 'profile'
                   ? 'bg-primary/10 text-primary'
@@ -98,7 +98,7 @@ const PatientDashboardLayout = () => {
               <p className={`text-sm ${activeTab === 'profile' ? 'font-bold' : 'font-medium'}`}>Profile</p>
             </button>
 
-            <button 
+            <button type="button" 
               className={`flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors ${
                 activeTab === 'ai-analysis'
                   ? 'bg-primary/10 text-primary'
@@ -110,7 +110,7 @@ const PatientDashboardLayout = () => {
               <p className={`text-sm ${activeTab === 'ai-analysis' ? 'font-bold' : 'font-medium'}`}>AI Analysis</p>
             </button>
 
-            <button 
+            <button type="button" 
               className={`flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors ${
                 activeTab === 'settings'
                   ? 'bg-primary/10 text-primary'
@@ -166,7 +166,7 @@ const PatientDashboardLayout = () => {
               </div>
             )}
             
-            <button 
+            <button type="button" 
               onClick={() => setShowGenerateCodeModal(true)}
               className="flex items-center gap-2 px-3 py-2 text-primary hover:text-primary/80 hover:bg-primary/5 rounded-lg text-sm font-medium transition-colors mt-1"
             >
@@ -177,7 +177,7 @@ const PatientDashboardLayout = () => {
         </div>
         
         <div className="p-6 mt-auto">
-          <button onClick={logout} className="flex w-full items-center justify-center gap-2 rounded-lg h-10 px-4 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-[#111318] dark:text-white text-sm font-bold transition-colors">
+          <button type="button" onClick={logout} className="flex w-full items-center justify-center gap-2 rounded-lg h-10 px-4 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-[#111318] dark:text-white text-sm font-bold transition-colors">
             <Icon name="logout" className="text-[18px]" />
             <span>Logout</span>
           </button>
@@ -194,7 +194,7 @@ const PatientDashboardLayout = () => {
             </div>
             <span className="font-bold text-sm truncate">{user?.email?.split('@')[0]}</span>
           </div>
-          <button 
+          <button type="button" 
             onClick={() => setShowMobileMenu(!showMobileMenu)}
             className="text-gray-500 dark:text-gray-400 p-2"
           >
@@ -205,7 +205,7 @@ const PatientDashboardLayout = () => {
         {/* Mobile Menu */}
         {showMobileMenu && (
           <div className="md:hidden bg-white dark:bg-[#1A202C] border-b border-gray-200 dark:border-gray-700 p-4 space-y-2 sticky top-16 z-10">
-            <button 
+            <button type="button" 
               className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors ${
                 activeTab === 'dashboard'
                   ? 'bg-primary/10 text-primary'
@@ -217,7 +217,7 @@ const PatientDashboardLayout = () => {
               <p className="text-sm font-medium">Dashboard</p>
             </button>
 
-            <button 
+            <button type="button" 
               className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors ${
                 activeTab === 'profile'
                   ? 'bg-primary/10 text-primary'
@@ -229,7 +229,7 @@ const PatientDashboardLayout = () => {
               <p className="text-sm font-medium">Profile</p>
             </button>
 
-            <button 
+            <button type="button" 
               className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors ${
                 activeTab === 'ai-analysis'
                   ? 'bg-primary/10 text-primary'
@@ -241,7 +241,7 @@ const PatientDashboardLayout = () => {
               <p className="text-sm font-medium">AI Analysis</p>
             </button>
 
-            <button 
+            <button type="button" 
               className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors ${
                 activeTab === 'settings'
                   ? 'bg-primary/10 text-primary'
@@ -290,7 +290,7 @@ const PatientDashboardLayout = () => {
               </>
             )}
 
-            <button 
+            <button type="button" 
               onClick={() => {
                 setShowGenerateCodeModal(true);
                 setShowMobileMenu(false);
@@ -301,7 +301,7 @@ const PatientDashboardLayout = () => {
               Connect with Doctor
             </button>
 
-            <button 
+            <button type="button" 
               onClick={logout}
               className="w-full flex items-center gap-2 px-3 py-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg text-sm font-medium transition-colors"
             >
@@ -326,7 +326,7 @@ const PatientDashboardLayout = () => {
           <div className="bg-white dark:bg-[#1a202c] rounded-xl max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-xl font-bold text-[#111318] dark:text-white">Connect with Doctor</h3>
-              <button onClick={() => setShowGenerateCodeModal(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
+              <button type="button" onClick={() => setShowGenerateCodeModal(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
                 <Icon name="close" className="text-[24px]" />
               </button>
             </div>

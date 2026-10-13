@@ -20,7 +20,7 @@ const Navbar = () => {
         IntelliMed AI
       </Link>
       <div className="nav-links flex items-center gap-4">
-        <button
+        <button type="button"
           onClick={toggleDarkMode}
           className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
           title="Toggle dark mode"
@@ -30,7 +30,7 @@ const Navbar = () => {
         {user ? (
           <>
             <Link to="/dashboard">Dashboard</Link>
-            <button onClick={handleLogout} className="btn">Logout</button>
+            <button type="button" onClick={handleLogout} className="btn">Logout</button>
           </>
         ) : (
           <Link to="/login" className="btn">Login</Link>

@@ -10,6 +10,7 @@ Every read returns the structured context object with source traceability
 (bbox + triggering values).
 """
 
+import logging
 import os
 import tempfile
 from pathlib import Path
@@ -28,6 +29,8 @@ from request_cache import doctor_has_patient_access
 import supabase_storage
 
 from lab_pipeline import ocr_stage, run_lab_report_pipeline
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -48,7 +51,7 @@ def _safe_file_url(file_path: str | None) -> str:
             supabase_storage.to_storage_path(file_path)
         )
     except Exception as e:
-        print(f'  ⚠ Lab report signed URL unavailable for {file_path}: {e}')
+        logger.warning('  ⚠ Lab report signed URL unavailable for %s: %s', file_path, e)
         return ''
 
 
@@ -220,7 +223,7 @@ async def upload_lab_report(
     except HTTPException:
         raise
     except Exception as e:
-        print(f'✗ Lab report upload failed: {str(e)}')
+        logger.error('✗ Lab report upload failed: %s', e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f'Lab report processing failed: {str(e)}',
@@ -363,13 +366,13 @@ async def delete_lab_report(
                 )
             except Exception as e:
                 # An orphaned blob is better than failing the record delete.
-                print(f'Warning: could not delete lab report file from storage: {e}')
+                logger.warning('Warning: could not delete lab report file from storage: %s', e)
 
         await db.labreport.delete(where={'id': lab_report_id})
     except HTTPException:
         raise
     except Exception as e:
-        print(f'✗ Failed to delete lab report: {e}')
+        logger.error('✗ Failed to delete lab report: %s', e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f'Failed to delete lab report: {str(e)}',

@@ -108,19 +108,19 @@ const DoctorDashboard = () => {
                 
                 {/* Navigation */}
                 <div className="flex flex-col gap-2 p-4 flex-1 overflow-y-auto">
-                    <button className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[#637588] dark:text-gray-400 hover:bg-[#f0f2f4] dark:hover:bg-gray-800 transition-colors text-left" onClick={() => {/* Future: Navigate to dashboard overview */}}>
+                    <button type="button" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[#637588] dark:text-gray-400 hover:bg-[#f0f2f4] dark:hover:bg-gray-800 transition-colors text-left" onClick={() => {/* Future: Navigate to dashboard overview */}}>
                         <Icon name="dashboard" className="text-xl" />
                         <span className="text-sm font-medium leading-normal">Dashboard</span>
                     </button>
-                    <button className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-primary/10 text-primary dark:text-primary transition-colors text-left" disabled>
+                    <button type="button" className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-primary/10 text-primary dark:text-primary transition-colors text-left" disabled>
                         <Icon name="group" filled className="text-xl" />
                         <span className="text-sm font-bold leading-normal">Patients</span>
                     </button>
-                    <button className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[#637588] dark:text-gray-400 hover:bg-[#f0f2f4] dark:hover:bg-gray-800 transition-colors text-left" onClick={() => {/* Future: Navigate to documents */}}>
+                    <button type="button" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[#637588] dark:text-gray-400 hover:bg-[#f0f2f4] dark:hover:bg-gray-800 transition-colors text-left" onClick={() => {/* Future: Navigate to documents */}}>
                         <Icon name="folder_open" className="text-xl" />
                         <span className="text-sm font-medium leading-normal">Documents</span>
                     </button>
-                    <button className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[#637588] dark:text-gray-400 hover:bg-[#f0f2f4] dark:hover:bg-gray-800 transition-colors text-left" onClick={() => {/* Future: Navigate to AI analysis */}}>
+                    <button type="button" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[#637588] dark:text-gray-400 hover:bg-[#f0f2f4] dark:hover:bg-gray-800 transition-colors text-left" onClick={() => {/* Future: Navigate to AI analysis */}}>
                         <Icon name="auto_awesome" className="text-xl" />
                         <span className="text-sm font-medium leading-normal">AI Analysis</span>
                     </button>
@@ -128,7 +128,7 @@ const DoctorDashboard = () => {
                 
                 {/* Bottom Settings */}
                 <div className="p-4 border-t border-[#f0f2f4] dark:border-gray-800">
-                    <button onClick={logout} className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[#637588] dark:text-gray-400 hover:bg-[#f0f2f4] dark:hover:bg-gray-800 transition-colors w-full">
+                    <button type="button" onClick={logout} className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[#637588] dark:text-gray-400 hover:bg-[#f0f2f4] dark:hover:bg-gray-800 transition-colors w-full">
                         <Icon name="logout" className="text-xl" />
                         <span className="text-sm font-medium leading-normal">Logout</span>
                     </button>
@@ -149,7 +149,7 @@ const DoctorDashboard = () => {
                     {/* Right Side Actions */}
                     <div className="flex items-center gap-6">
                         {/* Notifications */}
-                        <button className="relative flex items-center justify-center size-10 rounded-full hover:bg-[#f0f2f4] dark:hover:bg-gray-700 text-[#637588] dark:text-gray-300 transition-colors">
+                        <button type="button" className="relative flex items-center justify-center size-10 rounded-full hover:bg-[#f0f2f4] dark:hover:bg-gray-700 text-[#637588] dark:text-gray-300 transition-colors">
                             <Icon name="notifications" className="text-[24px]" />
                             <span className="absolute top-2 right-2.5 size-2 rounded-full bg-red-500 ring-2 ring-white dark:ring-[#1a202c]"></span>
                         </button>
@@ -180,7 +180,7 @@ const DoctorDashboard = () => {
                                 <p className="text-[#637588] dark:text-gray-400 text-sm">Manage your patient records and documents.</p>
                             </div>
                             <div className="flex gap-3">
-                                <button 
+                                <button type="button" 
                                     onClick={() => setShowLinkModal(true)}
                                     className="flex items-center gap-2 h-10 px-4 rounded-lg bg-primary hover:bg-blue-700 text-white font-bold text-sm shadow-sm transition-colors"
                                 >
@@ -202,7 +202,7 @@ const DoctorDashboard = () => {
                                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                                     <Icon name="search" className="text-[#637588] text-[20px]" />
                                 </div>
-                                <input 
+                                <input aria-label="Input" 
                                     className="block w-full pl-10 pr-3 py-2.5 rounded-lg border-none bg-white dark:bg-[#1a202c] text-[#111318] dark:text-white placeholder-[#637588] focus:ring-2 focus:ring-primary shadow-sm text-sm"
                                     placeholder="Search by name, ID or email..."
                                     type="text"
@@ -211,11 +211,11 @@ const DoctorDashboard = () => {
                                 />
                             </div>
                             <div className="flex items-center gap-2">
-                                <button className="flex items-center gap-2 h-[42px] px-3 bg-white dark:bg-[#1a202c] rounded-lg text-[#637588] dark:text-gray-300 font-medium text-sm shadow-sm hover:text-primary transition-colors">
+                                <button type="button" className="flex items-center gap-2 h-[42px] px-3 bg-white dark:bg-[#1a202c] rounded-lg text-[#637588] dark:text-gray-300 font-medium text-sm shadow-sm hover:text-primary transition-colors">
                                     <Icon name="filter_list" className="text-[20px]" />
                                     Filter
                                 </button>
-                                <button className="flex items-center gap-2 h-[42px] px-3 bg-white dark:bg-[#1a202c] rounded-lg text-[#637588] dark:text-gray-300 font-medium text-sm shadow-sm hover:text-primary transition-colors">
+                                <button type="button" className="flex items-center gap-2 h-[42px] px-3 bg-white dark:bg-[#1a202c] rounded-lg text-[#637588] dark:text-gray-300 font-medium text-sm shadow-sm hover:text-primary transition-colors">
                                     <Icon name="sort" className="text-[20px]" />
                                     Sort
                                 </button>
@@ -273,7 +273,7 @@ const DoctorDashboard = () => {
                                                             </div>
                                                         </td>
                                                         <td className="py-3 px-4 align-middle text-right">
-                                                            <button className="size-8 rounded hover:bg-white dark:hover:bg-gray-600 text-[#637588] dark:text-gray-400 transition-colors">
+                                                            <button type="button" className="size-8 rounded hover:bg-white dark:hover:bg-gray-600 text-[#637588] dark:text-gray-400 transition-colors">
                                                                 <Icon name="more_vert" className="text-[20px]" />
                                                             </button>
                                                         </td>
@@ -299,7 +299,7 @@ const DoctorDashboard = () => {
                                                 Showing {(currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, filteredPatients.length)} of {filteredPatients.length} entries
                                             </span>
                                             <div className="flex items-center gap-2">
-                                                <button 
+                                                <button type="button" 
                                                     onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                                                     disabled={currentPage === 1}
                                                     className="size-8 flex items-center justify-center rounded-lg border border-[#e5e7eb] dark:border-gray-700 text-[#637588] dark:text-gray-400 hover:bg-[#f0f2f4] dark:hover:bg-gray-800 transition-colors disabled:opacity-50"
@@ -307,7 +307,7 @@ const DoctorDashboard = () => {
                                                     <Icon name="chevron_left" className="text-[18px]" />
                                                 </button>
                                                 {[...Array(Math.min(totalPages, 3))].map((_, i) => (
-                                                    <button 
+                                                    <button type="button" 
                                                         key={i + 1}
                                                         onClick={() => setCurrentPage(i + 1)}
                                                         className={`size-8 flex items-center justify-center rounded-lg font-bold text-sm transition-colors ${
@@ -320,7 +320,7 @@ const DoctorDashboard = () => {
                                                     </button>
                                                 ))}
                                                 {totalPages > 3 && <span className="text-[#637588] dark:text-gray-400">...</span>}
-                                                <button 
+                                                <button type="button" 
                                                     onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                                                     disabled={currentPage === totalPages}
                                                     className="size-8 flex items-center justify-center rounded-lg border border-[#e5e7eb] dark:border-gray-700 text-[#637588] dark:text-gray-400 hover:bg-[#f0f2f4] dark:hover:bg-gray-800 transition-colors disabled:opacity-50"
@@ -355,7 +355,7 @@ const DoctorDashboard = () => {
                                 <h3 className="text-xl font-bold text-[#111318] dark:text-white">{selectedPatient.email?.split('@')[0]}'s Documents</h3>
                                 <p className="text-sm text-[#637588] dark:text-gray-400 mt-1">{selectedPatient.email}</p>
                             </div>
-                            <button onClick={() => setSelectedPatient(null)} className="text-gray-400 hover:text-gray-600">
+                            <button type="button" onClick={() => setSelectedPatient(null)} className="text-gray-400 hover:text-gray-600">
                                 <Icon name="close" className="text-[24px]" />
                             </button>
                         </div>
@@ -386,7 +386,7 @@ const DoctorDashboard = () => {
                                                         )}
                                                     </div>
                                                 </div>
-                                                <button 
+                                                <button type="button" 
                                                     onClick={() => navigate(`/document/${doc.id}`)}
                                                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary text-xs font-bold transition-colors"
                                                 >

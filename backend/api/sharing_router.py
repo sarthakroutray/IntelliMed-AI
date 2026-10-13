@@ -1,3 +1,4 @@
+import logging
 from typing import List
 import os
 from fastapi import APIRouter, Depends, HTTPException, status, Request
@@ -11,6 +12,8 @@ from auth import get_current_user
 from prisma_db import get_db
 from schemas import User
 from prisma_client import Prisma
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 CACHE_TTL = int(os.getenv("CACHE_TTL_SECONDS", "300"))
@@ -99,10 +102,10 @@ async def share_document(
         )
         await _invalidate_shared_doctors_cache(document_id, current_user.id)
         
-        print(f"✓ Document {document_id} shared with doctor {doctor_id}")
+        logger.info("✓ Document %s shared with doctor %s", document_id, doctor_id)
         return {"message": "Document shared successfully"}
     except Exception as e:
-        print(f"✗ Failed to share document: {str(e)}")
+        logger.error("✗ Failed to share document: %s", e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to share document: {str(e)}"
@@ -148,10 +151,10 @@ async def unshare_document(
         )
         await _invalidate_shared_doctors_cache(document_id, current_user.id)
         
-        print(f"✓ Document {document_id} unshared with doctor {doctor_id}")
+        logger.info("✓ Document %s unshared with doctor %s", document_id, doctor_id)
         return {"message": "Document access revoked successfully"}
     except Exception as e:
-        print(f"✗ Failed to unshare document: {str(e)}")
+        logger.error("✗ Failed to unshare document: %s", e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to unshare document: {str(e)}"
@@ -194,7 +197,7 @@ async def get_shared_doctors(
         
         return [{'doctor_id': share.doctor_id, 'doctor_email': share.doctor.email} for share in shares]
     except Exception as e:
-        print(f"✗ Failed to fetch shared doctors: {str(e)}")
+        logger.error("✗ Failed to fetch shared doctors: %s", e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to fetch shared doctors: {str(e)}"

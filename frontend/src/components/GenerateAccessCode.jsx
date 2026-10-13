@@ -38,7 +38,7 @@ const GenerateAccessCode = () => {
         Generate a secure, one-time access code for your doctor to view your medical records.
       </p>
       
-      <button 
+      <button type="button" 
         onClick={handleGenerateCode} 
         disabled={loading}
         className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-primary hover:bg-blue-700 text-white font-bold text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -67,7 +67,7 @@ const GenerateAccessCode = () => {
             <code className="flex-1 text-2xl font-bold text-primary dark:text-blue-400 tracking-wider text-center">
               {accessCode}
             </code>
-            <button
+            <button type="button"
               onClick={handleCopyCode}
               className="flex items-center justify-center size-9 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400 transition-colors"
               title="Copy to clipboard"

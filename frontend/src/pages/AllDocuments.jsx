@@ -101,7 +101,7 @@ const AllDocuments = () => {
           {/* Search */}
           <div className="relative flex-1 max-w-md w-full">
             <Icon name="search" className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-[20px]" />
-            <input 
+            <input aria-label="Input" 
               className="w-full h-10 pl-10 pr-4 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#1a202c] text-sm focus:border-primary focus:ring-0 placeholder:text-gray-400 dark:text-white"
               placeholder="Search by document name or patient..."
               type="text"
@@ -113,7 +113,7 @@ const AllDocuments = () => {
           {/* Filters */}
           <div className="flex gap-2 items-center flex-wrap">
             <div className="flex gap-1 p-1 bg-gray-100 dark:bg-gray-800 rounded-lg">
-              <button 
+              <button type="button" 
                 onClick={() => setFilterStatus('all')}
                 className={`px-3 py-1.5 rounded-md text-xs font-bold transition-colors ${
                   filterStatus === 'all' ? 'bg-white dark:bg-[#1a202c] text-primary shadow-sm' : 'text-gray-600 dark:text-gray-400'
@@ -121,7 +121,7 @@ const AllDocuments = () => {
               >
                 All ({documents.length})
               </button>
-              <button 
+              <button type="button" 
                 onClick={() => setFilterStatus('analyzed')}
                 className={`px-3 py-1.5 rounded-md text-xs font-bold transition-colors ${
                   filterStatus === 'analyzed' ? 'bg-white dark:bg-[#1a202c] text-primary shadow-sm' : 'text-gray-600 dark:text-gray-400'
@@ -129,7 +129,7 @@ const AllDocuments = () => {
               >
                 Analyzed ({documents.filter(d => d.ai_analysis).length})
               </button>
-              <button 
+              <button type="button" 
                 onClick={() => setFilterStatus('pending')}
                 className={`px-3 py-1.5 rounded-md text-xs font-bold transition-colors ${
                   filterStatus === 'pending' ? 'bg-white dark:bg-[#1a202c] text-primary shadow-sm' : 'text-gray-600 dark:text-gray-400'
@@ -139,7 +139,7 @@ const AllDocuments = () => {
               </button>
             </div>
 
-            <select 
+            <select aria-label="Select" 
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value)}
               className="h-9 px-3 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#1a202c] text-sm text-gray-700 dark:text-gray-300 focus:border-primary focus:ring-0"

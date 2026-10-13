@@ -40,7 +40,7 @@ const DoctorDashboardLayout = () => {
         
         {/* Navigation */}
         <div className="flex flex-col gap-2 p-4 flex-1 overflow-y-auto">
-          <button 
+          <button type="button" 
             className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-left ${
               activeTab === 'overview' 
                 ? 'bg-primary/10 text-primary dark:text-primary' 
@@ -54,7 +54,7 @@ const DoctorDashboardLayout = () => {
             </span>
           </button>
 
-          <button 
+          <button type="button" 
             className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-left ${
               activeTab === 'patients' 
                 ? 'bg-primary/10 text-primary dark:text-primary' 
@@ -68,7 +68,7 @@ const DoctorDashboardLayout = () => {
             </span>
           </button>
 
-          <button 
+          <button type="button" 
             className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-left ${
               activeTab === 'documents' 
                 ? 'bg-primary/10 text-primary dark:text-primary' 
@@ -82,7 +82,7 @@ const DoctorDashboardLayout = () => {
             </span>
           </button>
 
-          <button 
+          <button type="button" 
             className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-left ${
               activeTab === 'ai-analysis' 
                 ? 'bg-primary/10 text-primary dark:text-primary' 
@@ -99,7 +99,7 @@ const DoctorDashboardLayout = () => {
         
         {/* Bottom Settings */}
         <div className="p-4 border-t border-[#f0f2f4] dark:border-gray-800">
-          <button onClick={logout} className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[#637588] dark:text-gray-400 hover:bg-[#f0f2f4] dark:hover:bg-gray-800 transition-colors w-full">
+          <button type="button" onClick={logout} className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[#637588] dark:text-gray-400 hover:bg-[#f0f2f4] dark:hover:bg-gray-800 transition-colors w-full">
             <Icon name="logout" className="text-xl" />
             <span className="text-sm font-medium leading-normal">Logout</span>
           </button>
@@ -111,7 +111,7 @@ const DoctorDashboardLayout = () => {
         {/* Mobile Header */}
         <div className="md:hidden flex items-center justify-between p-4 bg-white dark:bg-[#1A202C] border-b border-gray-200 dark:border-gray-700 sticky top-0 z-20">
           <h2 className="text-lg font-bold dark:text-white">IntelliMed-AI</h2>
-          <button 
+          <button type="button" 
             onClick={() => setShowMobileMenu(!showMobileMenu)}
             className="text-gray-500 dark:text-gray-400 p-2"
           >
@@ -122,7 +122,7 @@ const DoctorDashboardLayout = () => {
         {/* Mobile Menu */}
         {showMobileMenu && (
           <div className="md:hidden bg-white dark:bg-[#1A202C] border-b border-gray-200 dark:border-gray-700 p-4 space-y-2 sticky top-16 z-10">
-            <button 
+            <button type="button" 
               className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors ${
                 activeTab === 'overview' 
                   ? 'bg-primary/10 text-primary' 
@@ -134,7 +134,7 @@ const DoctorDashboardLayout = () => {
               <span className="text-sm font-medium">Overview</span>
             </button>
 
-            <button 
+            <button type="button" 
               className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors ${
                 activeTab === 'patients' 
                   ? 'bg-primary/10 text-primary' 
@@ -146,7 +146,7 @@ const DoctorDashboardLayout = () => {
               <span className="text-sm font-medium">Patients</span>
             </button>
 
-            <button 
+            <button type="button" 
               className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors ${
                 activeTab === 'documents' 
                   ? 'bg-primary/10 text-primary' 
@@ -158,7 +158,7 @@ const DoctorDashboardLayout = () => {
               <span className="text-sm font-medium">Documents</span>
             </button>
 
-            <button 
+            <button type="button" 
               className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors ${
                 activeTab === 'ai-analysis' 
                   ? 'bg-primary/10 text-primary' 
@@ -172,7 +172,7 @@ const DoctorDashboardLayout = () => {
 
             <hr className="border-gray-200 dark:border-gray-700 my-2" />
 
-            <button 
+            <button type="button" 
               onClick={() => {
                 setShowLinkModal(true);
                 setShowMobileMenu(false);
@@ -183,7 +183,7 @@ const DoctorDashboardLayout = () => {
               Link Patient
             </button>
 
-            <button 
+            <button type="button" 
               onClick={logout}
               className="w-full flex items-center gap-2 px-3 py-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg text-sm font-medium transition-colors"
             >
@@ -209,7 +209,7 @@ const DoctorDashboardLayout = () => {
           <div className="flex items-center gap-6">
             {/* Link Patient Button (for doctor) */}
             {activeTab === 'patients' && (
-              <button 
+              <button type="button" 
                 onClick={() => setShowLinkModal(true)}
                 className="flex items-center gap-2 h-9 px-4 rounded-lg bg-primary hover:bg-blue-700 text-white font-bold text-sm shadow-sm transition-colors"
               >
@@ -219,7 +219,7 @@ const DoctorDashboardLayout = () => {
             )}
 
             {/* Notifications */}
-            <button className="relative flex items-center justify-center size-10 rounded-full hover:bg-[#f0f2f4] dark:hover:bg-gray-700 text-[#637588] dark:text-gray-300 transition-colors">
+            <button type="button" className="relative flex items-center justify-center size-10 rounded-full hover:bg-[#f0f2f4] dark:hover:bg-gray-700 text-[#637588] dark:text-gray-300 transition-colors">
               <Icon name="notifications" className="text-[24px]" />
               <span className="absolute top-2 right-2.5 size-2 rounded-full bg-red-500 ring-2 ring-white dark:ring-[#1a202c]"></span>
             </button>

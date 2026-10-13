@@ -223,7 +223,7 @@ const AIAnalysis = () => {
                 <div className="max-h-[400px] overflow-y-auto divide-y divide-gray-200 dark:divide-gray-800">
                   {analyzedDocs.map((doc) => (
                     <div key={doc.id} className="relative group">
-                      <button
+                      <button type="button"
                         onClick={() => setSelectedDoc(doc)}
                         className={`w-full p-4 text-left hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors ${
                           selectedDoc?.id === doc.id ? 'bg-primary/10 dark:bg-primary/20' : ''
@@ -237,7 +237,7 @@ const AIAnalysis = () => {
                           {new Date(doc.upload_timestamp).toLocaleDateString()}
                         </p>
                       </button>
-                      <button
+                      <button type="button"
                         onClick={() => handleAnalyze(doc.id)}
                         disabled={analyzing === doc.id}
                         className="absolute top-2 right-2 p-1.5 rounded-md bg-primary/10 hover:bg-primary/20 text-primary transition-colors disabled:opacity-50"
@@ -271,7 +271,7 @@ const AIAnalysis = () => {
                         {user.role === 'doctor' && (
                           <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Patient: {doc.patientName}</p>
                         )}
-                        <button
+                        <button type="button"
                           onClick={() => handleAnalyze(doc.id)}
                           disabled={analyzing === doc.id}
                           className="w-full flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary text-xs font-bold transition-colors disabled:opacity-50"
@@ -313,7 +313,7 @@ const AIAnalysis = () => {
                           Analyzed on {new Date(selectedDoc.upload_timestamp).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
                         </p>
                       </div>
-                      <button
+                      <button type="button"
                         onClick={() => navigate(`/document/${selectedDoc.id}`)}
                         className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary hover:bg-blue-700 text-white text-sm font-bold transition-colors"
                       >

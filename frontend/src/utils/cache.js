@@ -97,12 +97,10 @@ export const withCache = (apiCall, getCacheKey, ttl = 5 * 60 * 1000) => {
     // Try to get from cache first
     const cached = apiCache.get(cacheKey, ttl);
     if (cached !== null) {
-      console.log(`[Cache HIT] ${cacheKey}`);
       return cached;
     }
 
     // Cache miss - make API call
-    console.log(`[Cache MISS] ${cacheKey}`);
     const result = await apiCall(...args);
     
     // Store in cache

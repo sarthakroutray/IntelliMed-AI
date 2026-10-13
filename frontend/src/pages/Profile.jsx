@@ -99,7 +99,7 @@ const Profile = () => {
             </p>
           </div>
           {!editing ? (
-            <button
+            <button type="button"
               onClick={() => setEditing(true)}
               className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary hover:bg-blue-700 text-white text-sm font-bold transition-colors"
             >
@@ -108,7 +108,7 @@ const Profile = () => {
             </button>
           ) : (
             <div className="flex gap-2">
-              <button
+              <button type="button"
                 onClick={() => {
                   setEditing(false);
                   setError('');
@@ -118,7 +118,7 @@ const Profile = () => {
               >
                 Cancel
               </button>
-              <button
+              <button type="button"
                 onClick={handleSave}
                 disabled={saveLoading}
                 className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary hover:bg-blue-700 text-white text-sm font-bold transition-colors disabled:opacity-50"
@@ -198,7 +198,7 @@ const Profile = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Full Name</label>
-                    <input
+                    <input aria-label="Input"
                       type="text"
                       value={formData.name}
                       onChange={(e) => setFormData({ ...formData, name: e.target.value })}
@@ -208,7 +208,7 @@ const Profile = () => {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Email</label>
-                    <input
+                    <input aria-label="Input"
                       type="email"
                       value={formData.email}
                       onChange={(e) => setFormData({ ...formData, email: e.target.value })}
@@ -218,7 +218,7 @@ const Profile = () => {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Phone Number</label>
-                    <input
+                    <input aria-label="Input"
                       type="tel"
                       value={formData.phone}
                       onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
@@ -229,7 +229,7 @@ const Profile = () => {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Date of Birth</label>
-                    <input
+                    <input aria-label="Input"
                       type="date"
                       value={formData.dateOfBirth}
                       onChange={(e) => setFormData({ ...formData, dateOfBirth: e.target.value })}
@@ -239,7 +239,7 @@ const Profile = () => {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Gender</label>
-                    <select
+                    <select aria-label="Select"
                       value={formData.gender}
                       onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
                       disabled={!editing}
@@ -254,7 +254,7 @@ const Profile = () => {
                   </div>
                   <div className="md:col-span-2">
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Address</label>
-                    <input
+                    <input aria-label="Input"
                       type="text"
                       value={formData.address}
                       onChange={(e) => setFormData({ ...formData, address: e.target.value })}
@@ -275,7 +275,7 @@ const Profile = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Contact Name</label>
-                    <input
+                    <input aria-label="Input"
                       type="text"
                       value={formData.emergencyContact}
                       onChange={(e) => setFormData({ ...formData, emergencyContact: e.target.value })}
@@ -286,7 +286,7 @@ const Profile = () => {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Contact Phone</label>
-                    <input
+                    <input aria-label="Input"
                       type="tel"
                       value={formData.emergencyPhone}
                       onChange={(e) => setFormData({ ...formData, emergencyPhone: e.target.value })}
@@ -307,7 +307,7 @@ const Profile = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Blood Type</label>
-                    <select
+                    <select aria-label="Select"
                       value={formData.bloodType}
                       onChange={(e) => setFormData({ ...formData, bloodType: e.target.value })}
                       disabled={!editing}
@@ -326,7 +326,7 @@ const Profile = () => {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Known Allergies</label>
-                    <input
+                    <input aria-label="Input"
                       type="text"
                       value={formData.allergies}
                       onChange={(e) => setFormData({ ...formData, allergies: e.target.value })}
@@ -337,7 +337,7 @@ const Profile = () => {
                   </div>
                   <div className="md:col-span-2">
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Chronic Conditions</label>
-                    <textarea
+                    <textarea aria-label="Textarea"
                       value={formData.chronicConditions}
                       onChange={(e) => setFormData({ ...formData, chronicConditions: e.target.value })}
                       disabled={!editing}

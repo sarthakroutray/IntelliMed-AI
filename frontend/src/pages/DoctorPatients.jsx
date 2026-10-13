@@ -110,7 +110,7 @@ const DoctorPatients = () => {
                         <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                             <Icon name="search" className="text-[#637588] text-[20px]" />
                         </div>
-                        <input 
+                        <input aria-label="Input" 
                             className="block w-full pl-10 pr-3 py-2.5 rounded-lg border-none bg-white dark:bg-[#1a202c] text-[#111318] dark:text-white placeholder-[#637588] focus:ring-2 focus:ring-primary shadow-sm text-sm"
                             placeholder="Search by name, ID or email..."
                             type="text"
@@ -119,11 +119,11 @@ const DoctorPatients = () => {
                         />
                     </div>
                     <div className="flex items-center gap-2">
-                        <button className="flex items-center gap-2 h-[42px] px-3 bg-white dark:bg-[#1a202c] rounded-lg text-[#637588] dark:text-gray-300 font-medium text-sm shadow-sm hover:text-primary transition-colors">
+                        <button type="button" className="flex items-center gap-2 h-[42px] px-3 bg-white dark:bg-[#1a202c] rounded-lg text-[#637588] dark:text-gray-300 font-medium text-sm shadow-sm hover:text-primary transition-colors">
                             <Icon name="filter_list" className="text-[20px]" />
                             Filter
                         </button>
-                        <button className="flex items-center gap-2 h-[42px] px-3 bg-white dark:bg-[#1a202c] rounded-lg text-[#637588] dark:text-gray-300 font-medium text-sm shadow-sm hover:text-primary transition-colors">
+                        <button type="button" className="flex items-center gap-2 h-[42px] px-3 bg-white dark:bg-[#1a202c] rounded-lg text-[#637588] dark:text-gray-300 font-medium text-sm shadow-sm hover:text-primary transition-colors">
                             <Icon name="sort" className="text-[20px]" />
                             Sort
                         </button>
@@ -181,7 +181,7 @@ const DoctorPatients = () => {
                                                     </div>
                                                 </td>
                                                 <td className="py-3 px-4 align-middle text-right">
-                                                    <button className="size-8 rounded hover:bg-white dark:hover:bg-gray-600 text-[#637588] dark:text-gray-400 transition-colors">
+                                                    <button type="button" className="size-8 rounded hover:bg-white dark:hover:bg-gray-600 text-[#637588] dark:text-gray-400 transition-colors">
                                                         <Icon name="more_vert" className="text-[20px]" />
                                                     </button>
                                                 </td>
@@ -207,7 +207,7 @@ const DoctorPatients = () => {
                                         Showing {(currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, filteredPatients.length)} of {filteredPatients.length} entries
                                     </span>
                                     <div className="flex items-center gap-2">
-                                        <button 
+                                        <button type="button" 
                                             onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                                             disabled={currentPage === 1}
                                             className="size-8 flex items-center justify-center rounded-lg border border-[#e5e7eb] dark:border-gray-700 text-[#637588] dark:text-gray-400 hover:bg-[#f0f2f4] dark:hover:bg-gray-800 transition-colors disabled:opacity-50"
@@ -215,7 +215,7 @@ const DoctorPatients = () => {
                                             <Icon name="chevron_left" className="text-[18px]" />
                                         </button>
                                         {[...Array(Math.min(totalPages, 3))].map((_, i) => (
-                                            <button 
+                                            <button type="button" 
                                                 key={i + 1}
                                                 onClick={() => setCurrentPage(i + 1)}
                                                 className={`size-8 flex items-center justify-center rounded-lg font-bold text-sm transition-colors ${
@@ -228,7 +228,7 @@ const DoctorPatients = () => {
                                             </button>
                                         ))}
                                         {totalPages > 3 && <span className="text-[#637588] dark:text-gray-400">...</span>}
-                                        <button 
+                                        <button type="button" 
                                             onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                                             disabled={currentPage === totalPages}
                                             className="size-8 flex items-center justify-center rounded-lg border border-[#e5e7eb] dark:border-gray-700 text-[#637588] dark:text-gray-400 hover:bg-[#f0f2f4] dark:hover:bg-gray-800 transition-colors disabled:opacity-50"
@@ -252,7 +252,7 @@ const DoctorPatients = () => {
                                 <h3 className="text-xl font-bold text-[#111318] dark:text-white">{selectedPatient.email?.split('@')[0]}'s Documents</h3>
                                 <p className="text-sm text-[#637588] dark:text-gray-400 mt-1">{selectedPatient.email}</p>
                             </div>
-                            <button onClick={() => setSelectedPatient(null)} className="text-gray-400 hover:text-gray-600">
+                            <button type="button" onClick={() => setSelectedPatient(null)} className="text-gray-400 hover:text-gray-600">
                                 <Icon name="close" className="text-[24px]" />
                             </button>
                         </div>
@@ -283,7 +283,7 @@ const DoctorPatients = () => {
                                                         )}
                                                     </div>
                                                 </div>
-                                                <button 
+                                                <button type="button" 
                                                     onClick={() => navigate(`/document/${doc.id}`)}
                                                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary text-xs font-bold transition-colors"
                                                 >

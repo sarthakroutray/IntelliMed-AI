@@ -145,7 +145,7 @@ const MedicalDocumentViewer = () => {
       <div className="h-screen flex items-center justify-center bg-background-light dark:bg-background-dark">
         <div className="text-center">
           <p className="text-slate-600 dark:text-slate-400 mb-4">{error || 'Document not found'}</p>
-          <button 
+          <button type="button" 
             onClick={() => navigate('/dashboard')}
             className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-blue-700"
           >
@@ -169,14 +169,14 @@ const MedicalDocumentViewer = () => {
         <div className="flex flex-1 justify-end gap-6 items-center">
           {/* Action Buttons */}
           <div className="hidden md:flex gap-2">
-            <button 
+            <button type="button" 
               onClick={handleDownload}
               className="flex items-center justify-center rounded-lg h-9 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-900 dark:text-white gap-2 text-sm font-bold px-4 transition-colors"
             >
               <span className="material-symbols-outlined !text-[20px]">download</span>
               <span>Download</span>
             </button>
-            <button 
+            <button type="button" 
               onClick={() => setShowShareModal(true)}
               className="flex items-center justify-center rounded-lg h-9 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-900 dark:text-white gap-2 text-sm font-bold px-4 transition-colors"
             >
@@ -184,7 +184,7 @@ const MedicalDocumentViewer = () => {
               <span>Share</span>
             </button>
             {user && user.role === 'doctor' && (
-              <button 
+              <button type="button" 
                 onClick={handleArchive}
                 className="flex items-center justify-center rounded-lg h-9 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-900 dark:text-white gap-2 text-sm font-bold px-4 transition-colors"
               >
@@ -283,14 +283,14 @@ const MedicalDocumentViewer = () => {
 
             {/* Floating Toolbar */}
             <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-1 bg-white/90 dark:bg-slate-800/90 backdrop-blur-sm p-1.5 rounded-full shadow-lg border border-slate-200 dark:border-slate-700 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-              <button 
+              <button type="button" 
                 onClick={handleZoomIn}
                 className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors"
                 title="Zoom In"
               >
                 <span className="material-symbols-outlined">zoom_in</span>
               </button>
-              <button 
+              <button type="button" 
                 onClick={handleZoomOut}
                 className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors"
                 title="Zoom Out"
@@ -298,10 +298,10 @@ const MedicalDocumentViewer = () => {
                 <span className="material-symbols-outlined">zoom_out</span>
               </button>
               <div className="w-px h-6 bg-slate-300 dark:bg-slate-600 mx-1"></div>
-              <button className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors" title="Pan Mode">
+              <button type="button" className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors" title="Pan Mode">
                 <span className="material-symbols-outlined">drag_pan</span>
               </button>
-              <button 
+              <button type="button" 
                 onClick={handleResetZoom}
                 className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors"
                 title="Reset View"
@@ -318,7 +318,7 @@ const MedicalDocumentViewer = () => {
 
           <div className="mt-4 flex justify-between items-center text-sm text-slate-500 dark:text-slate-400">
             <span>File: {document.fileName}</span>
-            <button 
+            <button type="button" 
               onClick={() => setShowHistoryModal(true)}
               className="text-primary hover:underline font-medium"
             >
@@ -334,7 +334,7 @@ const MedicalDocumentViewer = () => {
               <span className="material-symbols-outlined text-primary">smart_toy</span>
               <h3 className="text-lg font-bold text-slate-900 dark:text-white">AI Analysis</h3>
             </div>
-            <button className="text-slate-400 hover:text-primary transition-colors">
+            <button type="button" className="text-slate-400 hover:text-primary transition-colors">
               <span className="material-symbols-outlined">more_vert</span>
             </button>
           </div>
@@ -579,14 +579,14 @@ const MedicalDocumentViewer = () => {
             {/* Actions */}
             {user && user.role === 'doctor' && (
               <div className="mt-auto pt-6 flex flex-col gap-3">
-                <button 
+                <button type="button" 
                   onClick={handleVerifyDocument}
                   className="w-full h-11 bg-primary hover:bg-blue-700 text-white font-bold rounded-lg shadow-md shadow-primary/20 transition-all flex items-center justify-center gap-2"
                 >
                   <span className="material-symbols-outlined !text-[20px]">verified</span>
                   Verify &amp; Sign Off
                 </button>
-                <button 
+                <button type="button" 
                   onClick={() => setShowNoteModal(true)}
                   className="w-full h-11 bg-white dark:bg-transparent border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-bold rounded-lg transition-all flex items-center justify-center gap-2"
                 >
@@ -611,20 +611,20 @@ const MedicalDocumentViewer = () => {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white dark:bg-slate-800 rounded-xl max-w-md w-full p-6 shadow-2xl">
             <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-4">Add Clinical Note</h3>
-            <textarea
+            <textarea aria-label="Textarea"
               value={clinicalNote}
               onChange={(e) => setClinicalNote(e.target.value)}
               className="w-full h-32 p-3 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-white resize-none focus:ring-2 focus:ring-primary focus:border-transparent"
               placeholder="Enter your clinical observations and notes..."
             />
             <div className="flex gap-3 mt-4">
-              <button
+              <button type="button"
                 onClick={handleAddNote}
                 className="flex-1 px-4 py-2 bg-primary text-white rounded-lg hover:bg-blue-700 font-medium transition-colors"
               >
                 Save Note
               </button>
-              <button
+              <button type="button"
                 onClick={() => {
                   setShowNoteModal(false);
                   setClinicalNote('');
@@ -644,7 +644,7 @@ const MedicalDocumentViewer = () => {
           <div className="bg-white dark:bg-slate-800 rounded-xl max-w-2xl w-full max-h-[80vh] overflow-hidden shadow-2xl flex flex-col">
             <div className="p-6 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
               <h3 className="text-xl font-bold text-slate-900 dark:text-white">Document History</h3>
-              <button 
+              <button type="button" 
                 onClick={() => setShowHistoryModal(false)}
                 className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
               >
@@ -697,7 +697,7 @@ const MedicalDocumentViewer = () => {
             </div>
             
             <div className="p-4 border-t border-gray-200 dark:border-gray-700">
-              <button
+              <button type="button"
                 onClick={() => setShowHistoryModal(false)}
                 className="w-full px-4 py-2 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600 font-medium transition-colors"
               >
@@ -718,7 +718,7 @@ const MedicalDocumentViewer = () => {
                 ? 'This document can be shared with your linked doctors via the dashboard.'
                 : 'Document sharing is managed by the patient.'}
             </p>
-            <button
+            <button type="button"
               onClick={() => setShowShareModal(false)}
               className="w-full px-4 py-2 bg-primary text-white rounded-lg hover:bg-blue-700 font-medium transition-colors"
             >

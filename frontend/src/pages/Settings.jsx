@@ -96,7 +96,7 @@ const Settings = () => {
                 <p className="font-medium text-gray-900 dark:text-white">Dark Mode</p>
                 <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Use dark theme across the application</p>
               </div>
-              <button
+              <button type="button"
                 onClick={() => toggleDarkMode()}
                 className={`flex w-11 items-center rounded-full transition-colors ${
                   darkMode ? 'bg-primary' : 'bg-gray-300 dark:bg-gray-700'
@@ -126,7 +126,7 @@ const Settings = () => {
                 <p className="font-medium text-gray-900 dark:text-white">Email Notifications</p>
                 <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Receive notifications via email</p>
               </div>
-              <button
+              <button type="button"
                 onClick={() => setNotifications({ ...notifications, email: !notifications.email })}
                 className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
                   notifications.email ? 'bg-primary' : 'bg-gray-300 dark:bg-gray-700'
@@ -145,7 +145,7 @@ const Settings = () => {
                 <p className="font-medium text-gray-900 dark:text-white">Push Notifications</p>
                 <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Receive browser push notifications</p>
               </div>
-              <button
+              <button type="button"
                 onClick={() => setNotifications({ ...notifications, push: !notifications.push })}
                 className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
                   notifications.push ? 'bg-primary' : 'bg-gray-300 dark:bg-gray-700'
@@ -166,7 +166,7 @@ const Settings = () => {
                 <p className="font-medium text-gray-900 dark:text-white">Document Uploads</p>
                 <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Notify when a document is uploaded</p>
               </div>
-              <button
+              <button type="button"
                 onClick={() => setNotifications({ ...notifications, documentUploads: !notifications.documentUploads })}
                 className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
                   notifications.documentUploads ? 'bg-primary' : 'bg-gray-300 dark:bg-gray-700'
@@ -185,7 +185,7 @@ const Settings = () => {
                 <p className="font-medium text-gray-900 dark:text-white">AI Analysis Complete</p>
                 <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Notify when AI analysis finishes</p>
               </div>
-              <button
+              <button type="button"
                 onClick={() => setNotifications({ ...notifications, aiAnalysis: !notifications.aiAnalysis })}
                 className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
                   notifications.aiAnalysis ? 'bg-primary' : 'bg-gray-300 dark:bg-gray-700'
@@ -204,7 +204,7 @@ const Settings = () => {
                 <p className="font-medium text-gray-900 dark:text-white">Doctor Messages</p>
                 <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Notify about messages from doctors</p>
               </div>
-              <button
+              <button type="button"
                 onClick={() => setNotifications({ ...notifications, doctorMessages: !notifications.doctorMessages })}
                 className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
                   notifications.doctorMessages ? 'bg-primary' : 'bg-gray-300 dark:bg-gray-700'
@@ -223,7 +223,7 @@ const Settings = () => {
                 <p className="font-medium text-gray-900 dark:text-white">Security Alerts</p>
                 <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Important security notifications</p>
               </div>
-              <button
+              <button type="button"
                 onClick={() => setNotifications({ ...notifications, securityAlerts: !notifications.securityAlerts })}
                 className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
                   notifications.securityAlerts ? 'bg-primary' : 'bg-gray-300 dark:bg-gray-700'
@@ -253,7 +253,7 @@ const Settings = () => {
                 <p className="font-medium text-gray-900 dark:text-white">Share with Doctors</p>
                 <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Allow linked doctors to access your documents</p>
               </div>
-              <button
+              <button type="button"
                 onClick={() => setPrivacy({ ...privacy, shareWithDoctors: !privacy.shareWithDoctors })}
                 className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
                   privacy.shareWithDoctors ? 'bg-primary' : 'bg-gray-300 dark:bg-gray-700'
@@ -272,7 +272,7 @@ const Settings = () => {
                 <p className="font-medium text-gray-900 dark:text-white">AI Analysis</p>
                 <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Allow AI to analyze your medical documents</p>
               </div>
-              <button
+              <button type="button"
                 onClick={() => setPrivacy({ ...privacy, allowAIAnalysis: !privacy.allowAIAnalysis })}
                 className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
                   privacy.allowAIAnalysis ? 'bg-primary' : 'bg-gray-300 dark:bg-gray-700'
@@ -288,7 +288,7 @@ const Settings = () => {
 
             <div>
               <p className="font-medium text-gray-900 dark:text-white mb-2">Data Retention</p>
-              <select
+              <select aria-label="Select"
                 value={privacy.dataRetention}
                 onChange={(e) => setPrivacy({ ...privacy, dataRetention: e.target.value })}
                 className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:border-primary focus:ring-0"
@@ -307,7 +307,7 @@ const Settings = () => {
         </div>
 
         {/* Save Button */}
-        <button
+        <button type="button"
           onClick={handleSaveSettings}
           disabled={saving}
           className="w-full md:w-auto px-6 py-3 rounded-lg bg-primary hover:bg-blue-700 text-white font-bold transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -332,7 +332,7 @@ const Settings = () => {
                   Permanently delete your account and all associated data. This action cannot be undone.
                 </p>
               </div>
-              <button
+              <button type="button"
                 onClick={() => setShowDeleteModal(true)}
                 className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white font-bold text-sm transition-colors whitespace-nowrap"
               >
@@ -356,13 +356,13 @@ const Settings = () => {
                 This will permanently delete your account and all your medical records. This action cannot be undone.
               </p>
               <div className="flex gap-3">
-                <button
+                <button type="button"
                   onClick={() => setShowDeleteModal(false)}
                   className="flex-1 px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 font-bold transition-colors"
                 >
                   Cancel
                 </button>
-                <button
+                <button type="button"
                   onClick={handleDeleteAccount}
                   className="flex-1 px-4 py-2.5 rounded-lg bg-red-600 hover:bg-red-700 text-white font-bold transition-colors"
                 >

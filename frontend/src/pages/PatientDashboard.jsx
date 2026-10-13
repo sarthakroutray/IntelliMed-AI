@@ -57,7 +57,6 @@ const PatientDashboard = () => {
 
     try {
       const uploadResponse = await uploadDocument(acceptedFiles[0]);
-      console.log('Upload response:', uploadResponse);
       const refreshed = await getPatientDocuments();
       setDocuments(refreshed.data || []);
 
@@ -101,8 +100,6 @@ const PatientDashboard = () => {
     try {
       setLoading(true);
       const response = await getPatientDocuments();
-      console.log('Documents response:', response);
-      console.log('Documents data:', response.data);
       setDocuments(response.data || []);
       
       // Load shared doctors info for all documents in parallel
@@ -263,7 +260,7 @@ const PatientDashboard = () => {
 
       {/* Upload Section (Drag & Drop) */}
       <div {...getRootProps()} className={`bg-white dark:bg-[#1A202C] rounded-xl border-2 border-dashed ${isDragActive ? 'border-primary' : 'border-primary/30 dark:border-primary/20'} hover:border-primary dark:hover:border-primary transition-colors cursor-pointer group`}>
-        <input {...getInputProps()} />
+        <input aria-label="Input" {...getInputProps()} />
         <div className="flex flex-col items-center justify-center py-10 px-6 text-center">
           <div className={`size-12 rounded-full bg-primary/10 flex items-center justify-center mb-4 ${uploading ? 'animate-pulse' : 'group-hover:scale-110'} transition-transform`}>
             {uploading ? (
@@ -282,7 +279,7 @@ const PatientDashboard = () => {
             Maximum file size: {MAX_FILE_SIZE_MB} MB
           </p>
           {!isDragActive && !uploading && (
-            <button className="flex items-center justify-center rounded-lg h-9 px-6 bg-primary text-white text-sm font-bold shadow-md shadow-primary/20 hover:bg-primary/90 transition-colors">
+            <button type="button" className="flex items-center justify-center rounded-lg h-9 px-6 bg-primary text-white text-sm font-bold shadow-md shadow-primary/20 hover:bg-primary/90 transition-colors">
               Browse Files
             </button>
           )}
@@ -292,7 +289,7 @@ const PatientDashboard = () => {
       {/* Filters & Controls */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div className="flex gap-2 p-1 bg-white dark:bg-[#1A202C] rounded-lg border border-[#dbdfe6] dark:border-gray-700">
-          <button 
+          <button type="button" 
             onClick={() => setActiveTab('all')}
             className={`px-4 py-1.5 rounded-md text-sm font-bold transition-colors ${
               activeTab === 'all' ? 'bg-primary/10 text-primary' : 'text-[#616f89] dark:text-gray-400 hover:text-[#111318] dark:hover:text-white'
@@ -300,7 +297,7 @@ const PatientDashboard = () => {
           >
             All Documents
           </button>
-          <button 
+          <button type="button" 
             onClick={() => setActiveTab('shared')}
             className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
               activeTab === 'shared' ? 'bg-primary/10 text-primary' : 'text-[#616f89] dark:text-gray-400 hover:text-[#111318] dark:hover:text-white'
@@ -308,7 +305,7 @@ const PatientDashboard = () => {
           >
             Shared
           </button>
-          <button 
+          <button type="button" 
             onClick={() => setActiveTab('private')}
             className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
               activeTab === 'private' ? 'bg-primary/10 text-primary' : 'text-[#616f89] dark:text-gray-400 hover:text-[#111318] dark:hover:text-white'
@@ -320,7 +317,7 @@ const PatientDashboard = () => {
         <div className="flex items-center gap-2 w-full sm:w-auto">
           <div className="relative w-full sm:w-64">
             <Icon name="search" className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-[20px]" />
-            <input 
+            <input aria-label="Input" 
               className="w-full h-9 pl-10 pr-4 rounded-lg border border-[#dbdfe6] dark:border-gray-700 bg-white dark:bg-[#1A202C] text-sm focus:border-primary focus:ring-0 placeholder:text-gray-400 dark:text-white"
               placeholder="Search documents..."
               type="text"
@@ -328,7 +325,7 @@ const PatientDashboard = () => {
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
-          <button className="h-9 px-3 rounded-lg border border-[#dbdfe6] dark:border-gray-700 bg-white dark:bg-[#1A202C] text-gray-500 hover:text-primary transition-colors flex items-center justify-center">
+          <button type="button" className="h-9 px-3 rounded-lg border border-[#dbdfe6] dark:border-gray-700 bg-white dark:bg-[#1A202C] text-gray-500 hover:text-primary transition-colors flex items-center justify-center">
             <Icon name="filter_list" />
           </button>
         </div>
@@ -414,7 +411,7 @@ const PatientDashboard = () => {
                           </td>
                           <td className="px-6 py-4 text-right">
                             <div className="flex items-center justify-end gap-2">
-                              <button 
+                              <button type="button" 
                                 onClick={() => handleShareDocument(doc.id)}
                                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#dbdfe6] dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 text-[#111318] dark:text-white text-xs font-bold transition-colors"
                                 title="Share with doctors"
@@ -423,7 +420,7 @@ const PatientDashboard = () => {
                                 Share
                               </button>
                               {doc.ai_analysis ? (
-                                <button 
+                                <button type="button" 
                                   onClick={() => navigate('/patient-dashboard/ai-analysis')}
                                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#dbdfe6] dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 text-[#111318] dark:text-white text-xs font-bold transition-colors"
                                 >
@@ -431,7 +428,7 @@ const PatientDashboard = () => {
                                   View
                                 </button>
                               ) : (
-                                <button 
+                                <button type="button" 
                                   onClick={() => handleAnalyze(doc.id)}
                                   disabled={analyzing === doc.id}
                                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary text-xs font-bold transition-colors disabled:opacity-50"
@@ -449,7 +446,7 @@ const PatientDashboard = () => {
                                   )}
                                 </button>
                               )}
-                              <button 
+                              <button type="button" 
                                 onClick={() => handleDeleteDocument(doc.id)}
                                 className="size-8 flex items-center justify-center rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
                                 title="Delete document"
@@ -488,7 +485,7 @@ const PatientDashboard = () => {
             <div className="bg-white dark:bg-[#1a202c] rounded-xl max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-xl font-bold text-[#111318] dark:text-white">Connect with Doctor</h3>
-                <button onClick={() => setShowGenerateCodeModal(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
+                <button type="button" onClick={() => setShowGenerateCodeModal(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
                   <Icon name="close" className="text-[24px]" />
                 </button>
               </div>
@@ -503,7 +500,7 @@ const PatientDashboard = () => {
             <div className="bg-white dark:bg-[#1a202c] rounded-xl max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-xl font-bold text-[#111318] dark:text-white">Share Document</h3>
-                <button onClick={() => setShowShareModal(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
+                <button type="button" onClick={() => setShowShareModal(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
                   <Icon name="close" className="text-[24px]" />
                 </button>
               </div>
@@ -512,7 +509,7 @@ const PatientDashboard = () => {
                 <div className="text-center py-8">
                   <Icon name="person_add" className="text-[48px] text-gray-300 dark:text-gray-600 mx-auto mb-4" />
                   <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">No linked doctors yet</p>
-                  <button 
+                  <button type="button" 
                     onClick={() => {
                       setShowShareModal(false);
                       setShowGenerateCodeModal(true);
@@ -532,7 +529,7 @@ const PatientDashboard = () => {
                           <p className="text-sm font-medium text-[#111318] dark:text-white">{doctor.email}</p>
                           <p className="text-xs text-gray-500 dark:text-gray-400">Doctor</p>
                         </div>
-                        <button
+                        <button type="button"
                           onClick={() => handleToggleShare(selectedDocumentForShare, doctor.id, isSharedWithDoctor)}
                           className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
                             isSharedWithDoctor

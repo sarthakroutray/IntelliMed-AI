@@ -42,7 +42,7 @@ const LinkPatient = ({ onPatientLinked, onClose }) => {
     <div className="bg-white dark:bg-[#1a202c] rounded-xl max-w-md w-full p-6">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-xl font-bold text-[#111318] dark:text-white">Link Patient</h3>
-        <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
+        <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
           <Icon name="close" className="text-[24px]" />
         </button>
       </div>
@@ -55,7 +55,7 @@ const LinkPatient = ({ onPatientLinked, onClose }) => {
       <form onSubmit={handleLinkPatient} className="flex flex-col gap-4">
         <div className="relative">
           <Icon name="vpn_key" className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-[20px]" />
-          <input
+          <input aria-label="Input"
             type="text"
             placeholder="Enter Patient Access Code"
             value={accessCode}
