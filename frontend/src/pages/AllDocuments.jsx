@@ -1,10 +1,10 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getPatientDocuments } from '../../services/api';
-import { getPatientDocumentById } from '../../services/documents';
-import Icon from '../../components/Icon';
-import { Alert, EmptyState, Spinner } from '../../components/ui.jsx';
-import { ui } from '../../styles/ui.js';
+import { getPatientDocuments } from '../services/api';
+import { getPatientDocumentById } from '../services/documents';
+import Icon from '../components/Icon';
+import { Alert, EmptyState, Spinner } from '../components/ui.jsx';
+import { ui } from '../styles/ui.js';
 
 const AllDocuments = () => {
   const navigate = useNavigate();
