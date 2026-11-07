@@ -1,11 +1,14 @@
 import os
+import time
 import logging
+from threading import Lock
 from pathlib import Path
 from dotenv import load_dotenv
 from fastapi import HTTPException, status
 from google.auth.exceptions import GoogleAuthError
 from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token
+import requests
 
 env_path = Path(__file__).parent / '.env'
 if not env_path.exists():
@@ -15,22 +18,55 @@ load_dotenv(dotenv_path=env_path, override=True)
 logger = logging.getLogger(__name__)
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
 GOOGLE_VERIFY_TIMEOUT_S = float(os.getenv("GOOGLE_VERIFY_TIMEOUT_S", "10"))
+GOOGLE_CERTS_CACHE_TTL_S = float(os.getenv("GOOGLE_CERTS_CACHE_TTL_S", "3600"))
+
+_shared_session = requests.Session()
 
 
-class _BoundedRequest(google_requests.Request):
+class _CachedBoundedRequest(google_requests.Request):
     """
-    Transport with a pinned request deadline.
+    Transport with a pinned request deadline, persistent HTTP connection pooling,
+    and in-memory caching of Google's public certificates.
 
-    `id_token.verify_oauth2_token` accepts no timeout of its own — the deadline
-    travels with the transport, and the library default is far longer than any
-    client waits. Every verification fetches Google's signing certs over the
-    network, so without a bound a stalled connection to googleapis.com hangs the
-    login request indefinitely.
+    `id_token.verify_oauth2_token` fetches Google's signing certs over the network
+    on every verification. Google's keys rotate rarely (served with ~6hr cache-control).
+    Caching the response in-memory avoids repeated TLS handshakes and roundtrips to
+    googleapis.com on every login.
     """
 
-    def __call__(self, *args, **kwargs):
+    def __init__(self, session=None, cache_ttl=GOOGLE_CERTS_CACHE_TTL_S):
+        super().__init__(session=session or _shared_session)
+        self._cache = {}
+        self._cache_lock = Lock()
+        self._cache_ttl = cache_ttl
+
+    def invalidate_cache(self):
+        with self._cache_lock:
+            self._cache.clear()
+
+    def __call__(self, url, method="GET", *args, **kwargs):
         kwargs.setdefault("timeout", GOOGLE_VERIFY_TIMEOUT_S)
-        return super().__call__(*args, **kwargs)
+
+        # Cache Google cert requests in-memory to prevent per-login network overhead
+        if method == "GET" and "googleapis.com" in url:
+            now = time.monotonic()
+            with self._cache_lock:
+                entry = self._cache.get(url)
+                if entry:
+                    cached_at, cached_response = entry
+                    if now - cached_at < self._cache_ttl:
+                        return cached_response
+
+            response = super().__call__(url, method=method, *args, **kwargs)
+            if getattr(response, "status", None) == 200:
+                with self._cache_lock:
+                    self._cache[url] = (now, response)
+            return response
+
+        return super().__call__(url, method=method, *args, **kwargs)
+
+
+_cached_transport = _CachedBoundedRequest()
 
 
 def verify_google_token(token: str):
@@ -58,8 +94,14 @@ def verify_google_token(token: str):
     
     try:
         logger.info("Verifying Google token signature and claims")
-        request = _BoundedRequest()
-        idinfo = id_token.verify_oauth2_token(token, request, GOOGLE_CLIENT_ID)
+        try:
+            idinfo = id_token.verify_oauth2_token(token, _cached_transport, GOOGLE_CLIENT_ID)
+        except (GoogleAuthError, ValueError) as first_err:
+            # If verification failed, cache might hold stale certs after rotation.
+            # Invalidate cache and retry once with fresh certs.
+            logger.info("Verification with cached certs failed (%s), retrying with fresh fetch", first_err)
+            _cached_transport.invalidate_cache()
+            idinfo = id_token.verify_oauth2_token(token, _cached_transport, GOOGLE_CLIENT_ID)
 
         issuer = idinfo.get("iss")
         if issuer not in {"accounts.google.com", "https://accounts.google.com"}:

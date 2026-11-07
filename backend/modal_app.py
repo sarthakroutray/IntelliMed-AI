@@ -16,11 +16,14 @@ image = modal.Image.from_dockerfile(
 )
 
 
+SCALEDOWN_WINDOW = int(os.getenv("MODAL_SCALEDOWN_WINDOW", "1800"))
+
+
 @app.function(
     image=image,
     cpu=4.0,
     memory=8192,
-    scaledown_window=300,
+    scaledown_window=SCALEDOWN_WINDOW,
     timeout=1800,
     secrets=[modal.Secret.from_name(SECRET_NAME)],
 )

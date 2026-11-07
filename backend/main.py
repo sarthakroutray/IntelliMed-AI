@@ -29,14 +29,23 @@ else:
     logger.warning("⚠ GOOGLE_CLIENT_ID not found in environment")
 
 AI_WARMUP_ON_STARTUP = os.getenv("AI_WARMUP_ON_STARTUP", "true").strip().lower() in ("1", "true", "yes")
+AI_WARMUP_DELAY_SECONDS = float(os.getenv("AI_WARMUP_DELAY_SECONDS", "15"))
 
 
 async def _warmup_models_in_background():
     """Pay the AI model load cost up front so the first upload doesn't spend
-    minutes downloading/loading models inside a single request."""
+    minutes downloading/loading models inside a single request.
+
+    An initial delay gives early startup requests (health checks, login, initial
+    dashboard queries) full CPU and event-loop availability before background
+    model warmup begins."""
     try:
+        if AI_WARMUP_DELAY_SECONDS > 0:
+            await asyncio.sleep(AI_WARMUP_DELAY_SECONDS)
         await asyncio.to_thread(services.warmup_models)
         logger.info("✓ AI models warmed up")
+    except asyncio.CancelledError:
+        pass
     except Exception as e:
         logger.warning("⚠ AI model warm-up failed (models will load on first request): %s", e)
 
