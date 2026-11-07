@@ -120,6 +120,8 @@ class _HomeScreenState extends State<HomeScreen> {
       serverError = e.kind == ApiErrorKind.unauthorized
           ? 'Your session has expired. Sign in again from Me.'
           : e.message;
+    } catch (e) {
+      serverError = '$e';
     }
 
     if (!mounted) return;

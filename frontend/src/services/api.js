@@ -7,6 +7,9 @@ const apiBaseUrl = normalizedApiBaseUrl.endsWith('/api/v1')
   ? normalizedApiBaseUrl
   : `${normalizedApiBaseUrl}/api/v1`;
 
+// v2 base shares the same origin: http://host/api/v1 -> http://host/api/v2
+const apiV2BaseUrl = apiBaseUrl.replace(/\/api\/v1$/, '/api/v2');
+
 const REQUEST_TIMEOUT_MS = parseInt(import.meta.env.VITE_REQUEST_TIMEOUT_MS || '120000', 10);
 const HEAVY_TIMEOUT_MS = parseInt(import.meta.env.VITE_HEAVY_TIMEOUT_MS || '900000', 10);
 
@@ -89,17 +92,25 @@ export const getDocument = withCache(
 );
 
 export const verifyDocument = (documentId, notes) => {
-  return api.post(`/documents/${documentId}/verify`, { notes });
+  return api.post(`/documents/${documentId}/verify`, { notes }).then(result => {
+    invalidateCache.document(documentId);
+    invalidateCache.documents();
+    return result;
+  });
 };
 
 export const addClinicalNote = (documentId, note) => {
-  return api.post(`/documents/${documentId}/notes`, { note });
+  return api.post(`/documents/${documentId}/notes`, { note }).then(result => {
+    invalidateCache.document(documentId);
+    return result;
+  });
 };
 
 export const shareDocument = (documentId, doctorId) => {
   return api.post(`/patient/documents/${documentId}/share/${doctorId}`).then(result => {
     // Invalidate shared doctors cache
     apiCache.delete(cacheKeys.sharedDoctors(documentId));
+    invalidateCache.documents();
     return result;
   });
 };
@@ -108,6 +119,7 @@ export const unshareDocument = (documentId, doctorId) => {
   return api.delete(`/patient/documents/${documentId}/share/${doctorId}`).then(result => {
     // Invalidate shared doctors cache
     apiCache.delete(cacheKeys.sharedDoctors(documentId));
+    invalidateCache.documents();
     return result;
   });
 };
@@ -119,7 +131,11 @@ export const getSharedDoctors = withCache(
 );
 
 export const archiveDocument = (documentId) => {
-  return api.post(`/documents/${documentId}/archive`);
+  return api.post(`/documents/${documentId}/archive`).then(result => {
+    invalidateCache.document(documentId);
+    invalidateCache.documents();
+    return result;
+  });
 };
 
 export const analyzeDocument = (documentId) => {
@@ -151,6 +167,55 @@ export const linkDoctor = (accessCode) => {
     invalidateCache.linkedDoctors();
     return result;
   });
+};
+
+// Lab reports API (v2 pipeline + listing for web parity). v2 lives on a
+// separate axios instance so cached v1 keys and interceptors stay unchanged.
+const apiV2 = axios.create({
+  baseURL: apiV2BaseUrl,
+  timeout: REQUEST_TIMEOUT_MS,
+});
+
+apiV2.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      config.headers['Authorization'] = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+
+export const uploadLabReport = (file, source = 'web', onUploadProgress) => {
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('source', source);
+  return apiV2.post('/lab-reports/upload', formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+    timeout: HEAVY_TIMEOUT_MS,
+    onUploadProgress,
+  });
+};
+
+export const getLabReports = () => {
+  return apiV2.get('/lab-reports');
+};
+
+export const getLabReport = (labReportId) => {
+  return apiV2.get(`/lab-reports/${labReportId}`);
+};
+
+export const deleteLabReport = (labReportId) => {
+  return apiV2.delete(`/lab-reports/${labReportId}`);
+};
+
+export const getPatientLabReports = (patientId) => {
+  return apiV2.get(`/lab-reports/patient/${patientId}`);
 };
 
 // Export cache utilities for use in components

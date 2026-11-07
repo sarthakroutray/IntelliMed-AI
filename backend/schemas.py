@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, ConfigDict
 from typing import Optional, Dict, Any
 from datetime import datetime
 from prisma_client.enums import role_enum as Role
@@ -13,13 +13,12 @@ class UserCreate(BaseModel):
 
 
 class UserInDB(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     email: EmailStr
     name: Optional[str] = None
     role: Role
-
-    class Config:
-        from_attributes = True
 
 class User(UserInDB):
     pass
@@ -34,13 +33,12 @@ class TokenData(BaseModel):
 
 
 class DocumentInfo(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     filename: str
-    upload_timestamp: datetime
-    ai_analysis: Optional[Dict[str, Any]]
-
-    class Config:
-        from_attributes = True
+    upload_timestamp: Optional[datetime] = None
+    ai_analysis: Optional[Dict[str, Any]] = None
 
 class DocumentDetail(DocumentInfo):
     file_url: str

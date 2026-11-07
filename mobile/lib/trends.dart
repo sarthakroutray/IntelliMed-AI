@@ -268,6 +268,8 @@ Map<String, dynamic>? decodeEnvelope(String? json) {
 DateTime? parseSqliteUtc(String raw) {
   if (raw.isEmpty) return null;
   final normalized = raw.contains('T') ? raw : raw.replaceFirst(' ', 'T');
-  final zoned = normalized.endsWith('Z') ? normalized : '${normalized}Z';
+  final hasZone = normalized.endsWith('Z') ||
+      RegExp(r'[+-]\d{2}(?::?\d{2})?$').hasMatch(normalized);
+  final zoned = hasZone ? normalized : '${normalized}Z';
   return DateTime.tryParse(zoned)?.toLocal();
 }

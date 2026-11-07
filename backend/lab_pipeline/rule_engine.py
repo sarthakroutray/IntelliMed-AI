@@ -715,16 +715,11 @@ def detect_patterns(document: dict, rules: list) -> dict:
 
                 # Otherwise search unused tests in pool
                 if matched is None:
-                    matched = next(
-                        (
-                            t for idx, t in enumerate(test_pool)
-                            if idx not in used_test_identities and _test_matches_condition(t, cond, all_tests_map)
-                        ),
-                        None,
-                    )
-                    if matched is not None:
-                        idx = test_pool.index(matched)
-                        used_test_identities.add(idx)
+                    for idx, t in enumerate(test_pool):
+                        if idx not in used_test_identities and _test_matches_condition(t, cond, all_tests_map):
+                            matched = t
+                            used_test_identities.add(idx)
+                            break
 
                 if matched is not None:
                     satisfied_count += 1

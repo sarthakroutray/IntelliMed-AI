@@ -24,7 +24,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/token")
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a password against a hashed password."""
     return bcrypt.checkpw(
-        plain_password.encode('utf-8'),
+        plain_password.encode('utf-8')[:72],
         hashed_password.encode('utf-8')
     )
 
@@ -63,6 +63,9 @@ def invalidate_cached_user(*, email: Optional[str] = None, user_id: Optional[int
     invalidate_user_cache(email=email, user_id=user_id)
 
 
+ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "admin@intellimed.ai")
+
+
 async def get_current_user(
     db: Prisma = Depends(get_db), token: str = Depends(oauth2_scheme)
 ):
@@ -80,7 +83,7 @@ async def get_current_user(
     except JWTError:
         raise credentials_exception
 
-    if email == "admin@intellimed.ai" and payload.get("role") == "admin":
+    if email == ADMIN_EMAIL and payload.get("role") == "admin":
         return schemas.User(
             id=0,
             email=email,

@@ -92,6 +92,12 @@ class _ReportsScreenState extends State<ReportsScreen> {
         _error = e.message;
         _loading = false;
       });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = '$e';
+        _loading = false;
+      });
     }
   }
 
@@ -169,35 +175,46 @@ class _ReportsScreenState extends State<ReportsScreen> {
           // keeps the existing list on screen instead of blanking it.
           if (_loading && _reports.isEmpty)
             const LoadingView(message: 'Loading reports…')
-          else if (_error != null)
+          else if (_error != null && _reports.isEmpty)
             ErrorView(message: _error!, onRetry: _load)
-          else if (_reports.isEmpty)
-            EmptyState(
-              icon: Icons.description_outlined,
-              title: 'No lab reports yet',
-              message:
-                  'Reports appear here once a lab report has been processed or '
-                  'a capture from this device has synced.',
-              actionLabel: 'Refresh',
-              onAction: _load,
-            )
-          else
-            for (final report in _reports)
+          else ...[
+            if (_error != null)
               Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: _ReportTile(
-                  report: report,
-                  onDelete: () => _delete(report),
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => ReportDetailScreen(
-                        repository: widget.repository,
-                        summary: report,
+                padding: const EdgeInsets.only(bottom: 12),
+                child: InlineBanner(
+                  tone: BannerTone.warning,
+                  icon: Icons.warning_amber_rounded,
+                  message: 'Refresh failed: $_error',
+                ),
+              ),
+            if (_reports.isEmpty)
+              EmptyState(
+                icon: Icons.description_outlined,
+                title: 'No lab reports yet',
+                message:
+                    'Reports appear here once a lab report has been processed or '
+                    'a capture from this device has synced.',
+                actionLabel: 'Refresh',
+                onAction: _load,
+              )
+            else
+              for (final report in _reports)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: _ReportTile(
+                    report: report,
+                    onDelete: () => _delete(report),
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => ReportDetailScreen(
+                          repository: widget.repository,
+                          summary: report,
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
+          ],
           const SizedBox(height: 12),
           Text(
             patternListCaption,

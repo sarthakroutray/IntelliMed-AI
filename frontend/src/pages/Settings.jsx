@@ -69,12 +69,24 @@ const Settings = () => {
   };
 
   const handleDeleteAccount = () => {
+    setShowDeleteConfirm(true);
+  };
+
+  const confirmDeleteAccount = async () => {
     setDeletePending(true);
-    setNotice('Account deletion requested. You will be logged out.');
-    setNoticeType('success');
-    logout();
-    setShowDeleteConfirm(false);
-    setDeletePending(false);
+    setNotice('');
+    try {
+      await api.delete('/account');
+      setNotice('Account deleted. You will be logged out.');
+      setNoticeType('success');
+      setTimeout(() => logout(), 800);
+    } catch (err) {
+      setNotice('Failed to delete account: ' + (err.response?.data?.detail || 'Unknown error'));
+      setNoticeType('error');
+    } finally {
+      setDeletePending(false);
+      setShowDeleteConfirm(false);
+    }
   };
 
   const toggleClasses = (active) =>
@@ -345,7 +357,7 @@ const Settings = () => {
         cancelLabel="Cancel"
         danger
         busy={deletePending}
-        onConfirm={handleDeleteAccount}
+        onConfirm={confirmDeleteAccount}
         onCancel={() => setShowDeleteConfirm(false)}
       />
     </div>

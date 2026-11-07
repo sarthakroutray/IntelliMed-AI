@@ -184,6 +184,7 @@ async def upload_lab_report(
             ),
         )
 
+    tmp_path: str | None = None
     try:
         file_bytes = await file.read()
         max_bytes = MAX_UPLOAD_SIZE_MB * 1024 * 1024
@@ -231,6 +232,12 @@ async def upload_lab_report(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f'Lab report processing failed: {str(e)}',
         )
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
 
 
 @router.get('/lab-reports/patient/{patient_id}')
@@ -240,18 +247,19 @@ async def get_patient_lab_reports_for_doctor(
     current_user: User = Depends(get_current_user),
 ):
     """Doctor view: all lab reports for a linked patient."""
-    if current_user.role != 'doctor':
+    if current_user.role != 'doctor' and current_user.role != 'admin':
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail='Only doctors can view patient lab reports',
         )
 
-    has_access = await doctor_has_patient_access(db, current_user.id, patient_id)
-    if not has_access:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You do not have access to this patient's lab reports",
-        )
+    if current_user.role != 'admin':
+        has_access = await doctor_has_patient_access(db, current_user.id, patient_id)
+        if not has_access:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have access to this patient's lab reports",
+            )
 
     reports = await db.labreport.find_many(where={'patient_id': patient_id})
     file_urls = await asyncio.gather(*[_safe_file_url(r.file_path) for r in reports])
@@ -314,13 +322,19 @@ async def get_lab_report(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You don't have access to this lab report",
             )
-    elif current_user.role == 'doctor':
-        has_access = await doctor_has_patient_access(db, current_user.id, report.patient_id)
-        if not has_access:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You don't have access to this lab report",
-            )
+    elif current_user.role in ('doctor', 'admin'):
+        if current_user.role != 'admin':
+            has_access = await doctor_has_patient_access(db, current_user.id, report.patient_id)
+            if not has_access:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="You don't have access to this lab report",
+                )
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have access to this lab report",
+        )
 
     file_url = await _safe_file_url(report.file_path)
 

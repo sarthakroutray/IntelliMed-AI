@@ -64,19 +64,24 @@ class V2Sync {
     required String baseUrl,
     ResultStore? store,
     http.Client? client,
-    this.token,
+    String? token,
+    this.tokenProvider,
     TokenRefresher? onUnauthorized,
     this.requestTimeout = const Duration(seconds: 60),
   }) : baseUrl = baseUrl,
        _store = store,
        _client = client ?? http.Client(),
+       _token = token,
        _onUnauthorized = onUnauthorized;
 
   final String baseUrl;
   final ResultStore? _store;
   final http.Client _client;
   final TokenRefresher? _onUnauthorized;
-  String? token;
+  String? get token => tokenProvider?.call() ?? _token;
+  set token(String? val) => _token = val;
+  String? _token;
+  final String? Function()? tokenProvider;
 
   String get _v2 => baseUrl.replaceAll(RegExp(r'/+$'), '');
 
@@ -133,7 +138,7 @@ class V2Sync {
     required Map<String, dynamic> envelope,
     String? token,
   }) async {
-    final effectiveToken = token ?? this.token;
+    final effectiveToken = token ?? tokenProvider?.call() ?? this.token;
     final payload = {...envelope, 'source': 'app'};
     // Structured app results ride the v2 router family; endpoint mapping is
     // centralized here (POST /api/v2/lab-reports/upload-structured).
@@ -180,7 +185,7 @@ class V2Sync {
   /// Retry every locally queued row. Rows that still fail stay `failed`
   /// with the latest error; rows that sync become `synced`.
   Future<SyncReport> retryQueued({String? token}) async {
-    final effectiveToken = token ?? this.token;
+    final effectiveToken = token ?? tokenProvider?.call() ?? this.token;
     final store = await _results();
     final rows = await store.pending();
     var synced = 0;
@@ -233,7 +238,7 @@ class V2Sync {
   static Future<bool> isOnline() async {
     try {
       final status = await _connectivity.checkConnectivity();
-      return !status.contains(ConnectivityResult.none);
+      return status.any((r) => r != ConnectivityResult.none);
     } catch (_) {
       return true;
     }
@@ -249,7 +254,7 @@ class V2Sync {
     var wasOnline = true;
     var running = false;
     return _connectivity.onConnectivityChanged.listen((status) async {
-      final online = !status.contains(ConnectivityResult.none);
+      final online = status.any((r) => r != ConnectivityResult.none);
       final reconnected = online && !wasOnline;
       wasOnline = online;
       if (!reconnected || running) return;

@@ -87,7 +87,8 @@ void main() {
         final fixture = '$_fixtureDir/$name.stage1.json';
         final ProcessResult result;
         try {
-          result = Process.runSync('python', [script, fixture]);
+          final pythonBin = Platform.isWindows ? 'python.exe' : 'python';
+          result = Process.runSync(pythonBin, [script, fixture], runInShell: true);
         } on ProcessException catch (e) {
           markTestSkipped('python interpreter not available: ${e.message}');
           return;

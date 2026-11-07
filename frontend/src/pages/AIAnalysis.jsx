@@ -91,9 +91,14 @@ const AIAnalysis = () => {
       setDocuments(docs =>
         docs.map(doc =>
           doc.id === docId
-            ? { ...doc, ai_analysis: JSON.stringify(structuredAnalysis) }
+            ? { ...doc, ai_analysis: analysisResult }
             : doc
         )
+      );
+      setSelectedDoc(current =>
+        current && current.id === docId
+          ? { ...current, ai_analysis: analysisResult }
+          : current
       );
     } catch (err) {
       console.error('AI analysis failed', err);

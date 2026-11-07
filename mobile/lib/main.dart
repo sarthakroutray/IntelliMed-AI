@@ -118,6 +118,7 @@ Future<void> main() async {
   final sync = V2Sync(
     baseUrl: apiBaseUrl,
     token: auth.token,
+    tokenProvider: () => auth.token,
     // One silent re-auth when the JWT lapses; V2Sync adopts the new token.
     onUnauthorized: auth.refresh,
     client: httpClient,

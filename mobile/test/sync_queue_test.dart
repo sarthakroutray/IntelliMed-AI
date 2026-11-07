@@ -75,6 +75,17 @@ void main() {
     expect(authHeader, 'Bearer jwt-test-token-123');
   });
 
+  test('V2Sync dynamically tracks tokenProvider updates', () async {
+    var dynamicToken = 'initial-token';
+    final sync = V2Sync(
+      baseUrl: 'http://localhost:8000',
+      tokenProvider: () => dynamicToken,
+    );
+    expect(sync.token, 'initial-token');
+    dynamicToken = 'updated-token';
+    expect(sync.token, 'updated-token');
+  });
+
   test('transport failure surfaces as OfflineException (stays retryable)',
       () async {
     final client = MockClient(

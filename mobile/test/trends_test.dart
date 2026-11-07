@@ -275,6 +275,25 @@ void main() {
       expect(parseSqliteUtc(''), isNull);
       expect(parseSqliteUtc('not a date'), isNull);
     });
+
+    test('preserves timezone offset and Z in ISO timestamps', () {
+      expect(
+        parseSqliteUtc('2026-01-02T10:00:00Z')?.toUtc(),
+        DateTime.utc(2026, 1, 2, 10),
+      );
+      expect(
+        parseSqliteUtc('2026-01-02T10:00:00+00:00')?.toUtc(),
+        DateTime.utc(2026, 1, 2, 10),
+      );
+      expect(
+        parseSqliteUtc('2026-01-02T15:30:00+05:30')?.toUtc(),
+        DateTime.utc(2026, 1, 2, 10),
+      );
+      expect(
+        parseSqliteUtc('2026-01-02 06:00:00-04:00')?.toUtc(),
+        DateTime.utc(2026, 1, 2, 10),
+      );
+    });
   });
 
   group('wording discipline', () {

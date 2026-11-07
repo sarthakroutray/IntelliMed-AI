@@ -137,3 +137,53 @@ async def doctor_has_patient_access(db: Any, doctor_id: int, patient_id: int) ->
     is_allowed = link is not None
     set_cached_doctor_patient_access(doctor_id, patient_id, is_allowed)
     return is_allowed
+
+
+async def clear_cache_namespace(namespace: str) -> None:
+    """Clear FastAPICache entries for a namespace, properly accounting for prefix."""
+    try:
+        from fastapi_cache import FastAPICache
+        backend = FastAPICache.get_backend()
+        if backend is None:
+            return
+        prefix = FastAPICache.get_prefix()
+        full_ns = f"{prefix}:{namespace}" if prefix else namespace
+        try:
+            await backend.clear(namespace=full_ns)
+        except Exception:
+            pass
+        if prefix:
+            try:
+                await backend.clear(namespace=namespace)
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+
+async def clear_cache_key(namespace: str, suffix: str) -> None:
+    """Clear a specific key in FastAPICache, properly accounting for prefix."""
+    try:
+        from fastapi_cache import FastAPICache
+        backend = FastAPICache.get_backend()
+        if backend is None:
+            return
+        prefix = FastAPICache.get_prefix()
+        candidate_keys = []
+        if prefix:
+            candidate_keys.append(f"{prefix}:{namespace}:{suffix}")
+        candidate_keys.append(f"{namespace}:{suffix}")
+
+        for k in candidate_keys:
+            try:
+                if hasattr(backend, "_store") and isinstance(backend._store, dict):
+                    backend._store.pop(k, None)
+                else:
+                    await backend.clear(key=k)
+            except KeyError:
+                pass
+            except Exception:
+                pass
+    except Exception:
+        pass
+

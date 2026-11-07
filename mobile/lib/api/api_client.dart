@@ -124,20 +124,26 @@ class ApiClient {
     Duration? timeout,
   }) async {
     final uri = Uri.parse('$_root$path');
-    final request = http.MultipartRequest('POST', uri);
-    final token = tokenProvider?.call();
-    if (token != null && token.isNotEmpty) {
-      request.headers['Authorization'] = 'Bearer $token';
+    http.MultipartRequest buildRequest(String? token) {
+      final request = http.MultipartRequest('POST', uri);
+      if (token != null && token.isNotEmpty) {
+        request.headers['Authorization'] = 'Bearer $token';
+      }
+      if (fields != null) request.fields.addAll(fields);
+      request.files.add(
+        http.MultipartFile.fromBytes(
+          field,
+          bytes,
+          filename: filename,
+          contentType:
+              contentType == null ? null : _parseMediaType(contentType),
+        ),
+      );
+      return request;
     }
-    if (fields != null) request.fields.addAll(fields);
-    request.files.add(
-      http.MultipartFile.fromBytes(
-        field,
-        bytes,
-        filename: filename,
-        contentType: contentType == null ? null : _parseMediaType(contentType),
-      ),
-    );
+
+    final token = tokenProvider?.call();
+    final request = buildRequest(token);
 
     http.Response response;
     try {
@@ -157,6 +163,31 @@ class ApiClient {
         'Cannot reach the backend at $baseUrl. Check your connection.',
         uri: uri,
       );
+    }
+
+    if (response.statusCode == 401 && onUnauthorized != null) {
+      final fresh = await _refresh();
+      if (fresh != null && fresh.isNotEmpty) {
+        final replayRequest = buildRequest(fresh);
+        try {
+          final streamed = await _client
+              .send(replayRequest)
+              .timeout(timeout ?? heavyTimeout);
+          response = await http.Response.fromStream(streamed);
+        } on TimeoutException {
+          throw ApiException(
+            ApiErrorKind.offline,
+            'The server took too long to respond.',
+            uri: uri,
+          );
+        } catch (_) {
+          throw ApiException(
+            ApiErrorKind.offline,
+            'Cannot reach the backend at $baseUrl. Check your connection.',
+            uri: uri,
+          );
+        }
+      }
     }
 
     return _handle(uri, response);

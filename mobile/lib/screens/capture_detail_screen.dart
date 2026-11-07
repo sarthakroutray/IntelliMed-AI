@@ -241,11 +241,15 @@ class _CaptureDetailScreenState extends State<CaptureDetailScreen> {
     if (!confirmed) return;
     final store = await ResultStore.instance();
     await store.delete(widget.rowId);
-    // The persisted source is dead weight once its only row is gone. Safe
-    // here because this row is being deleted outright — unlike the re-run
-    // path, where the new row shares the same file.
+    // The persisted source is dead weight once all rows pointing to it are gone.
     if (row != null) {
-      await PageSource.removePersisted('${row['local_path']}');
+      final localPath = row['local_path'] as String?;
+      if (localPath != null && localPath.isNotEmpty) {
+        final remaining = await store.byPath(localPath);
+        if (remaining.isEmpty) {
+          await PageSource.removePersisted(localPath);
+        }
+      }
     }
     widget.onChanged?.call();
     if (mounted) Navigator.of(context).pop();

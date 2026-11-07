@@ -62,6 +62,12 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
         _error = e.message;
         _loading = false;
       });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = '$e';
+        _loading = false;
+      });
     }
   }
 

@@ -222,5 +222,31 @@ void main() {
         ),
       );
     });
+
+    test('postMultipart refreshes on 401 and replays with fresh token', () async {
+      final tokens = <String?>[];
+      var calls = 0;
+      final client = _client(
+        MockClient((request) async {
+          tokens.add(request.headers['Authorization']);
+          calls++;
+          if (calls == 1) return http.Response('{}', 401);
+          return http.Response(jsonEncode({'id': 42}), 200);
+        }),
+        token: () => 'stale',
+        refresh: () async => 'fresh',
+      );
+
+      final decoded = await client.postMultipart(
+        '/api/v2/lab-reports/upload',
+        field: 'file',
+        filename: 'report.pdf',
+        bytes: [1, 2, 3],
+      );
+      expect((decoded as Map)['id'], 42);
+      expect(calls, 2);
+      expect(tokens.first, 'Bearer stale');
+      expect(tokens.last, 'Bearer fresh');
+    });
   });
 }

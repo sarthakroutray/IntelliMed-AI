@@ -120,6 +120,12 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
         _error = e.message;
         _loading = false;
       });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = '$e';
+        _loading = false;
+      });
     }
   }
 
@@ -441,42 +447,53 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
           // keeps the existing list on screen instead of blanking it.
           if (_loading && _documents.isEmpty)
             const LoadingView(message: 'Loading documents…')
-          else if (_error != null)
+          else if (_error != null && _documents.isEmpty)
             ErrorView(message: _error!, onRetry: _load)
-          else if (visible.isEmpty)
-            EmptyState(
-              icon: Icons.folder_outlined,
-              title: _documents.isEmpty
-                  ? 'No documents yet'
-                  : 'Nothing matches',
-              message: _documents.isEmpty
-                  ? 'Upload a medical document to store it and run AI analysis.'
-                  : 'Try a different search or filter.',
-            )
-          else
-            for (final doc in visible)
+          else ...[
+            if (_error != null)
               Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: _DocumentTile(
-                  doc: doc,
-                  busy: _busy,
-                  onTap: () async {
-                    await Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => DocumentDetailScreen(
-                          repository: widget.repository,
-                          documentId: doc.id,
-                          filename: doc.filename,
-                        ),
-                      ),
-                    );
-                    await _load();
-                    _notifyChanged();
-                  },
-                  onAnalyze: () => _analyze(doc),
-                  onDelete: () => _delete(doc),
+                padding: const EdgeInsets.only(bottom: 12),
+                child: InlineBanner(
+                  tone: BannerTone.warning,
+                  icon: Icons.warning_amber_rounded,
+                  message: 'Refresh failed: $_error',
                 ),
               ),
+            if (visible.isEmpty)
+              EmptyState(
+                icon: Icons.folder_outlined,
+                title: _documents.isEmpty
+                    ? 'No documents yet'
+                    : 'Nothing matches',
+                message: _documents.isEmpty
+                    ? 'Upload a medical document to store it and run AI analysis.'
+                    : 'Try a different search or filter.',
+              )
+            else
+              for (final doc in visible)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: _DocumentTile(
+                    doc: doc,
+                    busy: _busy,
+                    onTap: () async {
+                      await Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => DocumentDetailScreen(
+                            repository: widget.repository,
+                            documentId: doc.id,
+                            filename: doc.filename,
+                          ),
+                        ),
+                      );
+                      await _load();
+                      _notifyChanged();
+                    },
+                    onAnalyze: () => _analyze(doc),
+                    onDelete: () => _delete(doc),
+                  ),
+                ),
+          ],
           const SizedBox(height: 12),
           Text(
             'Analysis is assistive context for review, not a diagnosis.',
@@ -562,8 +579,9 @@ class _DocumentTile extends StatelessWidget {
   static IconData _iconFor(DocumentSummary doc) {
     final name = doc.filename.toLowerCase();
     if (name.endsWith('.pdf')) return Icons.picture_as_pdf_outlined;
-    if (doc.detectedType == 'xray') return Icons.image_outlined;
-    if (doc.detectedType == 'prescription') return Icons.medication_outlined;
+    final type = doc.detectedType?.trim().toLowerCase();
+    if (type == 'xray') return Icons.image_outlined;
+    if (type == 'prescription') return Icons.medication_outlined;
     return Icons.description_outlined;
   }
 }

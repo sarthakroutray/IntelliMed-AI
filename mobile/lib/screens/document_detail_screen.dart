@@ -78,6 +78,12 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
         _error = _local == null ? e.message : null;
         _loading = false;
       });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = _local == null ? '$e' : null;
+        _loading = false;
+      });
     }
   }
 

@@ -2,11 +2,21 @@ import asyncio
 import math
 import os
 import re
+import sys
 import traceback
 from pathlib import Path
 from functools import lru_cache
 from threading import Lock
 from tempfile import TemporaryDirectory
+
+if sys.platform == "win32":
+    try:
+        if hasattr(sys.stdout, "reconfigure"):
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        if hasattr(sys.stderr, "reconfigure"):
+            sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
 
 # Try importing AI libraries, handle missing dependencies gracefully
 try:
@@ -1033,15 +1043,15 @@ def _run_regex_medical_extraction(text: str) -> dict:
             if dosage_match:
                 prescription["dosage"] = dosage_match.group(0)
 
-            # Find frequency in window
-            for term in FREQUENCY_TERMS:
-                if term in window:
+            # Find frequency in window (match longer terms first with word boundary)
+            for term in sorted(FREQUENCY_TERMS, key=len, reverse=True):
+                if _FREQUENCY_PATTERNS[term].search(window):
                     prescription["frequency"] = term
                     break
 
-            # Find route in window
-            for term in ROUTE_TERMS:
-                if term in window:
+            # Find route in window (match longer terms first with word boundary)
+            for term in sorted(ROUTE_TERMS, key=len, reverse=True):
+                if _ROUTE_PATTERNS[term].search(window):
                     prescription["route"] = term
                     break
 

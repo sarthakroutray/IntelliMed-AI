@@ -22,23 +22,21 @@ const AllDocuments = () => {
         const patientsResponse = await api.get('/doctor/patients');
         const patients = patientsResponse.data;
         
-        const allDocs = [];
-        for (const patient of patients) {
-          try {
-            const docsResponse = await api.get(`/doctor/patients/${patient.id}/documents`);
-            const docs = docsResponse.data.map(doc => ({
+        const docPromises = patients.map(patient =>
+          api.get(`/doctor/patients/${patient.id}/documents`)
+            .then(docsResponse => docsResponse.data.map(doc => ({
               ...doc,
               patientName: patient.email?.split('@')[0],
               patientEmail: patient.email,
               patientId: patient.id
-            }));
-            allDocs.push(...docs);
-          } catch (err) {
-            console.error(`Failed to fetch documents for patient ${patient.id}`, err);
-          }
-        }
-        
-        setDocuments(allDocs);
+            })))
+            .catch(err => {
+              console.error(`Failed to fetch documents for patient ${patient.id}`, err);
+              return [];
+            })
+        );
+        const results = await Promise.all(docPromises);
+        setDocuments(results.flat());
       } catch (err) {
         console.error('Failed to fetch documents', err);
       } finally {

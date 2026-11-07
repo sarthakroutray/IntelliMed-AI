@@ -27,6 +27,7 @@ const PatientDashboard = () => {
   const [sharedDoctors, setSharedDoctors] = useState({});
   const [toast, setToast] = useState(null);
   const [pendingDelete, setPendingDelete] = useState(null);
+  const [togglingShare, setTogglingShare] = useState(null);
 
   const handleAnalyze = async (docId) => {
     setAnalyzing(docId);
@@ -85,7 +86,7 @@ const PatientDashboard = () => {
       if (err.response?.status === 413) {
         setError(`File is too large. Maximum allowed size is ${MAX_FILE_SIZE_MB} MB.`);
       } else if (err.code === 'ECONNABORTED') {
-        setError('The upload timed out before the server finished processing. Please try again — large scanned documents can take a few minutes to analyze.');
+        setError('The upload timed out. Please check your connection and try again with a smaller file.');
       } else if (err.response?.data?.detail) {
         setError(err.response.data.detail);
       } else {
@@ -158,8 +159,11 @@ const PatientDashboard = () => {
     const matchesSearch = doc.filename?.toLowerCase().includes(searchQuery.toLowerCase());
     
     // Tab filter (all, shared, private)
-    // Note: Currently showing all as private since we don't have shared_with field
-    const matchesTab = activeTab === 'all' || activeTab === 'private';
+    const isShared = Boolean(sharedDoctors[doc.id] && sharedDoctors[doc.id].length > 0);
+    const matchesTab = 
+      activeTab === 'all' || 
+      (activeTab === 'shared' && isShared) || 
+      (activeTab === 'private' && !isShared);
     
     return matchesSearch && matchesTab;
   });
@@ -203,6 +207,7 @@ const PatientDashboard = () => {
   };
 
   const handleToggleShare = async (docId, doctorId, isShared) => {
+    setTogglingShare(`${docId}:${doctorId}`);
     try {
       if (isShared) {
         await unshareDocument(docId, doctorId);
@@ -217,7 +222,15 @@ const PatientDashboard = () => {
       }));
     } catch (err) {
       console.error('Error toggling share:', err);
-      setToast({ type: 'error', message: 'Failed to update document sharing' });
+      const detail = err.response?.data?.detail;
+      const message = typeof detail === 'string'
+        ? detail
+        : Array.isArray(detail)
+          ? detail.map(d => d?.msg || JSON.stringify(d)).join('; ')
+          : detail?.message || detail?.msg || 'Failed to update document sharing';
+      setToast({ type: 'error', message });
+    } finally {
+      setTogglingShare(null);
     }
   };
 
@@ -280,7 +293,7 @@ const PatientDashboard = () => {
           </div>
           <h3 className="text-lg font-bold text-ink mb-2">
             {uploading
-              ? (uploadProgress < 100 ? `Uploading... ${uploadProgress}%` : 'Analyzing document...')
+              ? (uploadProgress < 100 ? `Uploading... ${uploadProgress}%` : 'Finishing upload...')
               : 'Upload New Medical Record'}
           </h3>
           {uploading && (
@@ -427,7 +440,7 @@ const PatientDashboard = () => {
                               </button>
                               {doc.ai_analysis ? (
                                 <button type="button"
-                                  onClick={() => navigate('/patient-dashboard/ai-analysis')}
+                                  onClick={() => navigate(`/document/${doc.id}`)}
                                   className={`${ui.btn} ${ui.btnSecondary} ${ui.btnSm}`}
                                 >
                                   <Icon name="visibility" className="text-[16px]" />
@@ -519,6 +532,7 @@ const PatientDashboard = () => {
             <div className="space-y-3 max-h-96 overflow-y-auto">
               {linkedDoctors.map(doctor => {
                 const isSharedWithDoctor = sharedDoctors[selectedDocumentForShare]?.some(sd => sd.doctor_id === doctor.id) || false;
+                const busy = togglingShare === `${selectedDocumentForShare}:${doctor.id}`;
                 return (
                   <div key={doctor.id} className="flex items-center justify-between p-3 bg-surface-2 rounded-lg">
                     <div>
@@ -527,9 +541,10 @@ const PatientDashboard = () => {
                     </div>
                     <button type="button"
                       onClick={() => handleToggleShare(selectedDocumentForShare, doctor.id, isSharedWithDoctor)}
-                      className={`${ui.btn} ${ui.btnSm} ${isSharedWithDoctor ? ui.btnSoftDanger : 'bg-success/10 hover:bg-success/20 text-success px-3 py-1.5'}`}
+                      disabled={busy}
+                      className={`${ui.btn} ${ui.btnSm} ${isSharedWithDoctor ? ui.btnSoftDanger : 'bg-success/10 hover:bg-success/20 text-success px-3 py-1.5'} disabled:opacity-50`}
                     >
-                      {isSharedWithDoctor ? 'Unshare' : 'Share'}
+                      {busy ? 'Saving…' : isSharedWithDoctor ? 'Unshare' : 'Share'}
                     </button>
                   </div>
                 );

@@ -82,6 +82,13 @@ const MedicalDocumentViewer = () => {
   };
 
   const analysis = useMemo(() => document ? parseAIAnalysis(document) : null, [document]);
+  const verification = document ? {
+    verifiedBy: document.verified_by ?? document.verification?.verified_by ?? null,
+    verifiedAt: document.verified_at ?? document.verification?.verified_at ?? null,
+    notes: document.verification_notes ?? document.verification?.notes ?? null,
+  } : null;
+  const clinicalNotes = document ? (document.clinical_notes ?? document.verification?.clinical_notes ?? []) : [];
+  const isArchived = Boolean(document?.archived ?? document?.verification?.archived);
 
   const handleZoomIn = useCallback(() => setZoomLevel(prev => Math.min(prev + 10, 200)), []);
   const handleZoomOut = useCallback(() => setZoomLevel(prev => Math.max(prev - 10, 50)), []);
@@ -90,6 +97,8 @@ const MedicalDocumentViewer = () => {
   const handleVerifyDocument = async () => {
     try {
       await verifyDocument(documentId);
+      const refreshed = await getDocument(documentId);
+      setDocument(refreshed.data);
       setToast({ type: 'success', message: 'Document verified successfully!' });
     } catch (err) {
       setToast({ type: 'error', message: 'Failed to verify document: ' + (err.response?.data?.detail || 'Unknown error') });
@@ -104,6 +113,8 @@ const MedicalDocumentViewer = () => {
     
     try {
       await addClinicalNote(documentId, clinicalNote);
+      const refreshed = await getDocument(documentId);
+      setDocument(refreshed.data);
       setToast({ type: 'success', message: 'Clinical note added successfully!' });
       setClinicalNote('');
       setShowNoteModal(false);
@@ -673,9 +684,32 @@ const MedicalDocumentViewer = () => {
               Verification Status
             </h4>
             <div className="bg-surface-2 rounded-xl p-4">
-              <p className="text-sm text-muted">
-                No verification records yet. Awaiting doctor review.
-              </p>
+              {verification?.verifiedAt || verification?.verifiedBy ? (
+                <div className="text-sm text-body">
+                  <p>
+                    <span className="font-medium">Verified by:</span> {verification.verifiedBy ?? 'Doctor'}
+                  </p>
+                  {verification.verifiedAt && (
+                    <p className="mt-1">
+                      <span className="font-medium">At:</span> {new Date(verification.verifiedAt).toLocaleString()}
+                    </p>
+                  )}
+                  {verification.notes && (
+                    <p className="mt-1">
+                      <span className="font-medium">Notes:</span> {verification.notes}
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <p className="text-sm text-muted">
+                  No verification records yet. Awaiting doctor review.
+                </p>
+              )}
+              {isArchived && (
+                <p className="text-sm text-warning mt-2 font-medium">
+                  This document has been archived.
+                </p>
+              )}
             </div>
           </div>
 
@@ -683,12 +717,26 @@ const MedicalDocumentViewer = () => {
           <div>
             <h4 className="text-sm font-bold text-ink mb-3 flex items-center gap-2">
               <span className="material-symbols-outlined text-info">edit_note</span>
-              Clinical Notes
+              Clinical Notes ({clinicalNotes.length})
             </h4>
             <div className="bg-surface-2 rounded-xl p-4">
-              <p className="text-sm text-muted">
-                No clinical notes added yet.
-              </p>
+              {clinicalNotes.length > 0 ? (
+                <div className="space-y-3">
+                  {clinicalNotes.map((n, idx) => (
+                    <div key={idx} className="text-sm text-body border-b border-line last:border-0 pb-2 last:pb-0">
+                      <p>{n.note || n.text}</p>
+                      <p className="text-xs text-muted mt-1">
+                        {n.added_by || n.author || 'Doctor'}
+                        {n.added_at ? ` • ${new Date(n.added_at).toLocaleString()}` : ''}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted">
+                  No clinical notes added yet.
+                </p>
+              )}
             </div>
           </div>
         </div>

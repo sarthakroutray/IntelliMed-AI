@@ -83,6 +83,8 @@ class _PatientSummaryScreenState extends State<PatientSummaryScreen> {
       documents = results[2] as List<DocumentSummary>;
     } on ApiException {
       // Offline is fine: the on-device records carry the summary.
+    } catch (_) {
+      // Non-API exceptions should not prevent loading on-device records either.
     }
 
     final records = <PatientRecord>[];
@@ -136,7 +138,11 @@ class _PatientSummaryScreenState extends State<PatientSummaryScreen> {
     List<DocumentSummary> documents,
   ) async {
     final targets = documents
-        .where((d) => d.detectedType == 'prescription')
+        .where(
+          (d) =>
+              d.detectedType?.trim().toLowerCase().contains('prescription') ==
+              true,
+        )
         .take(_maxCloudPrescriptions)
         .toList();
     final records = <PatientRecord>[];
@@ -152,6 +158,8 @@ class _PatientSummaryScreenState extends State<PatientSummaryScreen> {
         );
       } on ApiException {
         // Best effort: skip a document that will not load.
+      } catch (_) {
+        // Skip on format or parse error too.
       }
     }
     return records;

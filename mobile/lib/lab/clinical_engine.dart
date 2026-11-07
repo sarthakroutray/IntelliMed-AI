@@ -11,6 +11,7 @@ import 'dart:math' as math;
 
 import '../api/models.dart' show FlaggedPattern, TriggeringTest;
 import 'rule_engine.dart';
+import 'test_names.dart';
 
 /// Representation of a single condition within a clinical pattern rule.
 class ClinicalCondition {
@@ -113,11 +114,20 @@ const standardPanicThresholds = <String, ({double? low, double? high})>{
   'White Blood Cell Count': (low: 2.0, high: 30.0),
   'Fasting Blood Glucose': (low: 50.0, high: 400.0),
   'Random Blood Glucose': (low: 50.0, high: 400.0),
+  'Blood Glucose': (low: 50.0, high: 400.0),
+  'Glucose': (low: 50.0, high: 400.0),
   'Calcium': (low: 6.5, high: 13.0),
   'Corrected Calcium': (low: 6.5, high: 13.0),
   'Serum Creatinine': (low: null, high: 5.0),
+  'Creatinine': (low: null, high: 5.0),
   'Total Bilirubin': (low: null, high: 15.0),
+  'Bilirubin': (low: null, high: 15.0),
   'Triglycerides': (low: null, high: 500.0),
+};
+
+final _panicLookup = <String, ({double? low, double? high})>{
+  for (final entry in standardPanicThresholds.entries)
+    entry.key.toLowerCase(): entry.value,
 };
 
 /// Result of a full Stage 3 on-device annotation pass.
@@ -141,23 +151,67 @@ class LabDocumentAnnotationResult {
 
 LabDocument calculateDerivedIndices(LabDocument document) {
   final patientContext = document.patientContext;
-  final num? ageNum = patientContext?.age;
+  final num? ageNum = patientContext.age;
   final age = ageNum?.toDouble();
-  final sex = (patientContext?.sex ?? '').trim().toLowerCase();
+  final sex = (patientContext.sex ?? '').trim().toLowerCase();
 
-  // Index existing tests by lowercase canonical name
+  // Index existing tests by lowercase canonical, raw, and alias names
   final testLookup = <String, LabTest>{};
   for (final panel in document.panels) {
     for (final test in panel.tests) {
       if (test.value != null) {
-        testLookup[test.testName.trim().toLowerCase()] = test;
+        final tName = test.testName.trim().toLowerCase();
+        if (tName.isNotEmpty) testLookup[tName] = test;
+        final rawName = test.rawTestName.trim().toLowerCase();
+        if (rawName.isNotEmpty) testLookup[rawName] = test;
+        final norm = normalizeTestNameOrNull(test.rawTestName) ??
+            normalizeTestNameOrNull(test.testName);
+        if (norm != null) {
+          testLookup[norm.trim().toLowerCase()] = test;
+        }
       }
     }
   }
 
-  double? val(String canonical) => testLookup[canonical.toLowerCase()]?.value;
-  Map<String, dynamic>? bbox(String canonical) =>
-      testLookup[canonical.toLowerCase()]?.sourceBbox;
+  const derivedSynonyms = <String, List<String>>{
+    'serum creatinine': ['creatinine', 's creatinine', 's. creatinine', 'creat'],
+    'sodium': ['serum sodium', 'na', 'na+'],
+    'chloride': ['serum chloride', 'cl', 'cl-'],
+    'bicarbonate': ['serum bicarbonate', 'hco3', 'bicarb'],
+    'aspartate aminotransferase (ast)': ['aspartate aminotransferase', 'ast', 'sgot'],
+    'alanine aminotransferase (alt)': ['alanine aminotransferase', 'alt', 'sgpt'],
+    'blood urea nitrogen': ['bun'],
+    'blood urea': ['urea'],
+    'calcium': ['serum calcium', 'ca', 'total calcium'],
+    'serum albumin': ['albumin', 'alb'],
+    'serum globulin': ['globulin'],
+    'total protein': ['protein, total', 'protein', 'total proteins'],
+    'total cholesterol': ['cholesterol', 'cholesterol total'],
+    'hdl cholesterol': ['hdl'],
+    'mean corpuscular volume': ['mcv'],
+    'red blood cell count': ['rbc', 'rbc count', 'red blood cells'],
+    'serum iron': ['iron', 'fe'],
+    'total iron binding capacity': ['tibc'],
+    'neutrophils': ['neutrophil', 'neut', 'neuts'],
+    'lymphocytes': ['lymphocyte', 'lymph', 'lymp'],
+  };
+
+  LabTest? findTest(String canonical) {
+    final key = canonical.toLowerCase();
+    final direct = testLookup[key];
+    if (direct != null) return direct;
+    final alts = derivedSynonyms[key];
+    if (alts != null) {
+      for (final alt in alts) {
+        final t = testLookup[alt];
+        if (t != null) return t;
+      }
+    }
+    return null;
+  }
+
+  double? val(String canonical) => findTest(canonical)?.value;
+  Map<String, dynamic>? bbox(String canonical) => findTest(canonical)?.sourceBbox;
 
   final derived = <LabTest>[];
 
@@ -428,15 +482,35 @@ List<String> verifyArithmeticConsistency(LabDocument document) {
   for (final panel in document.panels) {
     for (final test in panel.tests) {
       if (test.value != null) {
-        testLookup[test.testName.trim().toLowerCase()] = test.value!;
+        final tName = test.testName.trim().toLowerCase();
+        if (tName.isNotEmpty) testLookup[tName] = test.value!;
+        final rawName = test.rawTestName.trim().toLowerCase();
+        if (rawName.isNotEmpty && !testLookup.containsKey(rawName)) {
+          testLookup[rawName] = test.value!;
+        }
+        final norm = normalizeTestNameOrNull(test.rawTestName) ??
+            normalizeTestNameOrNull(test.testName);
+        if (norm != null && !testLookup.containsKey(norm.trim().toLowerCase())) {
+          testLookup[norm.trim().toLowerCase()] = test.value!;
+        }
       }
     }
   }
 
+  double? lookupVal(String key, [List<String> alts = const []]) {
+    final direct = testLookup[key.toLowerCase()];
+    if (direct != null) return direct;
+    for (final alt in alts) {
+      final v = testLookup[alt.toLowerCase()];
+      if (v != null) return v;
+    }
+    return null;
+  }
+
   // 1. Bilirubin sum: Total ≈ Direct + Indirect
-  final tb = testLookup['total bilirubin'];
-  final db = testLookup['direct bilirubin'];
-  final ib = testLookup['indirect bilirubin'];
+  final tb = lookupVal('total bilirubin', ['bilirubin', 'bilirubin total']);
+  final db = lookupVal('direct bilirubin', ['bilirubin direct']);
+  final ib = lookupVal('indirect bilirubin', ['bilirubin indirect']);
   if (tb != null && db != null && ib != null && tb > 0) {
     final expected = db + ib;
     final diff = (tb - expected).abs();
@@ -448,10 +522,10 @@ List<String> verifyArithmeticConsistency(LabDocument document) {
   }
 
   // 2. Friedewald LDL check
-  final tc = testLookup['total cholesterol'];
-  final hdl = testLookup['hdl cholesterol'];
-  final ldl = testLookup['ldl cholesterol'];
-  final tg = testLookup['triglycerides'];
+  final tc = lookupVal('total cholesterol', ['cholesterol', 'cholesterol total']);
+  final hdl = lookupVal('hdl cholesterol', ['hdl']);
+  final ldl = lookupVal('ldl cholesterol', ['ldl']);
+  final tg = lookupVal('triglycerides', ['tg']);
   if (tc != null && hdl != null && ldl != null && tg != null && tg < 400) {
     final calcLdl = tc - hdl - (tg / 5.0);
     final diff = (ldl - calcLdl).abs();
@@ -463,9 +537,9 @@ List<String> verifyArithmeticConsistency(LabDocument document) {
   }
 
   // 3. MCHC check
-  final hb = testLookup['hemoglobin'];
-  final hct = testLookup['hematocrit'];
-  final mchc = testLookup['mean corpuscular hemoglobin concentration'];
+  final hb = lookupVal('hemoglobin', ['hb', 'hgb']);
+  final hct = lookupVal('hematocrit', ['hct', 'pcv']);
+  final mchc = lookupVal('mean corpuscular hemoglobin concentration', ['mchc']);
   if (hb != null && hct != null && mchc != null && hct > 0) {
     final calcMchc = (hb * 100.0) / hct;
     final diff = (mchc - calcMchc).abs();
@@ -496,7 +570,7 @@ Map<String, dynamic> flagSingleValues(LabDocument document) {
       final high = test.rangeHigh;
       final tMap = test.toJson();
 
-      if (val == null || (low == null && high == null)) {
+      if (val == null) {
         tMap['abnormal'] = null;
         tMap['direction'] = null;
         tMap['severity'] = null;
@@ -505,7 +579,15 @@ Map<String, dynamic> flagSingleValues(LabDocument document) {
         continue;
       }
 
-      final panic = standardPanicThresholds[test.testName];
+      final normKey = test.testName.trim().toLowerCase();
+      final rawKey = test.rawTestName.trim().toLowerCase();
+      final aliasKey = normalizeTestNameOrNull(test.rawTestName)?.toLowerCase() ??
+          normalizeTestNameOrNull(test.testName)?.toLowerCase();
+
+      final panic = _panicLookup[normKey] ??
+          _panicLookup[rawKey] ??
+          (aliasKey != null ? _panicLookup[aliasKey] : null);
+
       var isPanic = false;
       if (panic?.low != null && val <= panic!.low!) {
         isPanic = true;
@@ -513,6 +595,24 @@ Map<String, dynamic> flagSingleValues(LabDocument document) {
         isPanic = true;
       }
       tMap['is_panic_value'] = isPanic;
+
+      if (low == null && high == null) {
+        if (isPanic) {
+          tMap['abnormal'] = true;
+          tMap['severity'] = 'critical';
+          if (panic?.low != null && val <= panic!.low!) {
+            tMap['direction'] = 'low';
+          } else if (panic?.high != null && val >= panic!.high!) {
+            tMap['direction'] = 'high';
+          }
+        } else {
+          tMap['abnormal'] = null;
+          tMap['direction'] = null;
+          tMap['severity'] = null;
+        }
+        testsJson.add(tMap);
+        continue;
+      }
 
       if (low != null && val < low) {
         tMap['abnormal'] = true;
@@ -551,7 +651,7 @@ Map<String, dynamic> flagSingleValues(LabDocument document) {
 
   return {
     'document_type': document.documentType,
-    'patient_context': document.patientContext?.toJson(),
+    'patient_context': document.patientContext.toJson(),
     'lab_name': document.labName,
     'panels': panelsJson,
   };
@@ -569,7 +669,16 @@ bool _testMatchesCondition(
   final wanted = cond.testName.trim().toLowerCase();
   final norm = (test['test_name'] as String? ?? '').trim().toLowerCase();
   final raw = (test['raw_test_name'] as String? ?? '').trim().toLowerCase();
-  if (wanted != norm && wanted != raw) return false;
+  if (wanted != norm && wanted != raw) {
+    final normRaw = normalizeTestNameOrNull(raw)?.toLowerCase();
+    final normNorm = normalizeTestNameOrNull(norm)?.toLowerCase();
+    final normWanted = normalizeTestNameOrNull(wanted)?.toLowerCase();
+    final matchesAlias = wanted == normRaw ||
+        wanted == normNorm ||
+        (normWanted != null &&
+            (normWanted == norm || normWanted == raw || normWanted == normRaw));
+    if (!matchesAlias) return false;
+  }
 
   // Direction check
   if (cond.direction != null) {
@@ -601,7 +710,10 @@ bool _testMatchesCondition(
     }
     if (op == 'ratio_gt' || op == 'ratio_lt') {
       final otherName = (cond.ratioWith ?? '').trim().toLowerCase();
-      final otherTest = allTests[otherName];
+      final otherNorm = normalizeTestNameOrNull(otherName)?.toLowerCase();
+      final otherTest =
+          allTests[otherName] ??
+          (otherNorm != null ? allTests[otherNorm] : null);
       final otherVal = (otherTest?['value'] as num?)?.toDouble();
       if (otherVal == null || otherVal == 0) return false;
       final ratio = val / otherVal;
@@ -634,11 +746,18 @@ List<FlaggedPattern> detectClinicalPatterns(
     final tests = panel['tests'] as List? ?? [];
     for (final test in tests) {
       if (test is! Map<String, dynamic>) continue;
-      final name = (test['test_name'] ?? test['raw_test_name'] ?? '')
-          .toString()
-          .trim()
-          .toLowerCase();
+      final name = (test['test_name'] ?? '').toString().trim().toLowerCase();
+      final rawName = (test['raw_test_name'] ?? '').toString().trim().toLowerCase();
       if (name.isNotEmpty) allTestsMap[name] = test;
+      if (rawName.isNotEmpty && !allTestsMap.containsKey(rawName)) {
+        allTestsMap[rawName] = test;
+      }
+      final alias = (normalizeTestNameOrNull(rawName) ??
+              normalizeTestNameOrNull(name))
+          ?.toLowerCase();
+      if (alias != null && !allTestsMap.containsKey(alias)) {
+        allTestsMap[alias] = test;
+      }
       allTestsList.add(test);
     }
   }
@@ -669,16 +788,11 @@ List<FlaggedPattern> detectClinicalPatterns(
       var satisfied = 0;
 
       for (final cond in rule.conditions) {
-        final condName = cond.testName.trim().toLowerCase();
         Map<String, dynamic>? matched;
 
-        // Check if an already-matched test of the same name satisfies condition
+        // Check if an already-matched test satisfies condition
         for (final t in triggering) {
-          final tName = (t['test_name'] ?? t['raw_test_name'] ?? '')
-              .toString()
-              .trim()
-              .toLowerCase();
-          if (tName == condName && _testMatchesCondition(t, cond, allTestsMap)) {
+          if (_testMatchesCondition(t, cond, allTestsMap)) {
             matched = t;
             break;
           }
@@ -728,6 +842,10 @@ List<FlaggedPattern> detectClinicalPatterns(
             surfacedText: rule.surfacedText,
             matchType: rule.matchType,
             panelName: ctx.name,
+            severity: rule.severity,
+            category: rule.category,
+            clinicalImplication: rule.clinicalImplication,
+            differentialDiagnosis: rule.differentialDiagnosis,
             triggeringTests: triggering.map(TriggeringTest.fromJson).toList(),
           ),
         );

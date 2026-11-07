@@ -37,7 +37,7 @@ const Profile = () => {
           name: profile.name || '',
           email: profile.email || '',
           phone: profile.phone || '',
-          dateOfBirth: profile.date_of_birth || '',
+          dateOfBirth: profile.date_of_birth ? profile.date_of_birth.split('T')[0] : '',
           gender: profile.gender || '',
           address: profile.address || '',
           emergencyContact: profile.emergency_contact || '',
@@ -63,8 +63,9 @@ const Profile = () => {
     setSuccess('');
 
     try {
-      await api.put('/profile', {
+      const res = await api.put('/profile', {
         name: formData.name,
+        email: formData.email || null,
         phone: formData.phone,
         date_of_birth: formData.dateOfBirth || null,
         gender: formData.gender,
@@ -78,6 +79,15 @@ const Profile = () => {
 
       setEditing(false);
       setSuccess('Profile updated successfully!');
+      if (res?.data?.user) {
+        const u = res.data.user;
+        setFormData(prev => ({
+          ...prev,
+          name: u.name || '',
+          email: u.email || '',
+          dateOfBirth: u.date_of_birth || '',
+        }));
+      }
       setTimeout(() => setSuccess(''), 3000);
     } catch (err) {
       console.error('Failed to update profile', err);

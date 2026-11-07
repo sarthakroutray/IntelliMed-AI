@@ -2,6 +2,15 @@ import asyncio
 import os
 import sys
 
+if sys.platform == "win32":
+    try:
+        if hasattr(sys.stdout, "reconfigure"):
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        if hasattr(sys.stderr, "reconfigure"):
+            sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 # Add the project root to the python path
 sys.path.append(os.getcwd())
 
@@ -12,8 +21,15 @@ async def test_services():
     
     # Create a dummy file for testing
     test_file = "test_image.png"
-    with open(test_file, "w") as f:
-        f.write("dummy content")
+    try:
+        from PIL import Image
+        Image.new("RGB", (224, 224), color="white").save(test_file)
+    except Exception:
+        with open(test_file, "wb") as f:
+            # Minimal 1x1 valid PNG binary
+            f.write(
+                b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx\x9cc\xf8\xff\xff?\x00\x05\xfe\x02\xfe\xa7V\xfeae\x00\x00\x00\x00IEND\xaeB`\x82'
+            )
 
     try:
         # Test OCR

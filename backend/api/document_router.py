@@ -16,7 +16,7 @@ from auth import get_current_user
 from prisma_db import get_db
 from schemas import User
 from prisma_client import Prisma, Json
-from request_cache import doctor_has_patient_access
+from request_cache import doctor_has_patient_access, clear_cache_namespace
 import services
 import supabase_storage
 from api.v2.lab_refs import file_ref_name, has_stored_file
@@ -73,12 +73,11 @@ def _doc_key_builder(
 
 
 async def _invalidate_document_cache(document_id: int) -> None:
-    """Evict related document/list caches. Non-fatal if cache backend is unavailable."""
+    """Evict related document/list caches accounting for FastAPICache prefix."""
     try:
-        backend = FastAPICache.get_backend()
-        await backend.clear(namespace="document")
-        await backend.clear(namespace="patient-docs")
-        await backend.clear(namespace="doctor-patient-docs")
+        await clear_cache_namespace("document")
+        await clear_cache_namespace("patient-docs")
+        await clear_cache_namespace("doctor-patient-docs")
     except Exception:
         pass
 
@@ -113,13 +112,31 @@ async def get_document(
                 detail="You don't have access to this document"
             )
     elif current_user.role == 'doctor':
-        # Doctors can view documents of their linked patients
+        # Doctors view documents of their linked patients. Per-document
+        # sharing is enforced: a linked doctor sees only explicitly shared
+        # docs (same filter as get_patient_documents_for_doctor).
         has_access = await doctor_has_patient_access(db, current_user.id, document.patient_id)
         if not has_access:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You don't have access to this document"
             )
+        if document.patient_id is not None:
+            share = await db.documentshare.find_first(
+                where={'document_id': document_id, 'doctor_id': current_user.id}
+            )
+            if not share:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="This document has not been shared with you"
+                )
+    elif current_user.role == 'admin':
+        pass
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have access to this document"
+        )
     
     # Use real AI analysis from DB if available, otherwise provide placeholder.
     # App-produced results share this table but store a structured envelope with
@@ -257,10 +274,18 @@ async def get_document(
         },
         "timestamp": document.upload_timestamp.strftime("%Y-%m-%d %H:%M:%S") if document.upload_timestamp else "",
         "status": "Processed" if stored_analysis else "Pending",
+        "verified_by": document.verified_by,
+        "verified_at": document.verified_at.isoformat() if document.verified_at else None,
+        "verification_notes": document.verification_notes,
+        "clinical_notes": document.clinical_notes if isinstance(document.clinical_notes, list) else [],
+        "archived": document.archived,
+        "archived_at": document.archived_at.isoformat() if document.archived_at else None,
         "fileType": file_type,
         "fileSize": file_size,
         "fileName": file_name,
+        "filename": file_name,
         "fileUrl": file_url,
+        "file_url": file_url,
         "imageUrl": file_url,
         "ai_analysis": stored_analysis,
         "analysis": analysis
@@ -303,12 +328,24 @@ async def analyze_document(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You don't have access to this document"
             )
+    elif current_user.role == 'admin':
+        pass
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have access to this document"
+        )
 
     file_path = document.file_path
     if not file_path:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Document file not found"
+        )
+    if not has_stored_file(file_path):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot re-analyze an on-device structured result with no uploaded file."
         )
 
     tmp_path: str | None = None
@@ -379,6 +416,8 @@ async def analyze_document(
             "document_id": document_id,
             "analysis": aggregated_analysis
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("\u2717 AI analysis failed for document %s: %s", document_id, e)
         raise HTTPException(
@@ -619,8 +658,20 @@ async def download_document(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="File not found"
         )
+    if not has_stored_file(file_path):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No downloadable file for an on-device structured result"
+        )
 
     # Redirect to a short-lived signed URL for private object access
-    storage_path = supabase_storage.to_storage_path(file_path)
-    signed_url = await asyncio.to_thread(supabase_storage.create_signed_url, storage_path)
-    return RedirectResponse(url=signed_url)
+    try:
+        storage_path = supabase_storage.to_storage_path(file_path)
+        signed_url = await asyncio.to_thread(supabase_storage.create_signed_url, storage_path)
+        return RedirectResponse(url=signed_url)
+    except Exception as e:
+        logger.error("Failed to generate download URL: %s", e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate download URL: {str(e)}"
+        )

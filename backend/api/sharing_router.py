@@ -12,6 +12,7 @@ from auth import get_current_user
 from prisma_db import get_db
 from schemas import User
 from prisma_client import Prisma
+from request_cache import clear_cache_namespace, clear_cache_key
 
 logger = logging.getLogger(__name__)
 
@@ -36,8 +37,9 @@ def _shared_doctors_key_builder(
 
 async def _invalidate_shared_doctors_cache(document_id: int, user_id: int) -> None:
     try:
-        cache_key = f"shared-doctors:doc:{document_id}:user:{user_id}"
-        await FastAPICache.get_backend().clear(namespace=None, key=cache_key)
+        await clear_cache_namespace("shared-doctors")
+        await clear_cache_key("shared-doctors", f"doc:{document_id}:user:{user_id}")
+        await clear_cache_namespace("doctor-patient-docs")
     except Exception:
         pass
 
@@ -84,26 +86,38 @@ async def share_document(
         )
 
     try:
-        # Create or update the share record
-        await db.documentshare.upsert(
+        # Idempotent grant: skip the upsert when the row already exists so a
+        # repeated Share click (or a double-tap race) can't raise a unique
+        # violation. The upsert path stays as a fallback for races.
+        existing = await db.documentshare.find_first(
             where={
-                'document_id_doctor_id': {
-                    'document_id': document_id,
-                    'doctor_id': doctor_id,
-                }
-            },
-            data={
-                'create': {
-                    'document_id': document_id,
-                    'doctor_id': doctor_id,
-                },
-                'update': {},
+                'document_id': document_id,
+                'doctor_id': doctor_id,
             }
         )
+        if existing is None:
+            try:
+                await db.documentshare.create(
+                    data={
+                        'document_id': document_id,
+                        'doctor_id': doctor_id,
+                    }
+                )
+            except Exception as create_err:
+                already = await db.documentshare.find_first(
+                    where={
+                        'document_id': document_id,
+                        'doctor_id': doctor_id,
+                    }
+                )
+                if already is None:
+                    raise create_err
         await _invalidate_shared_doctors_cache(document_id, current_user.id)
         
         logger.info("✓ Document %s shared with doctor %s", document_id, doctor_id)
         return {"message": "Document shared successfully"}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("✗ Failed to share document: %s", e)
         raise HTTPException(
@@ -141,18 +155,18 @@ async def unshare_document(
         )
 
     try:
-        await db.documentshare.delete(
+        await db.documentshare.delete_many(
             where={
-                'document_id_doctor_id': {
-                    'document_id': document_id,
-                    'doctor_id': doctor_id,
-                }
+                'document_id': document_id,
+                'doctor_id': doctor_id,
             }
         )
         await _invalidate_shared_doctors_cache(document_id, current_user.id)
         
         logger.info("✓ Document %s unshared with doctor %s", document_id, doctor_id)
         return {"message": "Document access revoked successfully"}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("✗ Failed to unshare document: %s", e)
         raise HTTPException(
@@ -195,7 +209,9 @@ async def get_shared_doctors(
             include={'doctor': True}
         )
         
-        return [{'doctor_id': share.doctor_id, 'doctor_email': share.doctor.email} for share in shares]
+        return [{'doctor_id': share.doctor_id, 'doctor_email': share.doctor.email if share.doctor else 'Unknown'} for share in shares]
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("✗ Failed to fetch shared doctors: %s", e)
         raise HTTPException(
