@@ -78,6 +78,7 @@ async def _invalidate_document_cache(document_id: int) -> None:
         await clear_cache_namespace("document")
         await clear_cache_namespace("patient-docs")
         await clear_cache_namespace("doctor-patient-docs")
+        await clear_cache_namespace("doctor-documents")
     except Exception:
         pass
 

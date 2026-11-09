@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import api, { analyzeDocument } from '../services/api';
+import api, { analyzeDocument, getDoctorDocuments } from '../services/api';
 import Icon from '../components/Icon';
 import { Alert, Toast, Spinner, EmptyState } from '../components/ui.jsx';
 import { ui } from '../styles/ui.js';
 
-const AIAnalysis = () => {
+const AIAnalysis = ({ refreshKey = 0 }) => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [documents, setDocuments] = useState([]);
@@ -15,43 +15,32 @@ const AIAnalysis = () => {
   const [analyzing, setAnalyzing] = useState(null);
   const [toast, setToast] = useState(null);
 
-  useEffect(() => {
-    const fetchDocumentsWithAI = async () => {
-      try {
-        setLoading(true);
-        
-        if (user.role === 'doctor') {
-          const patientsResponse = await api.get('/doctor/patients');
-          const patients = patientsResponse.data;
-          
-          // Fetch all patient documents in parallel instead of sequentially
-          const docPromises = patients.map(patient =>
-            api.get(`/doctor/patients/${patient.id}/documents`)
-              .then(res => res.data.map(doc => ({
-                ...doc,
-                patientName: patient.email?.split('@')[0],
-                patientEmail: patient.email
-              })))
-              .catch(err => {
-                console.error(`Failed to fetch documents for patient ${patient.id}`, err);
-                return [];
-              })
-          );
-          const results = await Promise.all(docPromises);
-          setDocuments(results.flat());
-        } else {
-          const response = await api.get('/patient/documents');
-          setDocuments(response.data);
-        }
-      } catch (err) {
-        console.error('Failed to fetch documents', err);
-      } finally {
-        setLoading(false);
+  const fetchDocumentsWithAI = useCallback(async () => {
+    try {
+      setLoading(true);
+      
+      if (user?.role === 'doctor') {
+        const response = await getDoctorDocuments();
+        const docs = (response.data || []).map(doc => ({
+          ...doc,
+          patientName: doc.patient_name || doc.patient_email?.split('@')[0],
+          patientEmail: doc.patient_email
+        }));
+        setDocuments(docs);
+      } else {
+        const response = await api.get('/patient/documents');
+        setDocuments(response.data || []);
       }
-    };
+    } catch (err) {
+      console.error('Failed to fetch documents', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [user?.role]);
 
+  useEffect(() => {
     fetchDocumentsWithAI();
-  }, [user.role]);
+  }, [fetchDocumentsWithAI, refreshKey]);
 
   const handleAnalyze = async (docId) => {
     setAnalyzing(docId);

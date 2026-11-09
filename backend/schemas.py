@@ -43,3 +43,21 @@ class DocumentInfo(BaseModel):
 class DocumentDetail(DocumentInfo):
     file_url: str
     analysis_status: str = "processed"
+
+
+class DoctorDocumentInfo(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    filename: str
+    file_url: str
+    upload_timestamp: Optional[datetime] = None
+    ai_analysis: Optional[Dict[str, Any]] = None
+    analysis_status: str = "processed"
+    patient_id: int
+    patient_email: str
+    patient_name: Optional[str] = None
+    verified_at: Optional[datetime] = None
+    verified_by: Optional[int] = None
+    archived: bool = False
+

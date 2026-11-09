@@ -40,6 +40,7 @@ async def _invalidate_shared_doctors_cache(document_id: int, user_id: int) -> No
         await clear_cache_namespace("shared-doctors")
         await clear_cache_key("shared-doctors", f"doc:{document_id}:user:{user_id}")
         await clear_cache_namespace("doctor-patient-docs")
+        await clear_cache_namespace("doctor-documents")
     except Exception:
         pass
 

@@ -129,17 +129,20 @@ export const invalidateCache = {
   documents: () => {
     apiCache.clearPattern(/^documents:/);
     apiCache.clearPattern(/^document:/);
+    apiCache.delete('doctor-documents');
   },
   
   // Invalidate specific document cache
   document: (docId) => {
     apiCache.delete(cacheKeys.document(docId));
     apiCache.clearPattern(/^documents:/);
+    apiCache.delete('doctor-documents');
   },
   
   // Invalidate patient-related caches
   patients: () => {
     apiCache.clearPattern(/^patients:/);
+    apiCache.delete(cacheKeys.patients());
   },
   
   // Invalidate doctor connections

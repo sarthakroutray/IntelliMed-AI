@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import api from '../services/api';
+import { invalidateCache, apiCache } from '../utils/cache';
 import Icon from './Icon.jsx';
 import { ui } from '../styles/ui.js';
 import { Alert, Spinner } from '../components/ui.jsx';
@@ -25,6 +26,8 @@ const LinkPatient = ({ onPatientLinked, onClose }) => {
       const response = await api.post('/doctor/link-patient', {
         access_code: accessCode,
       });
+      invalidateCache.patients();
+      apiCache.delete('doctor-documents');
       setMessage(response.data.message);
       setAccessCode('');
 

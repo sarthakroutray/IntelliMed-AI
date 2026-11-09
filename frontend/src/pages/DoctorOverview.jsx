@@ -1,11 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import api from '../services/api';
+import { getDoctorPatients, getDoctorDocuments } from '../services/api';
 import Icon from '../components/Icon';
+import { Alert } from '../components/ui.jsx';
 import { ui } from '../styles/ui.js';
 
-const DoctorOverview = () => {
+const DoctorOverview = ({ refreshKey = 0 }) => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [stats, setStats] = useState({
@@ -16,73 +17,59 @@ const DoctorOverview = () => {
   });
   const [recentActivity, setRecentActivity] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  const fetchOverviewData = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError('');
+
+      // Fetch patients and shared documents in parallel
+      const [patientsResponse, docsResponse] = await Promise.all([
+        getDoctorPatients(),
+        getDoctorDocuments(),
+      ]);
+
+      const patients = patientsResponse.data || [];
+      const docs = docsResponse.data || [];
+
+      let aiCompleted = 0;
+      const activities = [];
+
+      docs.forEach(doc => {
+        if (doc.ai_analysis) aiCompleted++;
+        activities.push({
+          type: 'upload',
+          docId: doc.id,
+          patientName: doc.patient_name || doc.patient_email?.split('@')[0] || 'Patient',
+          documentName: doc.filename,
+          timestamp: doc.upload_timestamp,
+          hasAI: Boolean(doc.ai_analysis),
+        });
+      });
+
+      // Sort activities by most recent
+      activities.sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
+
+      setStats({
+        totalPatients: patients.length,
+        totalDocuments: docs.length,
+        pendingReviews: docs.length - aiCompleted,
+        aiAnalysisComplete: aiCompleted
+      });
+
+      setRecentActivity(activities.slice(0, 10)); // Top 10 most recent
+    } catch (err) {
+      console.error('Failed to fetch overview data', err);
+      setError(err.response?.data?.detail || 'Failed to load dashboard overview.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    const fetchOverviewData = async () => {
-      try {
-        setLoading(true);
-        
-        // Fetch patients
-        const patientsResponse = await api.get('/doctor/patients');
-        const patients = patientsResponse.data;
-        
-        // Fetch documents for ALL patients in parallel (much faster!)
-        const documentPromises = patients.map(patient =>
-          api.get(`/doctor/patients/${patient.id}/documents`)
-            .then(docsResponse => ({
-              patient,
-              docs: docsResponse.data,
-              success: true
-            }))
-            .catch(err => {
-              console.error(`Failed to fetch documents for patient ${patient.id}`, err);
-              return { patient, docs: [], success: false };
-            })
-        );
-        
-        const results = await Promise.all(documentPromises);
-        
-        // Calculate stats
-        let totalDocs = 0;
-        let aiCompleted = 0;
-        const activities = [];
-        
-        results.forEach(({ patient, docs }) => {
-          totalDocs += docs.length;
-          
-          docs.forEach(doc => {
-            if (doc.ai_analysis) aiCompleted++;
-            activities.push({
-              type: 'upload',
-              patientName: patient.email?.split('@')[0],
-              documentName: doc.filename,
-              timestamp: doc.upload_timestamp,
-              hasAI: !!doc.ai_analysis
-            });
-          });
-        });
-        
-        // Sort activities by most recent
-        activities.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-        
-        setStats({
-          totalPatients: patients.length,
-          totalDocuments: totalDocs,
-          pendingReviews: totalDocs - aiCompleted,
-          aiAnalysisComplete: aiCompleted
-        });
-        
-        setRecentActivity(activities.slice(0, 10)); // Top 10 most recent
-        
-      } catch (err) {
-        console.error('Failed to fetch overview data', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchOverviewData();
-  }, []);
+  }, [fetchOverviewData, refreshKey]);
 
   const StatCard = ({ icon, label, value, color, trend }) => (
     <div className={`${ui.card} ${ui.cardPad} hover:shadow-lg transition-shadow`}>
@@ -117,6 +104,8 @@ const DoctorOverview = () => {
           </p>
         </div>
       </div>
+
+      {error && <Alert type="error" onDismiss={() => setError('')}>{error}</Alert>}
 
       {loading ? (
         <>
@@ -237,7 +226,11 @@ const DoctorOverview = () => {
             <div className="divide-y divide-line">
               {recentActivity.length > 0 ? (
                 recentActivity.map((activity, index) => (
-                  <div key={index} className="p-4 hover:bg-surface-2/60 transition-colors">
+                  <div
+                    key={index}
+                    onClick={() => activity.docId && navigate(`/document/${activity.docId}`)}
+                    className="p-4 hover:bg-surface-2/60 transition-colors cursor-pointer"
+                  >
                     <div className="flex items-start gap-4">
                       <div className="size-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
                         <Icon name="description" className="text-primary text-[20px]" />

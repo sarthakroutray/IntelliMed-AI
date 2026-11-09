@@ -68,6 +68,39 @@ export const getDoctorPatients = withCache(
   3 * 60 * 1000 // 3 minutes cache
 );
 
+export const getDoctorDocuments = withCache(
+  () => api.get('/doctor/documents'),
+  () => 'doctor-documents',
+  2 * 60 * 1000 // 2 minutes cache
+);
+
+export const unlinkPatient = (patientId) => {
+  return api.delete(`/doctor/patients/${patientId}`).then(result => {
+    apiCache.delete(cacheKeys.patients());
+    apiCache.delete('doctor-documents');
+    invalidateCache.documents();
+    return result;
+  });
+};
+
+export const getDoctorStats = async () => {
+  const [patientsRes, docsRes] = await Promise.all([
+    getDoctorPatients(),
+    getDoctorDocuments(),
+  ]);
+  const patients = patientsRes.data || [];
+  const docs = docsRes.data || [];
+  const aiCompleted = docs.filter(d => Boolean(d.ai_analysis)).length;
+  return {
+    data: {
+      totalPatients: patients.length,
+      totalDocuments: docs.length,
+      aiAnalysisComplete: aiCompleted,
+      pendingReviews: docs.length - aiCompleted,
+    }
+  };
+};
+
 export const getPatientDocuments = withCache(
   (patientId) => {
     const url = patientId ? `/doctor/patients/${patientId}/documents` : '/patient/documents';
@@ -163,8 +196,10 @@ export const getLinkedDoctors = withCache(
 
 export const linkDoctor = (accessCode) => {
   return api.post('/doctor/link-patient', { access_code: accessCode }).then(result => {
-    // Invalidate linked doctors cache after linking
+    // Invalidate linked doctors and doctor patients caches after linking
     invalidateCache.linkedDoctors();
+    invalidateCache.patients();
+    apiCache.delete('doctor-documents');
     return result;
   });
 };

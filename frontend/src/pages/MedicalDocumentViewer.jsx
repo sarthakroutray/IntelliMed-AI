@@ -250,9 +250,9 @@ const MedicalDocumentViewer = () => {
             <span className="text-subtle">/</span>
             {user?.role === 'doctor' ? (
               <>
-                <Link to="/dashboard" className="text-muted hover:text-primary transition-colors font-medium">Patients</Link>
+                <Link to="/dashboard/patients" className="text-muted hover:text-primary transition-colors font-medium">Patients</Link>
                 <span className="text-subtle">/</span>
-                <Link to={`/patient/${document.patient.id}`} className="text-muted hover:text-primary transition-colors font-medium">{document.patient.name}</Link>
+                <span className="text-muted font-medium">{document.patient.name}</span>
               </>
             ) : (
               <>

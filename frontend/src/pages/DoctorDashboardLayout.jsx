@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Routes, Route, useNavigate, Navigate } from 'react-router-dom';
+import { Routes, Route, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import Icon from '../components/Icon';
 import LinkPatient from '../components/LinkPatient';
@@ -7,7 +7,7 @@ import LinkPatient from '../components/LinkPatient';
 // Import pages
 import DoctorOverview from './DoctorOverview';
 import DoctorPatients from './DoctorPatients';
-import AllDocuments from './AllDocuments';
+import DoctorDocuments from './DoctorDocuments';
 import AIAnalysis from './AIAnalysis';
 
 const NAV_ITEMS = [
@@ -34,14 +34,23 @@ const BrandMark = ({ className = 'size-8' }) => (
 const DoctorDashboardLayout = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [showLinkModal, setShowLinkModal] = useState(false);
-  const [activeTab, setActiveTab] = useState('overview'); // overview, patients, documents, ai-analysis
   const [showMobileMenu, setShowMobileMenu] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
 
-  const handleNavigate = (path, tab) => {
-    setActiveTab(tab);
+  // Sync activeTab with URL path
+  const pathParts = location.pathname.split('/');
+  const activeTab = pathParts[2] || 'overview';
+
+  const handleNavigate = (path) => {
     navigate(path);
     setShowMobileMenu(false);
+  };
+
+  const handlePatientLinked = () => {
+    setShowLinkModal(false);
+    setRefreshKey((k) => k + 1);
   };
 
   return (
@@ -188,10 +197,10 @@ const DoctorDashboardLayout = () => {
         {/* Page Content */}
         <Routes>
           <Route path="/" element={<Navigate to="overview" replace />} />
-          <Route path="overview" element={<DoctorOverview />} />
-          <Route path="patients" element={<DoctorPatients />} />
-          <Route path="documents" element={<AllDocuments />} />
-          <Route path="ai-analysis" element={<AIAnalysis />} />
+          <Route path="overview" element={<DoctorOverview refreshKey={refreshKey} />} />
+          <Route path="patients" element={<DoctorPatients refreshKey={refreshKey} />} />
+          <Route path="documents" element={<DoctorDocuments refreshKey={refreshKey} />} />
+          <Route path="ai-analysis" element={<AIAnalysis refreshKey={refreshKey} />} />
         </Routes>
       </main>
 
@@ -200,10 +209,7 @@ const DoctorDashboardLayout = () => {
         <div className="fixed inset-0 bg-ink/50 backdrop-blur-[2px] flex items-center justify-center z-50 p-4">
           <LinkPatient
             onClose={() => setShowLinkModal(false)}
-            onPatientLinked={() => {
-              setShowLinkModal(false);
-              // Optionally refresh data
-            }}
+            onPatientLinked={handlePatientLinked}
           />
         </div>
       )}
