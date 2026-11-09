@@ -209,7 +209,14 @@ async def get_shared_doctors(
             include={'doctor': True}
         )
         
-        return [{'doctor_id': share.doctor_id, 'doctor_email': share.doctor.email if share.doctor else 'Unknown'} for share in shares]
+        return [
+            {
+                'doctor_id': share.doctor_id,
+                'doctor_email': share.doctor.email if share.doctor else 'Unknown',
+                'doctor_name': share.doctor.name if (share.doctor and share.doctor.name) else None,
+            }
+            for share in shares
+        ]
     except HTTPException:
         raise
     except Exception as e:

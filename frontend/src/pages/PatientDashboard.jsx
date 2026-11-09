@@ -4,6 +4,7 @@ import Icon from '../components/Icon';
 import { uploadDocument, getPatientDocuments, deleteDocument, shareDocument, unshareDocument, getSharedDoctors, getLinkedDoctors, analyzeDocument } from '../services/api';
 import { useDropzone } from 'react-dropzone';
 import { Alert, Modal, ConfirmDialog, Toast, Spinner, EmptyState } from '../components/ui.jsx';
+import ShareDocumentModal from '../components/ShareDocumentModal.jsx';
 import { ui } from '../styles/ui.js';
 
 const PatientDashboard = () => {
@@ -16,7 +17,7 @@ const PatientDashboard = () => {
   const [analyzing, setAnalyzing] = useState(null);
   const [sharedDoctors, setSharedDoctors] = useState({});
   const [pendingDelete, setPendingDelete] = useState(null);
-  const [togglingShare, setTogglingShare] = useState(null);
+  const [sharingDocument, setSharingDocument] = useState(null);
   const [toast, setToast] = useState(null);
 
   const handleAnalyze = async (docId) => {
@@ -147,43 +148,12 @@ const PatientDashboard = () => {
     );
   };
 
-  const handleShareDocument = async (docId) => {
-    try {
-      const response = await getSharedDoctors(docId);
-      setSharedDoctors(prev => ({
-        ...prev,
-        [docId]: response.data
-      }));
-    } catch (err) {
-      console.error('Error fetching shared doctors:', err);
-    }
-  };
-
-  const handleToggleShare = async (docId, doctorId, isShared) => {
-    setTogglingShare(`${docId}:${doctorId}`);
-    try {
-      if (isShared) {
-        await unshareDocument(docId, doctorId);
-      } else {
-        await shareDocument(docId, doctorId);
-      }
-      const response = await getSharedDoctors(docId);
-      setSharedDoctors(prev => ({
-        ...prev,
-        [docId]: response.data
-      }));
-    } catch (err) {
-      console.error('Error toggling share:', err);
-      const detail = err.response?.data?.detail;
-      const message = typeof detail === 'string'
-        ? detail
-        : Array.isArray(detail)
-          ? detail.map(d => d?.msg || JSON.stringify(d)).join('; ')
-          : detail?.message || detail?.msg || 'Failed to update document sharing';
-      setToast({ type: 'error', message });
-    } finally {
-      setTogglingShare(null);
-    }
+  const handleShareDocument = (doc) => {
+    const targetDoc =
+      typeof doc === 'object' && doc !== null
+        ? doc
+        : documents.find((d) => d.id === doc) || { id: doc };
+    setSharingDocument(targetDoc);
   };
 
   const handleDeleteDocument = async (docId) => {
@@ -333,7 +303,7 @@ const PatientDashboard = () => {
                         <div className="flex items-center justify-end gap-2">
                           <button
                             type="button"
-                            onClick={() => handleShareDocument(doc.id)}
+                            onClick={() => handleShareDocument(doc)}
                             className={`${ui.btn} ${ui.btnSecondary} ${ui.btnSm}`}
                           >
                             <Icon name="share" className="text-[15px]" />
@@ -387,6 +357,44 @@ const PatientDashboard = () => {
           IntelliMed-AI complies with HIPAA standards. All your documents are end-to-end encrypted.
         </p>
       </div>
+
+      {/* Share Document Modal */}
+      <ShareDocumentModal
+        open={Boolean(sharingDocument)}
+        onClose={() => setSharingDocument(null)}
+        document={sharingDocument}
+        initialSharedDoctors={sharingDocument ? sharedDoctors[sharingDocument.id] : []}
+        onShareChange={(docId, updated) => {
+          setSharedDoctors(prev => ({
+            ...prev,
+            [docId]: updated,
+          }));
+        }}
+      />
+
+      {/* Delete Confirmation Dialog */}
+      <ConfirmDialog
+        open={Boolean(pendingDelete)}
+        title="Delete Document"
+        message="Are you sure you want to delete this document? This action cannot be undone."
+        confirmLabel="Delete"
+        danger
+        onConfirm={async () => {
+          const docId = pendingDelete;
+          setPendingDelete(null);
+          await handleDeleteDocument(docId);
+        }}
+        onCancel={() => setPendingDelete(null)}
+      />
+
+      {/* Toast Notification */}
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
+      )}
     </div>
   );
 };

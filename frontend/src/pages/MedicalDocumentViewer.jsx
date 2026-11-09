@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { getDocument, verifyDocument, addClinicalNote, archiveDocument, downloadDocument } from '../services/api';
 import { Modal, ConfirmDialog, Toast, Spinner } from '../components/ui.jsx';
+import ShareDocumentModal from '../components/ShareDocumentModal.jsx';
 import { ui } from '../styles/ui.js';
 
 const entityBadgeClass = (label) => {
@@ -743,23 +744,30 @@ const MedicalDocumentViewer = () => {
       </Modal>
 
       {/* Share Modal */}
-      <Modal
-        open={showShareModal}
-        onClose={() => setShowShareModal(false)}
-        title="Share Document"
-      >
-        <p className="text-sm text-body mb-4">
-          {user?.role === 'patient'
-            ? 'This document can be shared with your linked doctors via the dashboard.'
-            : 'Document sharing is managed by the patient.'}
-        </p>
-        <button type="button"
-          onClick={() => setShowShareModal(false)}
-          className={`${ui.btn} ${ui.btnPrimary} w-full`}
+      {user?.role === 'patient' ? (
+        <ShareDocumentModal
+          open={showShareModal}
+          onClose={() => setShowShareModal(false)}
+          document={document}
+        />
+      ) : (
+        <Modal
+          open={showShareModal}
+          onClose={() => setShowShareModal(false)}
+          title="Share Document"
         >
-          Got it
-        </button>
-      </Modal>
+          <p className="text-sm text-body mb-4">
+            Document sharing is managed by the patient who uploaded this record.
+          </p>
+          <button
+            type="button"
+            onClick={() => setShowShareModal(false)}
+            className={`${ui.btn} ${ui.btnPrimary} w-full`}
+          >
+            Got it
+          </button>
+        </Modal>
+      )}
 
       {/* Destructive / sign-out Confirmation */}
       <ConfirmDialog
